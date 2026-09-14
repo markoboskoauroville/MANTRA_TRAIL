@@ -126,13 +126,12 @@ jobs:
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           echo "scanning: $APK ($(stat -c%s "$APK") bytes)"
-          # The Maps key is IN this artefact by design — it is a client key restricted at Google's
-          # end, not a secret — so it is excluded by name from the scan rather than by loosening
-          # the pattern, which would let every other key shape through with it.
+          # NOTHING IS EXCLUDED FROM THIS SCAN ANY MORE. It used to except the Maps key, which
+          # was "in the artefact by design" — and that design is what put a live key inside a
+          # public APK on 14.9.2026. Zero means zero.
           HITS=$(strings -a "$APK" | grep -acE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
           echo "key-shaped strings in the artefact: ${HITS:-0}"
           [ "${HITS:-0}" = "0" ]
-        env:
 
       - name: "Gate G1 — the three numbers agree"
         env:
