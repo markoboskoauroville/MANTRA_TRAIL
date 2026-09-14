@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE SYMBOL BOX IS 42 UNITS OF 108, CENTRED (app-icon.md 2), so nothing drawn here leaves
+  33..75 on either axis. The mark is the app's own crosshair: one shape, readable at 48 px,
+  amber on the near-black ground every Mantra icon uses.
+
+  Painted extent: 34 to 74 on both axes = 40 units. Against the 72 unit visible mask that is
+  0.556, inside the 0.55 to 0.60 band measured from icons drawn by people who measured.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#E8A64B"
+        android:strokeWidth="4"
+        android:strokeLineCap="butt"
+        android:pathData="M54,41 A13,13 0 1,1 53.99,41" />
+    <path
+        android:strokeColor="#E8A64B"
+        android:strokeWidth="4"
+        android:pathData="M34,54 L45,54 M63,54 L74,54 M54,34 L54,45 M54,63 L54,74" />
+    <path
+        android:fillColor="#E8A64B"
+        android:pathData="M54,51 A3,3 0 1,1 53.99,51 Z" />
+</vector>
