@@ -10,7 +10,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 100
+TEST_FLOOR = 110
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
@@ -58,10 +58,13 @@ shapes = re.compile(r"(AIza|gsk_|ghp_|github_pat_|sk-ant-)[A-Za-z0-9_-]{20,}")
 hits = [p.name for p in tracked if shapes.search(p.read_text(errors="ignore"))]
 check("no key-shaped string anywhere in the tree", not hits,
       f"{len(tracked)} files examined, {len(hits)} hits {hits if hits else ''}")
-check("the Google key arrives as a placeholder, never as a literal",
-      "${googleMapsKey}" in (ROOT / "app/src/main/AndroidManifest.xml").read_text()
-      and "googleMapsKey" in bg,
-      "manifest placeholder and gradle property both present")
+# This check used to assert the opposite: that the manifest carried a ${googleMapsKey} placeholder
+# filled from a repository secret. That is what put a live key inside a public APK on 14.9.2026.
+# The rule reversed, so the check reversed with it rather than being deleted.
+check("no key reaches the app at build time, by placeholder or otherwise",
+      "googleMapsKey" not in (ROOT / "app/src/main/AndroidManifest.xml").read_text()
+      and "googleMapsKey" not in bg,
+      "neither the manifest nor the build file mentions one")
 
 # 4 the manifest declares what a fix and a recording need
 mf = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
@@ -99,7 +102,8 @@ check("the notification is taken down when the service dies",
 screens = code_only((MAIN / "Screens.kt").read_text())
 keys = re.findall(r"\bKey\(", screens)
 check("the control row draws every key unconditionally",
-      len(keys) >= 5, f"{len(keys)} Key( calls: no key is conditional on state")
+      len(keys) + screens.count("MarkKey(") + screens.count("RecordKey(") >= 6,
+      f"{len(keys)} glyph keys plus the two marks: no key is conditional on state")
 # A key that cannot act SAYS WHY. v6 dropped the disabled look from the map screen: a dimmed
 # button with no explanation is the same dead end as a missing one.
 check("a key that cannot act says why instead of going grey",
@@ -165,6 +169,31 @@ check("a part file only becomes the map when it is whole",
       "the length is checked before the rename")
 check("the size is on the screen before the download starts",
       "OfflineDownload.LABEL" in screens or "OfflineDownload.LABEL" in activity, "present")
+
+
+# NO KEY IS BUILT INTO THIS APP (14.9.2026, after a live Maps key went out inside a public APK).
+# The picker is the only way one arrives, and these are the checks that keep it that way.
+gradle_kts = (ROOT / "app/build.gradle.kts").read_text()
+check("the build takes no service key",
+      "googleMapsKey" not in gradle_kts and "HAS_GOOGLE_KEY" not in gradle_kts,
+      "no placeholder, no BuildConfig field")
+check("the manifest holds no key of any kind",
+      "API_KEY" not in mf and "${" not in mf.split("<application")[1],
+      "no meta-data key, no placeholder")
+sdk_lines = [l for l in gradle_kts.splitlines()
+             if ("play-services-maps" in l or "maps-compose" in l) and "implementation" in l]
+check("the Google Maps SDK is gone, because it can only read a key from the installed app",
+      not sdk_lines, f"{len(sdk_lines)} dependency lines on it")
+keys_src = (MAIN / "Keys.kt").read_text()
+check("keys are sorted by shape, not by asking him which is which",
+      "fun providerOf" in keys_src, "one function decides the service from the shape")
+check("a key is never written to the screen, only its service",
+      "keyState" in (MAIN / "Store.kt").read_text() and "it.key" not in screens,
+      "the settings row names services, never values")
+workflow = (ROOT / ".github/workflows/build-apk.yml").read_text()
+check("the workflow uses no key secret",
+      "GOOGLE_MAPS_API_KEY" not in workflow,
+      "the only secrets are the signing keystore and its password")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

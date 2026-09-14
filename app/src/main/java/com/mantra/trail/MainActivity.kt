@@ -81,9 +81,12 @@ class MainActivity : ComponentActivity() {
                 Trail.say("No key-shaped string in that file. If the format is new, say so and it gets added.")
                 return@registerForActivityResult
             }
-            store.keys = (store.keys + found.map { it.key }).distinct()
+            // One key per service, the newest winning, so re-importing a file after rotating a
+            // key replaces the dead one instead of leaving two and a guess about which is live.
+            store.keys = store.keys + found.associate { it.provider to it.key }
+            GoogleTiles.forget()
             UiTick.bump()
-            Trail.say("${found.size} imported, ${store.keyCount} held")
+            Trail.say("Held for: ${store.keyState}")
         } catch (e: Exception) {
             Trail.say("Import failed: ${e.javaClass.simpleName}")
         }
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 onChooseExportFolder = { pickExportFolder.launch(null) },
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
                 onDownloadMap = ::downloadOfflineMap,
+                onOpenMapLink = ::openMapLink,
                 onZeroLevel = ::zeroLevel,
                 onBare = ::setFullScreen,
             )
@@ -203,6 +207,15 @@ class MainActivity : ComponentActivity() {
                     Trail.say(canvas?.show(Layers.OFFLINE))
                 }
             }
+        }
+    }
+
+    /** The same file, in a browser, for when the phone is the wrong place to fetch 176 MB. */
+    private fun openMapLink() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Layers.OfflineDownload.URL)))
+        } catch (e: Exception) {
+            Trail.say("No browser answered: ${Layers.OfflineDownload.URL}")
         }
     }
 

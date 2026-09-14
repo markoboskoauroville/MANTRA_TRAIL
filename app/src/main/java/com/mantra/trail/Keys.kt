@@ -1,63 +1,77 @@
 package com.mantra.trail
 
 /**
- * KEYS ARRIVE AS A FILE AND ARE READ BY SHAPE, NEVER BY EYE (secrets.md 2, keyring.md 10d).
+ * THE KEYS COME FROM A FILE ON THE PHONE AND FROM NOWHERE ELSE.
  *
- * No Android imports (android-app.md 1), so the parser is attacked by Test 1 with the awkward
- * files a real note contains: account names above the key, a URL with tracking parameters under
- * it, blank lines, and the word somebody wrote to remind themselves which account it was.
+ * Baba, 14.9.2026, after a Maps key went out inside a public APK: *"This is public app. My key
+ * cannot be inside. Please remove the key. Only work with key picker. Key picker is the key."*
  *
- * SPLITTING ON WHITESPACE HAS GENUINELY PRODUCED AN ATTEMPT TO AUTHENTICATE WITH THE WORD
- * "cafeteria". The shape is what identifies a key; the position in the file identifies nothing.
+ * So no key is compiled into this app, no key is in the repository, and no build has one. A key
+ * arrives when he picks a file, is read BY SHAPE, is kept in the app's own private storage, and
+ * is shown to nobody — not even to him, because a key on a screen is a key in a screenshot.
  *
- * WHAT A KEY IMPORTED HERE CAN AND CANNOT DO, said once and plainly:
- * Google's own map reads its key from the app's manifest when the app is installed, so a key put
- * in here cannot switch Google on — that one is built in from a repository secret. A key here is
- * for the tile services that take a key in the URL, and for the day this app talks to one.
+ * WHICH SERVICE A KEY BELONGS TO IS DECIDED BY ITS SHAPE, not by asking him to sort them:
+ *
+ *   Google         AIza… or AQ.… — Google's own key formats
+ *   Thunderforest  thirty-two hexadecimal characters, which is the shape their keys take
+ *
+ * No Android imports (android-app.md 1), so Test 1 attacks the parser with the awkward files a
+ * real note contains: account names above the key, tracking URLs below it, blank lines, prose.
  */
 object Keys {
 
-    /** Google-style keys, the shape the Maps and tile APIs issue. */
+    enum class Provider {
+        /** Google Map Tiles: roadmap, satellite, terrain and hybrid, online only. */
+        GOOGLE,
+
+        /** Thunderforest Outdoors: contours and marked trails, and it may be cached. */
+        THUNDERFOREST,
+    }
+
     private val GOOGLE = Regex("AIza[A-Za-z0-9_\\-]{30,}")
-
-    /** The newer Google format, which the AIza filter silently misses (secrets.md 2a). */
     private val GOOGLE_AQ = Regex("AQ\\.[A-Za-z0-9_\\-.]{20,}")
+    private val HEX32 = Regex("\\b[0-9a-f]{32}\\b")
 
-    /** A key with the name of the account it belongs to, when the file gave one. */
-    data class Found(val key: String, val label: String?)
+    data class Found(val key: String, val provider: Provider, val label: String?)
 
-    /**
-     * Every key-shaped string in the text, each with the first line of its block that is not
-     * itself a key. Duplicates are collapsed: one key pasted twice is one key.
-     */
-    fun parse(text: String): List<Found> {
-        val found = LinkedHashMap<String, String?>()
-        for (block in text.split(Regex("\\n\\s*\\n"))) {
-            val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
-            val keys = ArrayList<String>()
-            for (line in lines) {
-                val candidate = line.substringAfter(':', line).trim()
-                val hit = GOOGLE.find(candidate)?.value ?: GOOGLE_AQ.find(candidate)?.value
-                if (hit != null) keys.add(hit)
-            }
-            val label = lines.firstOrNull { line ->
-                GOOGLE.find(line) == null && GOOGLE_AQ.find(line) == null &&
-                    !line.startsWith("#") && !line.contains("://")
-            }?.let { line ->
-                // "label: kalabhumi" and "kalabhumi" are the same account written two ways.
-                val after = line.substringAfter(':', line).trim()
-                after.ifEmpty { null }
-            }
-            keys.forEach { k -> found.putIfAbsent(k, label) }
-        }
-        return found.map { (k, v) -> Found(k, v) }
+    /** The provider a key belongs to, or null when the shape is one nobody here knows. */
+    fun providerOf(candidate: String): Provider? = when {
+        GOOGLE.matches(candidate) || GOOGLE_AQ.matches(candidate) -> Provider.GOOGLE
+        HEX32.matches(candidate) -> Provider.THUNDERFOREST
+        else -> null
     }
 
     /**
-     * What may be shown about a key, ever: its position and its length. Not its first six
-     * characters — on Google keys the first four are identical on every one, so a mask that
+     * Every key-shaped string in the text, with the provider its shape names and the first line
+     * of its block that is not itself a key. The same key twice is one key.
+     */
+    fun parse(text: String): List<Found> {
+        val found = LinkedHashMap<String, Found>()
+        for (block in text.split(Regex("\\n\\s*\\n"))) {
+            val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            val hits = ArrayList<Pair<String, Provider>>()
+            for (line in lines) {
+                // "key: AIza…" and "AIza…" are the same line written two ways.
+                val candidate = line.substringAfter(':', line).trim()
+                val whole = sequenceOf(GOOGLE, GOOGLE_AQ, HEX32)
+                    .mapNotNull { it.find(candidate)?.value }
+                    .firstOrNull() ?: continue
+                providerOf(whole)?.let { hits.add(whole to it) }
+            }
+            val label = lines.firstOrNull { line ->
+                providerOf(line.substringAfter(':', line).trim()) == null &&
+                    !line.startsWith("#") && !line.contains("://")
+            }?.let { it.substringAfter(':', it).trim().ifEmpty { null } }
+            hits.forEach { (k, p) -> found.putIfAbsent(k, Found(k, p, label)) }
+        }
+        return found.values.toList()
+    }
+
+    /**
+     * What may be said about a key, ever: its position, its provider and its length. Not its
+     * first characters — on Google keys the first four are the same on every one, so a mask that
      * shows them identifies nothing and leaks something (keyring.md 10d).
      */
-    fun describe(index: Int, total: Int, key: String): String =
-        "key ${index + 1} of $total, ${key.length} characters"
+    fun describe(index: Int, total: Int, found: Found): String =
+        "key ${index + 1} of $total, ${found.provider.name.lowercase()}, ${found.key.length} characters"
 }

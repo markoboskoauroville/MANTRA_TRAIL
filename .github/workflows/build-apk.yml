@@ -100,25 +100,23 @@ jobs:
           sys.exit(1 if (fails or errors) else 0)
           EOF
 
-      - name: The keys, by reference
+      - name: "Gate G2 — no service key may enter the build"
+        run: |
+          set -euo pipefail
+          echo "repository secrets used by this build: the signing keystore and its password, and nothing else"
+          grep -q 'googleMapsKey' app/build.gradle.kts && { echo "a build-time key placeholder came back"; exit 1; } || true
+          grep -q 'googleMapsKey' app/src/main/AndroidManifest.xml && { echo "the manifest still takes a key"; exit 1; } || true
+          echo "manifest placeholders for a service key: 0"
+
+      - name: Restore the signing key
         env:
           KS: ${{ secrets.TRAIL_KEYSTORE }}
           KS_PW: ${{ secrets.TRAIL_KEYSTORE_PASSWORD }}
-          MAPS: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "$KS" ]; then echo "No keystore secret. This build would not be upgradable in place."; exit 1; fi
           echo "$KS" | base64 -d > trail.p12
           printf 'storeFile=trail.p12\nstorePassword=%s\nkeyAlias=trail\nkeyPassword=%s\n' "$KS_PW" "$KS_PW" > keystore.properties
-          # The Maps key reaches the build as a gradle property and nothing else. Absent, the app
-          # still builds and the Google layer says it has no key rather than failing quietly.
-          if [ -n "$MAPS" ]; then
-            printf 'googleMapsKey=%s\n' "$MAPS" >> local.properties
-            echo "google maps key: present"
-          else
-            echo "google maps key: absent, the Google layer will be inactive in this build"
-          fi
-          keytool -list -storetype PKCS12 -keystore trail.p12 -storepass "$KS_PW" | grep -i 'SHA-256' || true
 
       - name: Build the release APK
         run: ./gradlew :app:assembleRelease --no-daemon
@@ -131,11 +129,10 @@ jobs:
           # The Maps key is IN this artefact by design — it is a client key restricted at Google's
           # end, not a secret — so it is excluded by name from the scan rather than by loosening
           # the pattern, which would let every other key shape through with it.
-          HITS=$(strings -a "$APK" | grep -aE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' | grep -avcF "${MAPS:-__none__}" || true)
-          echo "key-shaped strings in the artefact, not counting the Maps client key: ${HITS:-0}"
+          HITS=$(strings -a "$APK" | grep -acE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
+          echo "key-shaped strings in the artefact: ${HITS:-0}"
           [ "${HITS:-0}" = "0" ]
         env:
-          MAPS: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: "Gate G1 — the three numbers agree"
         env:

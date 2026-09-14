@@ -40,10 +40,5 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <!-- The key is a build-time placeholder from a repository secret, never a committed
-             string (secrets.md 3). Absent, the Google layer says so instead of failing quietly. -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="${googleMapsKey}" />
     </application>
 </manifest>

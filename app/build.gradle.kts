@@ -17,18 +17,10 @@ val keystoreProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
-// THE GOOGLE MAPS KEY IS NEVER IN THE REPOSITORY (secrets.md 3, keyring.md 11). It arrives as a
-// gradle property from local.properties or from the workflow, which writes it from a repository
-// secret. When it is absent the app still builds and still runs: the Google layer is present in
-// the switcher and inactive, with the reason on it. Nothing appears or disappears.
-val localProperties = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val googleMapsKey: String = (localProperties.getProperty("googleMapsKey")
-    ?: project.findProperty("googleMapsKey") as String?
-    ?: System.getenv("GOOGLE_MAPS_API_KEY")
-    ?: "").trim()
+// NO KEY REACHES THIS BUILD, IN ANY FORM. Baba, 14.9.2026, after a Maps key went out inside a
+// public APK: "This is public app. My key cannot be inside. Only work with key picker. Key picker
+// is the key." So there is no manifest placeholder, no BuildConfig field and no repository secret
+// for a service key: every key arrives on the phone, from a file he picks (Keys.kt).
 
 android {
     namespace = "com.mantra.trail"
@@ -40,8 +32,6 @@ android {
         targetSdk = 35
         versionCode = appVersion
         versionName = appVersion.toString()
-        manifestPlaceholders["googleMapsKey"] = googleMapsKey
-        buildConfigField("boolean", "HAS_GOOGLE_KEY", if (googleMapsKey.isEmpty()) "false" else "true")
     }
 
     signingConfigs {
@@ -127,9 +117,9 @@ dependencies {
 
     // The fix: GPS, Wi-Fi and cell fused by the system, plus the raw satellite status underneath it.
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    // Google's own map, online only: its terms forbid caching tiles (Map Tiles API policies).
-    implementation("com.google.android.gms:play-services-maps:19.0.0")
-    implementation("com.google.maps.android:maps-compose:6.4.1")
+    // NO GOOGLE MAPS SDK. It reads its key from the installed app, which is exactly the thing
+    // that put a live key inside a public APK. Google's tiles now come from the Map Tiles API
+    // with the key from the picker, over plain HTTP, like any other tile service.
 
     testImplementation("junit:junit:4.13.2")
 }

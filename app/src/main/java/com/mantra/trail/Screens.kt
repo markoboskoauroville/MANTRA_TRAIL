@@ -41,10 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.MapUiSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -64,7 +60,10 @@ import kotlinx.coroutines.launch
  * to say where the centre is when panning, not enough to be in the way.
  */
 private val GAP = 10.dp
-private val KEY = 52.dp
+private val KEY = 46.dp
+
+/** The one size for the marks: the centre of the map, the where key and the record circle. */
+private val MARK = 22.dp
 
 /** Bumped when a picker or a download changes something a row shows. */
 object UiTick {
@@ -88,6 +87,7 @@ fun TrailApp(
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
     onDownloadMap: () -> Unit,
+    onOpenMapLink: () -> Unit,
     onZeroLevel: () -> Unit,
     onBare: (Boolean) -> Unit,
 ) {
@@ -104,9 +104,15 @@ fun TrailApp(
     val recording = recordingSince != null
     val scope = rememberCoroutineScope()
 
+    // The map the app opened on. It is put up once the view exists, and never again from here:
+    // after that every change goes through the toggle or the settings list.
+    LaunchedEffect(Unit) {
+        showLayer(store, layer)
+    }
+
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
 
-        MapSurface(layer = layer, store = store, fix = fix, line = Trail.line.collectAsState().value, onCanvas = onCanvas)
+        MapSurface(store = store, fix = fix, line = Trail.line.collectAsState().value, onCanvas = onCanvas)
 
         // THE TAP IN THE MIDDLE. A small target, so panning the map anywhere else is untouched,
         // and the mark that says where the centre is sits inside it.
@@ -139,9 +145,10 @@ fun TrailApp(
                 verticalArrangement = Arrangement.spacedBy(GAP),
             ) {
                 NoteLine(note)
+                Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
                 TrackLine(stats, recording)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-                    Key("⊕", lit = fix != null, onClick = onWhereAmI)
+                    MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
                     Key(
                         glyph = "CH",
@@ -170,7 +177,7 @@ fun TrailApp(
                                     if (plan.truncated) ", of ${plan.wanted}: zoom in for the rest" else ""
                             )
                             scope.launch {
-                                val failed = canvas.cacheVisible(layer, plan) { done, total, bad ->
+                                val failed = canvas.cacheVisible(layer, plan, layer.provider?.let { store.key(it) }) { done, total, bad ->
                                     Trail.say("Caching $done of $total" + if (bad > 0) ", $bad did not come" else "")
                                 }
                                 caching = false
@@ -189,7 +196,7 @@ fun TrailApp(
                             val picked = Layers.next(layer)
                             layer = picked
                             store.layerId = picked.id
-                            Trail.say(CanvasHolder.canvas?.show(picked))
+                            scope.launch { showLayer(store, picked) }
                         },
                     )
                     Key("⚙", lit = false, onClick = { settings = true })
@@ -206,13 +213,14 @@ fun TrailApp(
                 onPick = { picked ->
                     layer = picked
                     store.layerId = picked.id
-                    Trail.say(CanvasHolder.canvas?.show(picked))
+                    scope.launch { showLayer(store, picked) }
                 },
                 onZero = onZeroLevel,
                 onChooseMapFile = onChooseMapFile,
                 onChooseExportFolder = onChooseExportFolder,
                 onImportKeys = onImportKeys,
                 onDownloadMap = onDownloadMap,
+                onOpenMapLink = onOpenMapLink,
                 onExport = onExport,
                 onPause = onPause,
                 recordingPaused = paused,
@@ -223,42 +231,69 @@ fun TrailApp(
 }
 
 @Composable
-private fun MapSurface(
-    layer: MapLayer,
-    store: Store,
-    fix: Fix?,
-    line: List<Fix>,
-    onCanvas: (MapCanvas) -> Unit,
-) {
-    if (layer.kind == LayerKind.GOOGLE) {
-        if (BuildConfig.HAS_GOOGLE_KEY) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                properties = MapProperties(mapType = MapType.TERRAIN),
-                uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false),
-            )
-        } else {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Label("Google needs a key in this build", Paint.Dim)
-            }
-        }
-        return
-    }
-
+private fun MapSurface(store: Store, fix: Fix?, line: List<Fix>, onCanvas: (MapCanvas) -> Unit) {
+    // ONE SURFACE FOR EVERY MAP. Google's own SDK is gone with the key that was compiled in:
+    // its tiles now come through the Map Tiles API with the key from the picker, which makes it
+    // the same kind of layer as the others and leaves nothing to switch between.
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             val made = MapCanvas(context, store)
             CanvasHolder.canvas = made
             onCanvas(made)
-            Trail.say(made.show(layer))
             made.view
         },
     )
 
-    LaunchedEffect(line.size, fix?.timeMs, layer.id) {
+    LaunchedEffect(line.size, fix?.timeMs) {
         CanvasHolder.canvas?.drawTrack(line)
         CanvasHolder.canvas?.drawPosition(fix)
+    }
+}
+
+/**
+ * PUT A LAYER ON THE MAP, fetching whatever it needs first.
+ *
+ * A layer that needs a key and has none says which key and where to put it, rather than drawing
+ * an empty grid and leaving somebody to guess. Google needs a session as well, and the session is
+ * made here — once, when the view is actually chosen, because Google bills per tile.
+ */
+suspend fun showLayer(store: Store, layer: MapLayer) {
+    val canvas = CanvasHolder.canvas ?: return
+    val key = layer.provider?.let { store.key(it) }
+    if (layer.provider != null && key.isNullOrEmpty()) {
+        Trail.say(Layers.missingKey(layer))
+        return
+    }
+    if (layer.kind == LayerKind.GOOGLE_TILES) {
+        val view = layer.googleView ?: MapLayer.GoogleView.NORMAL
+        Trail.say("Asking Google for a session…")
+        val result = GoogleTiles.session(view, key!!)
+        if (result.token == null) {
+            Trail.say(result.problem)
+            return
+        }
+        Trail.say(canvas.show(layer, session = result.token, key = key))
+        return
+    }
+    Trail.say(canvas.show(layer, key = key))
+}
+
+/**
+ * A KEY THAT IS A MARK RATHER THAN A GLYPH.
+ *
+ * Baba, 14.9.2026: the where key should look like the thing in the middle of the map, and both it
+ * and the record circle should be smaller. So they are: the same ring and dot that marks the
+ * centre, at the same size as the red circle beside it, on nothing.
+ */
+@Composable
+private fun RowScope.MarkKey(onClick: () -> Unit, mark: @Composable (Boolean) -> Unit) {
+    val hasFix = Trail.fix.collectAsState().value != null
+    Box(
+        Modifier.weight(1f).height(KEY).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        mark(hasFix)
     }
 }
 
@@ -276,7 +311,7 @@ object CanvasHolder {
 @Composable
 private fun CentreMark(hasFix: Boolean) {
     val ink = if (hasFix) Paint.Sand else Paint.Dim
-    Canvas(Modifier.size(18.dp)) {
+    Canvas(Modifier.size(MARK)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         drawCircle(ink, radius = size.minDimension / 2f - 1f, center = c, style = Stroke(1.5.dp.toPx()))
         drawCircle(ink, radius = 1.5.dp.toPx(), center = c)
@@ -362,7 +397,7 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
         Modifier.weight(1f).height(KEY).clickable(onClick = onPress),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(30.dp)) {
+        Canvas(Modifier.size(MARK)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f - 2f
             when {
@@ -395,6 +430,7 @@ private fun SettingsFace(
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
     onDownloadMap: () -> Unit,
+    onOpenMapLink: () -> Unit,
     onExport: () -> Unit,
     onPause: () -> Unit,
     recordingPaused: Boolean,
@@ -404,7 +440,7 @@ private fun SettingsFace(
     var reading by remember { mutableStateOf(sensors.level) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     val exportState = remember(UiTick.n) { if (store.exportTreeUri != null) "chosen" else "none" }
-    val keyState = remember(UiTick.n) { if (store.keyCount > 0) "${store.keyCount} held" else "none" }
+    val keyState = remember(UiTick.n) { store.keyState }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -451,34 +487,41 @@ private fun SettingsFace(
             SettingRow("zero the level on this surface", "set it down first", onZero)
 
             // The map, chosen the way one-of-many is always chosen (design-language.md 6).
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-                Layers.ALL.forEach { layer ->
-                    val chosen = layer.id == current.id
-                    val usable = layer.kind != LayerKind.GOOGLE || BuildConfig.HAS_GOOGLE_KEY
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (chosen) Paint.Amber else Paint.Veil)
-                            .alpha(if (usable) 1f else 0.4f)
-                            .clickable(enabled = usable) { onPick(layer) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Label(layer.label, if (chosen) Paint.Ground else Paint.Sand, size = 11)
+            // Three to a row: six across a phone would clip the words, so it stacks instead.
+            Layers.ALL.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                    row.forEach { layer ->
+                        val chosen = layer.id == current.id
+                        val needsKey = layer.provider != null && store.key(layer.provider) == null
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (chosen) Paint.Amber else Paint.Veil)
+                                .alpha(if (needsKey) 0.55f else 1f)
+                                .clickable { onPick(layer) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Label(layer.label, if (chosen) Paint.Ground else Paint.Sand, size = 11)
+                        }
                     }
                 }
             }
 
             SettingRow("download the offline map, ${Layers.OfflineDownload.LABEL}", mapState, onDownloadMap)
             SettingRow("or choose a .map file", "picker", onChooseMapFile)
+            SettingRow("open the map link in the browser", "mapsforge.org", onOpenMapLink)
+            // The address itself, in full, so it can be read off the screen and typed into a
+            // desktop browser if the phone is the wrong place to fetch 176 MB.
+            Label(Layers.OfflineDownload.URL, Paint.Dim, size = 9, align = TextAlign.Start)
             SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
             SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)
             Label(
-                text = "Google's key is read from the app at install, so a key imported here is for " +
-                    "tile services that take one in the URL, not Google's view.",
+                text = "No key is built into this app. Google's four views and Outdoors each need " +
+                    "your own key, picked from a file here; the offline map and OpenStreetMap need none.",
                 colour = Paint.Dim,
                 size = 10,
                 align = TextAlign.Start,

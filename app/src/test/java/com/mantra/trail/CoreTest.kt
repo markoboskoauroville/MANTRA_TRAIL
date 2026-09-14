@@ -553,9 +553,81 @@ class CoreTest {
 
     // --- The layers -----------------------------------------------------------------------------
 
-    @Test fun thereAreThreeLayersAndTheyHaveDistinctIds() {
-        assertEquals(3, Layers.ALL.size)
-        assertEquals(3, Layers.ALL.map { it.id }.toSet().size)
+    @Test fun thereAreSevenLayersAndTheyHaveDistinctIds() {
+        assertEquals(7, Layers.ALL.size)
+        assertEquals(7, Layers.ALL.map { it.id }.toSet().size)
+    }
+
+    @Test fun noLayerCarriesAKeyOfItsOwn() {
+        // The whole point of v7: the app ships no key. A URL template may have a {key} hole in
+        // it; anything that looks like a real key in this table is the failure that cost a live
+        // Maps key on 14.9.2026.
+        val shapes = Regex("(AIza|gsk_|sk-ant-)[A-Za-z0-9_-]{20,}|\\b[0-9a-f]{32}\\b")
+        Layers.ALL.forEach { layer ->
+            assertNull(layer.id, layer.url?.let { shapes.find(it) })
+        }
+    }
+
+    @Test fun aLayerThatNeedsAKeyHasNoAddressWithoutOne() {
+        Layers.ALL.filter { it.provider != null }.forEach {
+            assertNull(it.id, Layers.tileUrl(it, 12, 2229, 1460, auth = "session", key = null))
+            assertNull(it.id, Layers.tileUrl(it, 12, 2229, 1460, auth = "session", key = ""))
+            assertNotNull(it.id, Layers.missingKey(it))
+        }
+    }
+
+    @Test fun googleNeedsASessionAsWellAsAKey() {
+        assertNull(Layers.tileUrl(Layers.GOOGLE, 12, 2229, 1460, auth = null, key = "AIza" + "B".repeat(35)))
+        val url = Layers.tileUrl(Layers.GOOGLE, 12, 2229, 1460, auth = "S123", key = "AIza" + "B".repeat(35))!!
+        assertTrue(url.contains("session=S123"))
+        assertTrue(url.contains("/12/2229/1460"))
+    }
+
+    @Test fun theWalkingMapPutsTheKeyInItsAddress() {
+        val key = "a".repeat(32)
+        val url = Layers.tileUrl(Layers.OUTDOORS, 12, 2229, 1460, key = key)!!
+        assertTrue(url.contains("apikey=$key"))
+        assertTrue(url.startsWith("https://"))
+    }
+
+    @Test fun hybridIsSatelliteWithTheRoadsOverIt() {
+        assertEquals("satellite", MapLayer.GoogleView.HYBRID.mapType)
+        assertTrue(MapLayer.GoogleView.HYBRID.overlayRoads)
+        assertFalse(MapLayer.GoogleView.SATELLITE.overlayRoads)
+    }
+
+    @Test fun aKeyIsSortedByItsShapeRatherThanByBeingAsked() {
+        assertEquals(Keys.Provider.GOOGLE, Keys.providerOf("AIza" + "B".repeat(35)))
+        assertEquals(Keys.Provider.THUNDERFOREST, Keys.providerOf("0123456789abcdef0123456789abcdef"))
+        assertNull(Keys.providerOf("cafeteria"))
+        assertNull(Keys.providerOf("0123456789ABCDEF0123456789ABCDEF"))
+    }
+
+    @Test fun aFileWithBothKindsSortsBoth() {
+        val text = "google\n" + "AIza" + "B".repeat(35) + "\n\nthunderforest\n" + "a".repeat(32) + "\n"
+        val found = Keys.parse(text)
+        assertEquals(2, found.size)
+        assertEquals(setOf(Keys.Provider.GOOGLE, Keys.Provider.THUNDERFOREST), found.map { it.provider }.toSet())
+    }
+
+    @Test fun googleContributesAllFourOfItsViews() {
+        val views = Layers.ALL.mapNotNull { it.googleView }
+        assertEquals(4, views.size)
+        assertEquals(4, views.toSet().size)
+    }
+
+    @Test fun noViewOfGoogleMayBeCachedOrRefusedQuietly() {
+        Layers.ALL.filter { it.kind == LayerKind.GOOGLE_TILES }.forEach {
+            assertFalse(it.id, it.cacheable)
+            assertEquals(it.id, MapLayer.Offline.NONE, it.offline)
+            assertNotNull(it.id, Caching.refusal(it))
+            assertNull(it.id, Layers.tileUrl(it, 12, 2229, 1460))
+        }
+    }
+
+    @Test fun onlyGoogleLayersCarryAGoogleView() {
+        assertNull(Layers.OFFLINE.googleView)
+        assertNull(Layers.OSM.googleView)
     }
 
     @Test fun oneButtonTurnsThroughEveryMapAndComesBack() {
@@ -671,6 +743,7 @@ class CoreTest {
 
     @Test fun ourOwnRasterLayersAreNotRefused() {
         assertNull(Caching.refusal(Layers.OSM))
+        assertNull(Caching.refusal(Layers.OUTDOORS))
     }
 
     @Test fun sizesAreWrittenInUnitsSomebodyCanJudge() {
@@ -727,7 +800,7 @@ class CoreTest {
     }
 
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {
-        val d = Keys.describe(0, 3, fakeKey)
+        val d = Keys.describe(0, 3, Keys.Found(fakeKey, Keys.Provider.GOOGLE, null))
         assertTrue(d.contains("1 of 3"))
         assertTrue(d.contains("${fakeKey.length}"))
         assertFalse(d.contains(fakeKey.substring(0, 8)))

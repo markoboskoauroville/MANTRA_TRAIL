@@ -85,7 +85,7 @@ object Caching {
      * are honest ones rather than a disabled button with no explanation.
      */
     fun refusal(layer: MapLayer): String? = when (layer.kind) {
-        LayerKind.GOOGLE ->
+        LayerKind.GOOGLE_TILES ->
             "Google's terms forbid storing its tiles, so this one cannot be cached"
 
         LayerKind.VECTOR_FILE ->

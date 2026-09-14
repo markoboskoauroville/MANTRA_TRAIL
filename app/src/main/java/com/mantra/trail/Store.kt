@@ -46,11 +46,26 @@ class Store(context: Context) {
      * not in the repository, not in a log line, not on the screen. What the screen may show is
      * how many there are (secrets.md 3, keyring.md 10d).
      */
-    var keys: List<String>
-        get() = prefs.getString(KEY_KEYS, "")?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
-        set(v) = prefs.edit().putString(KEY_KEYS, v.joinToString("\n")).apply()
+    var keys: Map<Keys.Provider, String>
+        get() = (prefs.getString(KEY_KEYS, "") ?: "").split("\n")
+            .filter { it.contains('|') }
+            .mapNotNull { line ->
+                val provider = runCatching { Keys.Provider.valueOf(line.substringBefore('|')) }.getOrNull()
+                val value = line.substringAfter('|')
+                if (provider != null && value.isNotBlank()) provider to value else null
+            }
+            .toMap()
+        set(v) = prefs.edit()
+            .putString(KEY_KEYS, v.entries.joinToString("\n") { "${it.key.name}|${it.value}" })
+            .apply()
+
+    fun key(provider: Keys.Provider): String? = keys[provider]
 
     val keyCount: Int get() = keys.size
+
+    /** Which services have a key, by name, for the settings row. Never a key, never a piece of one. */
+    val keyState: String
+        get() = if (keys.isEmpty()) "none" else keys.keys.joinToString(", ") { it.name.lowercase() }
 
     /** What the settings row says about the offline map: on the phone, or not yet. */
     val offlineMapState: String

@@ -36,8 +36,13 @@ import java.net.URL
  * The time to live is thirty days. A topographic map is not news: keeping a tile for a month is
  * the difference between a map that is there on the mountain and one that is a grey grid.
  */
-class WebTileSource(private val layer: MapLayer) :
-    AbstractTileSource(arrayOf(URL(layer.url).host), 443) {
+class WebTileSource(
+    private val layer: MapLayer,
+    /** The session token for Google, ignored by everything else. */
+    private val session: String? = null,
+    /** The key from the file he picked, for the services that take one in the address. */
+    private val key: String? = null,
+) : AbstractTileSource(arrayOf(URL(layer.url).host), 443) {
 
     init {
         userAgent = "MantraTrail/1 (+https://github.com/markoboskoauroville/MANTRA_TRAIL)"
@@ -48,8 +53,8 @@ class WebTileSource(private val layer: MapLayer) :
 
     @Throws(MalformedURLException::class)
     override fun getTileUrl(tile: Tile): URL {
-        val url = Layers.tileUrl(layer, tile.zoomLevel.toInt(), tile.tileX, tile.tileY)
-            ?: throw MalformedURLException("layer ${layer.id} has no tiles of its own")
+        val url = Layers.tileUrl(layer, tile.zoomLevel.toInt(), tile.tileX, tile.tileY, session, key)
+            ?: throw MalformedURLException("layer ${layer.id} has no address without its key")
         return URL(url)
     }
 
@@ -99,7 +104,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * Put a layer under everything else. Returns the reason when it cannot, so the screen can say
      * it in a sentence instead of showing an empty grid and letting somebody wonder.
      */
-    fun show(layer: MapLayer): String? {
+    fun show(layer: MapLayer, session: String? = null, key: String? = null): String? {
         baseLayer?.let { view.layerManager.layers.remove(it) }
         (baseLayer as? TileDownloadLayer)?.onPause()
         baseLayer = null
@@ -122,11 +127,17 @@ class MapCanvas(private val context: Context, private val store: Store) {
 
         val problem: String? = when (layer.kind) {
             LayerKind.VECTOR_FILE -> openVectorLayer(cache)
-            LayerKind.RASTER_XYZ -> {
+            LayerKind.RASTER_XYZ, LayerKind.GOOGLE_TILES -> {
+                if (layer.provider != null && key.isNullOrEmpty()) {
+                    return Layers.missingKey(layer)
+                }
+                if (layer.kind == LayerKind.GOOGLE_TILES && session.isNullOrEmpty()) {
+                    return "Google has no session yet"
+                }
                 val download = TileDownloadLayer(
                     cache,
                     view.model.mapViewPosition,
-                    WebTileSource(layer),
+                    WebTileSource(layer, session, key),
                     factory,
                 )
                 view.layerManager.layers.add(0, download)
@@ -137,7 +148,6 @@ class MapCanvas(private val context: Context, private val store: Store) {
 
             // Google draws its own view. That is not a problem and must not be reported as
             // one: a note the person cannot act on teaches them to ignore the note line.
-            LayerKind.GOOGLE -> null
         }
         view.setZoomLevelMin(layer.minZoom.toByte())
         view.setZoomLevelMax(layer.maxZoom.toByte())
@@ -254,10 +264,11 @@ class MapCanvas(private val context: Context, private val store: Store) {
     suspend fun cacheVisible(
         layer: MapLayer,
         plan: Caching.Plan,
+        key: String?,
         onProgress: (done: Int, total: Int, failed: Int) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
         val cache = tileCache ?: return@withContext 0
-        val source = WebTileSource(layer)
+        val source = WebTileSource(layer, key = key)
         val tileSize = view.model.displayModel.tileSize
         var done = 0
         var failed = 0
