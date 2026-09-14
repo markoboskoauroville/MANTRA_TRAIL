@@ -73,8 +73,14 @@ jobs:
           LOOPS=$( nocount grep -rnE '(while|for|repeat)[[:space:]]*[({]' --include='*.kt' "$SRC" | wc -l)
           UNBOUNDED=$( nocount grep -rnF 'while (true)' --include='*.kt' "$SRC" | notcomment | wc -l)
           echo "loops examined:         $LOOPS"
-          echo "written as while(true): $UNBOUNDED   (the tools face's LaunchedEffect loop is bounded by the composition: it dies with the face)"
-          [ "$UNBOUNDED" -le 1 ] || { echo "an unbounded loop appeared"; exit 1; }
+          # TWO, AND BOTH BOUNDS ARE NAMED. Raising this number is a decision, never a reflex:
+          #   1  the settings face's LaunchedEffect — bounded by the composition; it dies with the face
+          #   2  MapDownload's read loop — bounded by the end of the stream and by the socket's
+          #      own read timeout, which is what stops a server that accepts and then goes quiet
+          #      (four-tests.md Test 3, "never answers")
+          echo "written as while(true): $UNBOUNDED   (both bounds are named in the workflow)"
+          [ "$UNBOUNDED" -le 2 ] || { echo "an unbounded loop appeared that nobody has justified"; exit 1; }
+          grep -q "readTimeout" app/src/main/java/com/mantra/trail/MapDownload.kt || { echo "the download loop lost its deadline"; exit 1; }
           [ "$LOOPS" -ge 3 ] || { echo "found fewer loops than exist: this check is broken, not the code"; exit 1; }
 
       - name: "Test 1 — the mechanism"
