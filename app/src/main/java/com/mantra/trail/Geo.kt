@@ -30,9 +30,6 @@ object Geo {
     /** Web Mercator is undefined at the poles; this is the latitude the square is cut at. */
     const val MERC_LAT_LIMIT = 85.05112878
 
-    /** Half the side of the Web Mercator square, in metres. */
-    const val MERC_MAX = 20037508.342789244
-
     fun rad(deg: Double): Double = deg * Math.PI / 180.0
     fun deg(rad: Double): Double = rad * 180.0 / Math.PI
 
@@ -88,16 +85,6 @@ object Geo {
 
     fun clampLat(lat: Double): Double = lat.coerceIn(-MERC_LAT_LIMIT, MERC_LAT_LIMIT)
 
-    fun mercX(lon: Double): Double = lon.coerceIn(-180.0, 180.0) * MERC_MAX / 180.0
-
-    fun mercY(lat: Double): Double {
-        val l = rad(clampLat(lat))
-        return ln(tan(Math.PI / 4 + l / 2)) * EARTH_R_MERC
-    }
-
-    /** The sphere radius Web Mercator is defined on, which is not the mean radius above. */
-    private const val EARTH_R_MERC = 6378137.0
-
     fun tileX(lon: Double, zoom: Int): Int {
         val n = 1 shl zoom
         val x = floor((lon.coerceIn(-180.0, 180.0) + 180.0) / 360.0 * n).toInt()
@@ -109,18 +96,6 @@ object Geo {
         val l = rad(clampLat(lat))
         val y = floor((1.0 - ln(tan(l) + 1.0 / cos(l)) / Math.PI) / 2.0 * n).toInt()
         return y.coerceIn(0, n - 1)
-    }
-
-    /**
-     * The bounding box of a tile in EPSG:3857 metres, as minX, minY, maxX, maxY — the order a WMS
-     * GetMap expects. The y axis points north, so the tile row counts the other way.
-     */
-    fun tileBbox3857(zoom: Int, x: Int, y: Int): DoubleArray {
-        val n = 1 shl zoom
-        val side = 2 * MERC_MAX / n
-        val minX = -MERC_MAX + x * side
-        val maxY = MERC_MAX - y * side
-        return doubleArrayOf(minX, maxY - side, minX + side, maxY)
     }
 
     // --- How things are written on the screen ---------------------------------------------------

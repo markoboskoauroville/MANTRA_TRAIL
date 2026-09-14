@@ -122,7 +122,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
 
         val problem: String? = when (layer.kind) {
             LayerKind.VECTOR_FILE -> openVectorLayer(cache)
-            LayerKind.RASTER_XYZ, LayerKind.WMS -> {
+            LayerKind.RASTER_XYZ -> {
                 val download = TileDownloadLayer(
                     cache,
                     view.model.mapViewPosition,
@@ -146,25 +146,43 @@ class MapCanvas(private val context: Context, private val store: Store) {
         return problem
     }
 
+    /**
+     * The offline map, from whichever of the two places it is in: the file this app downloaded
+     * itself, or one chosen with the picker. The downloaded one wins, because it is the one the
+     * app can prove is whole.
+     */
     private fun openVectorLayer(cache: TileCache): String? {
-        val uri = store.mapFileUri ?: return "No offline map chosen yet"
+        val downloaded = MapDownload.target(context)
+        if (MapDownload.isPresent(context)) {
+            return try {
+                attachVector(cache, MapFile(downloaded))
+                null
+            } catch (e: Exception) {
+                "The downloaded map could not be read: ${e.javaClass.simpleName}"
+            }
+        }
+        val uri = store.mapFileUri
+            ?: return "No offline map yet. Settings: download Croatia, or choose a .map file."
         return try {
             val descriptor: ParcelFileDescriptor = context.contentResolver
                 .openFileDescriptor(Uri.parse(uri), "r")
-                ?: return "The offline map file could not be opened"
-            val file = MapFile(FileInputStream(descriptor.fileDescriptor))
-            mapFile = file
-            val renderer = TileRendererLayer(cache, file, view.model.mapViewPosition, factory)
-            renderer.setXmlRenderTheme(MapsforgeThemes.DEFAULT)
-            view.layerManager.layers.add(0, renderer)
-            baseLayer = renderer
+                ?: return "That map file could not be opened"
+            attachVector(cache, MapFile(FileInputStream(descriptor.fileDescriptor)))
             null
         } catch (e: Exception) {
-            // The folder permission can be lost by a reinstall, and the file can be deleted.
-            // Either way the honest answer is one sentence and the button to choose it again.
+            // A folder permission can be lost by a reinstall and a file can be deleted. Either
+            // way the honest answer is one sentence and the way to choose it again.
             store.mapFileUri = null
             "The offline map could not be read: ${e.javaClass.simpleName}"
         }
+    }
+
+    private fun attachVector(cache: TileCache, file: MapFile) {
+        mapFile = file
+        val renderer = TileRendererLayer(cache, file, view.model.mapViewPosition, factory)
+        renderer.setXmlRenderTheme(MapsforgeThemes.DEFAULT)
+        view.layerManager.layers.add(0, renderer)
+        baseLayer = renderer
     }
 
     /** The line of the walk so far, in the recording red. */

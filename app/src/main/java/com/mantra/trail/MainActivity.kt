@@ -12,6 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
     private var canvas: MapCanvas? = null
 
     private var pendingRecord by mutableStateOf(false)
+    private var downloading = false
 
     private val askLocation = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -55,7 +58,7 @@ class MainActivity : ComponentActivity() {
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         store.mapFileUri = uri.toString()
         UiTick.bump()
-        Trail.say(canvas?.show(Layers.OAM))
+        Trail.say(canvas?.show(Layers.OFFLINE))
     }
 
     /**
@@ -123,8 +126,9 @@ class MainActivity : ComponentActivity() {
                 onChooseMapFile = { pickMapFile.launch(arrayOf("*/*")) },
                 onChooseExportFolder = { pickExportFolder.launch(null) },
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
+                onDownloadMap = ::downloadOfflineMap,
                 onZeroLevel = ::zeroLevel,
-                onFullScreen = ::setFullScreen,
+                onBare = ::setFullScreen,
             )
         }
 
@@ -155,9 +159,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * THE SECOND VIEW. The system's bars go out with ours, so the map is the whole glass and the
-     * one way back is the key the screen keeps in the top right corner. Sticky immersive, so a
-     * swipe shows the bars for a moment without dropping out of the view.
+     * THE BARE VIEW, reached by tapping the middle of the map. The system's bars go out with ours,
+     * so there is the map and nothing else; tapping the middle again brings both back. Sticky
+     * immersive, so a swipe shows the bars for a moment without dropping out of the view.
      */
     private fun setFullScreen(on: Boolean) {
         val controller = WindowInsetsControllerCompat(window, window.decorView)
@@ -167,6 +171,38 @@ class MainActivity : ComponentActivity() {
             controller.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /**
+     * THE OFFLINE MAP, FETCHED BY THE APP ITSELF. 176 MB from mapsforge's own server, resumable,
+     * with the progress on the screen the whole time (download-monitor.md: never in the dark).
+     */
+    private fun downloadOfflineMap() {
+        if (downloading) {
+            Trail.say("Already fetching the map")
+            return
+        }
+        if (MapDownload.isPresent(this)) {
+            Trail.say("The offline map is already on the phone")
+            return
+        }
+        downloading = true
+        Trail.say("Fetching ${Layers.OfflineDownload.LABEL}. It can run in the background.")
+        lifecycleScope.launch {
+            val problem = MapDownload.fetch(this@MainActivity) { p ->
+                Trail.say("Map ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB")
+            }
+            downloading = false
+            UiTick.bump()
+            if (problem != null) {
+                Trail.say(problem)
+            } else {
+                Trail.say("The offline map is on the phone. It works with no signal now.")
+                if (Layers.byId(store.layerId).kind == LayerKind.VECTOR_FILE) {
+                    Trail.say(canvas?.show(Layers.OFFLINE))
+                }
+            }
         }
     }
 

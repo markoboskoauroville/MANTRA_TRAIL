@@ -14,8 +14,10 @@ import android.content.SharedPreferences
  */
 class Store(context: Context) {
 
+    private val app: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("mantra-trail", Context.MODE_PRIVATE)
+        app.getSharedPreferences("mantra-trail", Context.MODE_PRIVATE)
 
     var layerId: String
         get() = prefs.getString(KEY_LAYER, Layers.OAM.id) ?: Layers.OAM.id
@@ -49,6 +51,14 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString(KEY_KEYS, v.joinToString("\n")).apply()
 
     val keyCount: Int get() = keys.size
+
+    /** What the settings row says about the offline map: on the phone, or not yet. */
+    val offlineMapState: String
+        get() = when {
+            MapDownload.isPresent(app) -> "on the phone"
+            mapFileUri != null -> "a file is chosen"
+            else -> "not yet"
+        }
 
     fun calibration(): Level.Calibration = Level.Calibration(levelPitchZero, levelRollZero)
 

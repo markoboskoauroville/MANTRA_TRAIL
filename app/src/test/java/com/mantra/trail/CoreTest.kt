@@ -132,32 +132,9 @@ class CoreTest {
         assertEquals(1460, Geo.tileY(zagrebLat, 12))
     }
 
-    @Test fun theWholeWorldBoxIsTheMercatorSquare() {
-        val b = Geo.tileBbox3857(0, 0, 0)
-        assertEquals(-Geo.MERC_MAX, b[0], 1.0)
-        assertEquals(-Geo.MERC_MAX, b[1], 1.0)
-        assertEquals(Geo.MERC_MAX, b[2], 1.0)
-        assertEquals(Geo.MERC_MAX, b[3], 1.0)
-    }
 
-    @Test fun aTileBoxIsSquareAndHalvesEachZoom() {
-        val z8 = Geo.tileBbox3857(8, 137, 90)
-        val z9 = Geo.tileBbox3857(9, 274, 180)
-        assertEquals(z8[2] - z8[0], z8[3] - z8[1], 1e-6)
-        assertEquals((z8[2] - z8[0]) / 2.0, z9[2] - z9[0], 1e-6)
-    }
 
-    @Test fun theTopRowIsNorthOfTheBottomRow() {
-        val top = Geo.tileBbox3857(4, 8, 0)
-        val bottom = Geo.tileBbox3857(4, 8, 15)
-        assertTrue(top[1] > bottom[3])
-    }
 
-    @Test fun neighbouringTilesShareAnEdge() {
-        val left = Geo.tileBbox3857(10, 550, 360)
-        val right = Geo.tileBbox3857(10, 551, 360)
-        assertEquals(left[2], right[0], 1e-6)
-    }
 
     // --- Geo: what the screen shows -----------------------------------------------------------
 
@@ -576,9 +553,30 @@ class CoreTest {
 
     // --- The layers -----------------------------------------------------------------------------
 
-    @Test fun thereAreFourLayersAndTheyHaveDistinctIds() {
-        assertEquals(4, Layers.ALL.size)
-        assertEquals(4, Layers.ALL.map { it.id }.toSet().size)
+    @Test fun thereAreThreeLayersAndTheyHaveDistinctIds() {
+        assertEquals(3, Layers.ALL.size)
+        assertEquals(3, Layers.ALL.map { it.id }.toSet().size)
+    }
+
+    @Test fun oneButtonTurnsThroughEveryMapAndComesBack() {
+        var layer = Layers.ALL.first()
+        val seen = ArrayList<String>()
+        repeat(Layers.ALL.size) {
+            seen.add(layer.id)
+            layer = Layers.next(layer)
+        }
+        assertEquals(Layers.ALL.map { it.id }, seen)
+        assertEquals(Layers.ALL.first().id, layer.id)
+    }
+
+    @Test fun everyMapHasAShortNameThatFitsAKey() {
+        Layers.ALL.forEach { assertTrue(it.id, it.short.length <= 4) }
+    }
+
+    @Test fun theOfflineMapIsFetchedFromAKnownPlaceWithAKnownSize() {
+        assertTrue(Layers.OfflineDownload.URL.startsWith("https://"))
+        assertTrue(Layers.OfflineDownload.NAME.endsWith(".map"))
+        assertTrue(Layers.OfflineDownload.BYTES > 100_000_000)
     }
 
     @Test fun googlesTilesAreNeverCacheable() {
@@ -590,29 +588,20 @@ class CoreTest {
     }
 
     @Test fun theOfflineMapNeedsNothingFetched() {
-        assertEquals(MapLayer.Offline.COMPLETE, Layers.OAM.offline)
-        assertNull(Layers.tileUrl(Layers.OAM, 12, 2229, 1460))
+        assertEquals(MapLayer.Offline.COMPLETE, Layers.OFFLINE.offline)
+        assertNull(Layers.tileUrl(Layers.OFFLINE, 12, 2229, 1460))
     }
 
     @Test fun theRasterUrlCarriesTheTileNumbers() {
-        val u = Layers.tileUrl(Layers.OPENTOPO, 12, 2229, 1460)!!
+        val u = Layers.tileUrl(Layers.OSM, 12, 2229, 1460)!!
         assertTrue(u.endsWith("/12/2229/1460.png"))
+        assertTrue(u.startsWith("https://"))
     }
 
-    @Test fun theCroatianTopoIsAskedForItsOwnBoundingBox() {
-        val u = Layers.tileUrl(Layers.TK25, 12, 2229, 1460)!!
-        assertTrue(u.contains("SRS=EPSG:3857"))
-        assertTrue(u.contains("LAYERS=tk:TK25"))
-        assertTrue(u.contains("WIDTH=256&HEIGHT=256"))
-        val bbox = u.substringAfter("BBOX=").split(",").map { it.toDouble() }
-        val expected = Geo.tileBbox3857(12, 2229, 1460)
-        assertEquals(expected[0], bbox[0], 0.001)
-        assertEquals(expected[3], bbox[3], 0.001)
-    }
 
     @Test fun anUnknownLayerIdFallsBackToTheOneThatWorksOffline() {
-        assertEquals(Layers.OAM.id, Layers.byId("something else").id)
-        assertEquals(Layers.TK25.id, Layers.byId("tk25").id)
+        assertEquals(Layers.OFFLINE.id, Layers.byId("something else").id)
+        assertEquals(Layers.OSM.id, Layers.byId("osm").id)
     }
 
     @Test fun everyFetchedLayerHasAnAttributionAndAUrl() {
@@ -625,7 +614,7 @@ class CoreTest {
     // --- Caching the view -----------------------------------------------------------------------
 
     @Test fun aPlanCoversTheZoomOnScreenAndTwoCloser() {
-        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OPENTOPO)
+        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OSM)
         assertEquals(13, p.fromZoom)
         assertEquals(15, p.toZoom)
         assertTrue(p.tiles.any { it.zoom == 13 })
@@ -634,43 +623,39 @@ class CoreTest {
 
     @Test fun aPlanStartsWithTheZoomBeingLookedAt() {
         // A cancelled run must leave the level on screen complete, so it is fetched first.
-        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OPENTOPO)
+        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OSM)
         assertEquals(13, p.tiles.first().zoom)
     }
 
     @Test fun oneZoomCloserIsFourTimesTheTiles() {
-        val p = Caching.plan(44.0, 15.0, 44.5, 15.5, 12, Layers.OPENTOPO, extraZooms = 1)
+        val p = Caching.plan(44.0, 15.0, 44.5, 15.5, 12, Layers.OSM, extraZooms = 1)
         val atTwelve = p.tiles.count { it.zoom == 12 }
         val atThirteen = p.tiles.count { it.zoom == 13 }
         assertTrue("12: $atTwelve  13: $atThirteen", atThirteen >= atTwelve * 3)
     }
 
-    @Test fun aPlanNeverGoesPastWhatTheLayerHas() {
-        val p = Caching.plan(44.0, 15.0, 44.1, 15.1, 16, Layers.TK25, extraZooms = 4)
-        assertTrue(p.tiles.all { it.zoom <= Layers.TK25.maxZoom })
-    }
 
     @Test fun cornersGivenTheWrongWayRoundStillMakeABox() {
-        val right = Caching.plan(44.0, 15.0, 44.2, 15.2, 12, Layers.OPENTOPO)
-        val swapped = Caching.plan(44.2, 15.2, 44.0, 15.0, 12, Layers.OPENTOPO)
+        val right = Caching.plan(44.0, 15.0, 44.2, 15.2, 12, Layers.OSM)
+        val swapped = Caching.plan(44.2, 15.2, 44.0, 15.0, 12, Layers.OSM)
         assertEquals(right.tiles.size, swapped.tiles.size)
     }
 
     @Test fun theCeilingHoldsAndSaysSo() {
-        val p = Caching.plan(42.0, 13.0, 47.0, 20.0, 10, Layers.OPENTOPO, ceiling = 100)
+        val p = Caching.plan(42.0, 13.0, 47.0, 20.0, 10, Layers.OSM, ceiling = 100)
         assertEquals(100, p.tiles.size)
         assertTrue(p.truncated)
         assertTrue(p.wanted > 100)
     }
 
     @Test fun aSmallPlanIsNotTruncated() {
-        val p = Caching.plan(44.30, 15.20, 44.31, 15.21, 14, Layers.OPENTOPO)
+        val p = Caching.plan(44.30, 15.20, 44.31, 15.21, 14, Layers.OSM)
         assertFalse(p.truncated)
         assertEquals(p.wanted, p.tiles.size)
     }
 
     @Test fun everyTileInAPlanIsUnique() {
-        val p = Caching.plan(44.30, 15.20, 44.40, 15.30, 13, Layers.OPENTOPO)
+        val p = Caching.plan(44.30, 15.20, 44.40, 15.30, 13, Layers.OSM)
         assertEquals(p.tiles.size, p.tiles.toSet().size)
     }
 
@@ -681,12 +666,11 @@ class CoreTest {
     }
 
     @Test fun theOfflineFileIsRefusedBecauseItIsAlreadyOffline() {
-        assertNotNull(Caching.refusal(Layers.OAM))
+        assertNotNull(Caching.refusal(Layers.OFFLINE))
     }
 
     @Test fun ourOwnRasterLayersAreNotRefused() {
-        assertNull(Caching.refusal(Layers.OPENTOPO))
-        assertNull(Caching.refusal(Layers.TK25))
+        assertNull(Caching.refusal(Layers.OSM))
     }
 
     @Test fun sizesAreWrittenInUnitsSomebodyCanJudge() {

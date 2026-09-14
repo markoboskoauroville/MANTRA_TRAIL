@@ -1,31 +1,26 @@
 package com.mantra.trail
 
-import java.util.Locale
-
 /**
- * THE MAPS, AND WHICH OF THEM SURVIVE LOSING THE SIGNAL. No Android imports (android-app.md 1).
+ * THREE MAPS, AND ONE BUTTON THAT TURNS FROM ONE TO THE NEXT.
  *
- * The whole point of this app is the map that is still there on the ridge, so every layer carries
- * the honest answer to one question: what does it show when the phone has no network?
+ * Baba, 14.9.2026, on the four that were here: the Croatian TK25 and OpenTopoMap were crossed out
+ * of the screenshot as useless, and the row of four chips came out with them. **A map is not
+ * something he changes often**, so it is a toggle on the map screen and a list in the settings,
+ * not five permanent chips across the bottom of the map.
  *
- *   OpenAndroMaps   everything. It is a file on the phone; there is nothing to fetch.
- *   TK25            everything that was fetched before, and nothing else. Croatia's official
- *                   1:25000, served as WMS by the state survey under an open licence.
- *   OpenTopoMap     the same: whatever is in the cache.
- *   Google          NOTHING, and it may not be otherwise. Google's Map Tiles and Maps SDK terms
- *                   forbid pre-fetching, caching or storing tiles, and name offline use as a
- *                   prohibited case. Building a cache behind it would be exactly the failure
- *                   silent-failure.md is about: right at home, empty on the mountain.
+ * What each one does with no signal, which is the only question that matters in the mountains:
+ *
+ *   Offline map   everything. A mapsforge file on the phone; there is nothing to fetch.
+ *   OpenStreetMap whatever is in the cache. CH fills it for the view you are looking at.
+ *   Google        NOTHING, and it may not be otherwise. Google's terms forbid pre-fetching,
+ *                 caching or storing tiles and name offline use as a prohibited case.
  */
 enum class LayerKind {
-    /** A .map file the person chose once and keeps. */
+    /** A .map file on the phone, downloaded once. */
     VECTOR_FILE,
 
     /** z/x/y raster tiles, cached to a file. */
     RASTER_XYZ,
-
-    /** A WMS, asked for one tile-shaped bounding box at a time, cached to a file. */
-    WMS,
 
     /** Google's own view, drawn by Google's SDK, online only. */
     GOOGLE,
@@ -34,92 +29,88 @@ enum class LayerKind {
 data class MapLayer(
     val id: String,
     val label: String,
+    /** The word under the toggle: three or four letters, because the button is small. */
+    val short: String,
     val kind: LayerKind,
-    /** What it can still draw with no network at all. */
     val offline: Offline,
     val attribution: String,
-    /** Null for the layers that are not fetched by us. */
     val url: String? = null,
-    val maxZoom: Int = 17,
+    val maxZoom: Int = 18,
     val minZoom: Int = 2,
 ) {
     enum class Offline { COMPLETE, CACHED_ONLY, NONE }
 
-    /** True only for the layers whose licence allows their tiles to be kept on the phone. */
-    val cacheable: Boolean get() = kind == LayerKind.RASTER_XYZ || kind == LayerKind.WMS
+    /** True only where the licence allows the tiles to be kept on the phone. */
+    val cacheable: Boolean get() = kind == LayerKind.RASTER_XYZ
 }
 
 object Layers {
 
     /**
-     * The offline hiking map: OpenStreetMap rendered for the mountains, contour lines included,
-     * one file per country. Chosen with the file picker (design-language.md 17) and kept in a
-     * folder the person picks, so it survives an uninstall.
+     * The offline map: a mapsforge file. The app can fetch Croatia itself (175 MB, from
+     * mapsforge's own server) or take any .map file with the picker.
      */
-    val OAM = MapLayer(
-        id = "oam",
-        label = "OpenAndroMaps",
+    val OFFLINE = MapLayer(
+        id = "offline",
+        label = "Offline map",
+        short = "OFF",
         kind = LayerKind.VECTOR_FILE,
         offline = MapLayer.Offline.COMPLETE,
-        attribution = "OpenStreetMap contributors, OpenAndroMaps",
+        attribution = "OpenStreetMap contributors",
     )
 
-    /**
-     * The Croatian state survey's 1:25000. Anonymous WMS, open licence. EPSG:3857 and a 256 px
-     * PNG were both proved against the live service on 14.9.2026 before this line was written.
-     */
-    val TK25 = MapLayer(
-        id = "tk25",
-        label = "TK25 Hrvatska",
-        kind = LayerKind.WMS,
-        offline = MapLayer.Offline.CACHED_ONLY,
-        attribution = "Državna geodetska uprava",
-        url = "https://geoportal.dgu.hr/services/tk/ows",
-        maxZoom = 16,
-        minZoom = 8,
-    )
-
-    val OPENTOPO = MapLayer(
-        id = "opentopo",
-        label = "OpenTopoMap",
+    val OSM = MapLayer(
+        id = "osm",
+        label = "OpenStreetMap",
+        short = "OSM",
         kind = LayerKind.RASTER_XYZ,
         offline = MapLayer.Offline.CACHED_ONLY,
-        attribution = "OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA)",
-        url = "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-        maxZoom = 17,
+        attribution = "OpenStreetMap contributors",
+        url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        maxZoom = 18,
     )
 
     val GOOGLE = MapLayer(
         id = "google",
         label = "Google",
+        short = "GGL",
         kind = LayerKind.GOOGLE,
         offline = MapLayer.Offline.NONE,
         attribution = "Google",
         maxZoom = 21,
     )
 
-    /** The order they appear in the switcher: the one that works everywhere comes first. */
-    val ALL: List<MapLayer> = listOf(OAM, TK25, OPENTOPO, GOOGLE)
+    /** The order the one button turns through. */
+    val ALL: List<MapLayer> = listOf(OFFLINE, OSM, GOOGLE)
 
-    fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OAM
+    fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
 
-    /**
-     * One tile's URL. For the WMS this is a GetMap over the tile's own bounding box in EPSG:3857,
-     * which is why Geo carries the bounding box arithmetic.
-     */
-    fun tileUrl(layer: MapLayer, zoom: Int, x: Int, y: Int): String? = when (layer.kind) {
-        LayerKind.RASTER_XYZ -> layer.url
-            ?.replace("{z}", zoom.toString())
-            ?.replace("{x}", x.toString())
-            ?.replace("{y}", y.toString())
+    /** The next map, wrapping. One button, pressed as many times as there are maps. */
+    fun next(current: MapLayer): MapLayer {
+        val i = ALL.indexOfFirst { it.id == current.id }
+        return ALL[(if (i < 0) 0 else i + 1) % ALL.size]
+    }
 
-        LayerKind.WMS -> {
-            val b = Geo.tileBbox3857(zoom, x, y)
-            layer.url + "?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=tk:TK25&STYLES=" +
-                "&FORMAT=image/png&TRANSPARENT=FALSE&SRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX=" +
-                String.format(Locale.US, "%.4f,%.4f,%.4f,%.4f", b[0], b[1], b[2], b[3])
+    fun tileUrl(layer: MapLayer, zoom: Int, x: Int, y: Int): String? =
+        if (layer.kind != LayerKind.RASTER_XYZ) {
+            null
+        } else {
+            layer.url
+                ?.replace("{z}", zoom.toString())
+                ?.replace("{x}", x.toString())
+                ?.replace("{y}", y.toString())
         }
 
-        else -> null
+    /**
+     * The offline map this app can fetch by itself. mapsforge's own server, one file, no archive
+     * to unpack, and the render theme built into the library draws it.
+     */
+    object OfflineDownload {
+        const val NAME = "croatia.map"
+        const val URL = "https://download.mapsforge.org/maps/v5/europe/croatia.map"
+
+        /** Measured against the server on 14.9.2026, so the screen can say it before it starts. */
+        const val BYTES = 175_514_764L
+        const val LABEL = "Croatia, 176 MB"
     }
 }

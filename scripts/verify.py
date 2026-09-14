@@ -76,9 +76,9 @@ check("manifest does NOT ask for ACCESS_BACKGROUND_LOCATION",
 
 # 5 Google's tiles are never cached, and the rule is in the code rather than in a comment
 layers = code_only((MAIN / "Layers.kt").read_text())
-check("cacheable is true only for the layers we fetch ourselves",
-      "kind == LayerKind.RASTER_XYZ || kind == LayerKind.WMS" in layers,
-      "the definition names the two kinds")
+check("cacheable is true only for the raster layer we fetch ourselves",
+      "kind == LayerKind.RASTER_XYZ" in layers and "GOOGLE" not in layers.split("val cacheable")[1][:120],
+      "the definition names the one kind, and Google is not in it")
 canvas = code_only((MAIN / "MapCanvas.kt").read_text())
 check("the tile cache is persistent only when the layer allows it",
       "layer.cacheable," in canvas,
@@ -98,14 +98,15 @@ check("the notification is taken down when the service dies",
 # or not (design-language.md 1). Five keys, five enabled arguments.
 screens = code_only((MAIN / "Screens.kt").read_text())
 keys = re.findall(r"\bKey\(", screens)
-enabled = re.findall(r"enabled = ", screens)
-check("the control row draws all five keys unconditionally",
-      len(keys) >= 5, f"{len(keys)} Key( calls")
-check("the keys are governed by enabled, not by being drawn or not",
-      len(enabled) >= 5, f"{len(enabled)} enabled arguments")
-check("the way out of the tools face is a close control in its own row",
-      "onClose" in screens and 'ViewKey(glyph = "\u2715", onClick = onClose)' in screens,
-      "the same ✕ key the full-screen view uses, in the same corner")
+check("the control row draws every key unconditionally",
+      len(keys) >= 5, f"{len(keys)} Key( calls: no key is conditional on state")
+# A key that cannot act SAYS WHY. v6 dropped the disabled look from the map screen: a dimmed
+# button with no explanation is the same dead end as a missing one.
+check("a key that cannot act says why instead of going grey",
+      "Trail.say(refusal)" in screens, "the refusal is spoken")
+check("the way out of the settings face is at the right-hand end of its top row",
+      "clickable(onClick = onClose)" in screens and screens.index("onClose") > 0,
+      "the ✕ in the corner it occupies on every face here")
 
 # 8 the test floor ratchets
 tests = TESTS.read_text()
@@ -128,16 +129,23 @@ check("no committed local.properties could point a build at a desk's SDK",
 # exist because nothing on a desk has a status bar to be covered by.
 pads = screens.count("safeDrawingPadding()")
 activity = (MAIN / "MainActivity.kt").read_text()
-check("every overlay of the map sits inside the safe area", pads >= 4,
-      f"{pads} safeDrawingPadding calls: top strip, controls, tools face, full-screen key")
+check("every overlay of the map sits inside the safe area", pads >= 3,
+      f"{pads} safeDrawingPadding calls: the top line, the controls, the settings face. "
+      "The bare view has no overlay at all, which is why three is the number.")
 check("the window is told we draw edge to edge ourselves",
       "setDecorFitsSystemWindows(window, false)" in activity, "present")
 check("full screen hides the system bars, and coming back shows them",
       "hide(WindowInsetsCompat.Type.systemBars())" in activity and
       "show(WindowInsetsCompat.Type.systemBars())" in activity, "both directions present")
-check("no row of keys holds more than three",
-      max((len(re.findall(r"\bKey\(", chunk)) for chunk in screens.split("Row(")), default=0) <= 3,
-      "three across a 390 px phone is the ceiling; six clips the labels")
+# v5 clipped because each key carried a word under its glyph. v6 keys are a glyph alone, so five
+# fit where three did; the ceiling is on WORDS in a row, not on keys.
+key_body = screens.split("private fun RowScope.Key")[1].split("\n}\n")[0]
+check("no key carries a word under its glyph any more",
+      screens.count("private fun RowScope.Key") == 1 and key_body.count("Label(") == 1,
+      f"{key_body.count('Label(')} Label call in the key body: the glyph, and nothing under it")
+check("the control row holds at most five keys",
+      max((len(re.findall(r"\b(Record)?Key\(", chunk)) for chunk in screens.split("Row(")), default=0) <= 5,
+      "five bare glyphs across a 390 px phone is 60 px each")
 
 # CH caches what is on the view, and never Google's tiles
 check("CH refuses Google with a sentence rather than a dead button",
@@ -145,6 +153,18 @@ check("CH refuses Google with a sentence rather than a dead button",
       "the refusal is shown, not swallowed")
 check("the cache run says what did not come", "did not come" in screens,
       "failed tiles are counted on the screen, never hidden")
+
+
+# THE OFFLINE MAP IS FETCHED BY THE APP, WITH THE SIZE SAID FIRST AND THE PROGRESS SHOWN
+# (download-monitor.md: nothing longer than a minute happens in the dark).
+download = (MAIN / "MapDownload.kt").read_text()
+check("the download resumes rather than starting again",
+      "Range" in download and ".part" in download, "a Range header and a part file")
+check("a part file only becomes the map when it is whole",
+      "part.length() < total" in download and "renameTo(finished)" in download,
+      "the length is checked before the rename")
+check("the size is on the screen before the download starts",
+      "OfflineDownload.LABEL" in screens or "OfflineDownload.LABEL" in activity, "present")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

@@ -89,7 +89,7 @@ object Caching {
             "Google's terms forbid storing its tiles, so this one cannot be cached"
 
         LayerKind.VECTOR_FILE ->
-            "This map is a file on the phone: it is already complete offline"
+            "The offline map is a file on the phone: it is already complete"
 
         else -> null
     }
