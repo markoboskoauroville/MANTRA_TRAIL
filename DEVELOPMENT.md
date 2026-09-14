@@ -52,3 +52,21 @@ is not a local build — it produces no artefact — and it removed several CI r
 the attempt was the wrong instinct: Baba's answer was to write the rule into the manifest instead.
 `android-app.md` §1a now says the APK is built by GitHub Actions and never on a desk, with the
 three reasons — provenance, a reproducible environment, and the one signing key.
+
+## 14.9.2026 — v1 build 1 was red, and the check that should have caught it was mine
+
+`InternalRenderTheme` does not exist in mapsforge 0.25.0; the themes are
+`org.mapsforge.map.rendertheme.internal.MapsforgeThemes`. Two lines, and CI found them in six
+minutes.
+
+**It should not have reached CI.** The file had been typechecked locally against the real jars and
+reported clean — because the filter was `grep -E "^(error|warning)"` and this kotlinc writes
+`Broken.kt:1:10: error: unresolved reference`, with the word in the middle of the line and not at
+the start of it. **A check that cannot fail looks exactly like a check that passes**
+(`checking-the-checks.md`). The filter was replaced with the compiler's own exit status, and then
+proved by breaking `Geo.normaliseDeg` on purpose: exit 1 with 51 errors broken, exit 0 restored.
+
+The restore is worth its own line. The first attempt to put the deliberately broken file back ran
+after a `return` in a shell function and never executed, so the next run reported 51 errors that
+were all my own sabotage. **When you sabotage something on purpose, confirm the repair before
+reading the next result** (four-tests.md Test 3: exclude the error you caused yourself).

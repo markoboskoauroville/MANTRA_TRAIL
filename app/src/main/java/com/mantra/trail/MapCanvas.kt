@@ -17,7 +17,7 @@ import org.mapsforge.map.layer.overlay.Circle
 import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
-import org.mapsforge.map.rendertheme.InternalRenderTheme
+import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
 import java.io.FileInputStream
 import java.net.MalformedURLException
 import java.net.URL
@@ -149,7 +149,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
             val file = MapFile(FileInputStream(descriptor.fileDescriptor))
             mapFile = file
             val renderer = TileRendererLayer(cache, file, view.model.mapViewPosition, factory)
-            renderer.setXmlRenderTheme(InternalRenderTheme.DEFAULT)
+            renderer.setXmlRenderTheme(MapsforgeThemes.DEFAULT)
             view.layerManager.layers.add(0, renderer)
             baseLayer = renderer
             null
