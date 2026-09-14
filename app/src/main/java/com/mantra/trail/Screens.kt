@@ -13,63 +13,85 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * THE WHOLE INTERFACE, RENDERED FROM THE FIRST FRAME (design-language.md 1).
+ * THE WHOLE INTERFACE, AND THERE ARE EXACTLY TWO VIEWS OF IT (design-language.md 10, the system
+ * bars section, written from the v4 screenshot).
  *
- * Every control below exists whether or not it can be used. The record button is there before
- * there is a fix; the export is there before there is a track; the Google row is there on a build
- * with no key. What changes is whether they are lit and whether they answer a press. Opacity and
- * a guard, never a layout that rearranges itself under the thumb.
+ *   THE ORDINARY VIEW   every control visible and every one of them inside the safe area. The map
+ *                       runs full bleed behind the bars because a map is better for it; nothing
+ *                       that can be pressed or read goes under them.
+ *   THE FULL SCREEN     the system's bars are hidden and ours go with them. One picture, and one
+ *                       way out at the right-hand end of its row, because it has taken away the
+ *                       system's own.
  *
- * The gaps are one gap (GAP), the rows are one height, and the way out of the tools face is at the
- * right-hand end of its row, where a thumb already is.
+ * Within a view nothing appears or disappears: every key exists from the first frame and is dimmed
+ * until it can be used.
  */
 private val GAP = 10.dp
-private val ROW = 56.dp
+private val ROW = 58.dp
+
+/** Bumped when a picker changes something the screen shows, so the rows redraw. */
+object UiTick {
+    var n by mutableIntStateOf(0)
+    fun bump() {
+        n += 1
+    }
+}
 
 @Composable
 fun TrailApp(
     store: Store,
     sensors: Sensors,
+    version: String,
     onCanvas: (MapCanvas) -> Unit,
     onWhereAmI: () -> Unit,
     onRecord: () -> Unit,
     onPause: () -> Unit,
     onExport: () -> Unit,
     onChooseMapFile: () -> Unit,
+    onChooseExportFolder: () -> Unit,
+    onImportKeys: () -> Unit,
     onZeroLevel: () -> Unit,
+    onFullScreen: (Boolean) -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var tools by remember { mutableStateOf(false) }
-    var canvas by remember { mutableStateOf<MapCanvas?>(null) }
+    var full by remember { mutableStateOf(false) }
+    var caching by remember { mutableStateOf(false) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -78,74 +100,143 @@ fun TrailApp(
     val rejected by Trail.rejected.collectAsState()
     val line by Trail.line.collectAsState()
     val note by Trail.note.collectAsState()
-
     val recording = recordingSince != null
+    val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
 
-        MapSurface(
-            layer = layer,
-            store = store,
-            fix = fix,
-            line = line,
-            onCanvas = {
-                canvas = it
-                onCanvas(it)
-            },
-        )
+        MapSurface(layer = layer, store = store, fix = fix, line = line, onCanvas = onCanvas)
 
         Crosshair(Modifier.align(Alignment.Center), hasFix = fix != null)
 
-        Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(GAP)) {
-            FixStrip(fix, sensors)
-        }
-
-        Column(
-            Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(GAP),
-            verticalArrangement = Arrangement.spacedBy(GAP),
-        ) {
-            NoteLine(note)
-            TrackStrip(stats, rejected, recording)
-            LayerRow(
-                current = layer,
-                onPick = { picked ->
-                    layer = picked
-                    store.layerId = picked.id
-                    val problem = canvas?.show(picked)
-                    Trail.say(problem)
-                    if (picked.kind == LayerKind.VECTOR_FILE && store.mapFileUri == null) {
-                        onChooseMapFile()
+        if (full) {
+            // The only control in the full view, in the same corner the ✕ always occupies.
+            Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(GAP)) {
+                ViewKey(glyph = "✕") {
+                    full = false
+                    onFullScreen(false)
+                }
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding().padding(GAP),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(GAP),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(Modifier.weight(1f)) { FixStrip(fix, sensors) }
+                    ViewKey(glyph = "⛶") {
+                        full = true
+                        onFullScreen(true)
                     }
-                },
-            )
-            ControlRow(
-                hasFix = fix != null,
-                recording = recording,
-                paused = paused,
-                canExport = LastTrack.file != null,
-                onWhereAmI = onWhereAmI,
-                onRecord = onRecord,
-                onPause = onPause,
-                onExport = onExport,
-                onTools = { tools = true },
-            )
+                }
+            }
+
+            Column(
+                Modifier.fillMaxWidth().align(Alignment.BottomCenter).safeDrawingPadding().padding(GAP),
+                verticalArrangement = Arrangement.spacedBy(GAP),
+            ) {
+                NoteLine(note)
+                TrackStrip(stats, rejected, recording)
+                LayerRow(
+                    current = layer,
+                    onPick = { picked ->
+                        layer = picked
+                        store.layerId = picked.id
+                        Trail.say(CanvasHolder.canvas?.show(picked))
+                        if (picked.kind == LayerKind.VECTOR_FILE && store.mapFileUri == null) {
+                            onChooseMapFile()
+                        }
+                    },
+                )
+                // TWO ROWS OF THREE, not six narrow keys: six across a 390 px phone is 53 px each
+                // and the word under the glyph clips (design-language.md 10, STACK IT).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                    Key("⊕", "where", enabled = true, lit = fix != null, onClick = onWhereAmI)
+                    Key(
+                        glyph = if (recording) "■" else "●",
+                        name = if (recording) "stop" else "record",
+                        enabled = true,
+                        lit = recording,
+                        tint = Paint.Red,
+                        onClick = onRecord,
+                    )
+                    Key(
+                        glyph = if (paused) "▶" else "❚❚",
+                        name = if (paused) "resume" else "pause",
+                        enabled = recording,
+                        lit = paused,
+                        onClick = onPause,
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                    Key(
+                        glyph = "CH",
+                        name = "cache view",
+                        enabled = Caching.refusal(layer) == null && !caching,
+                        lit = caching,
+                        onClick = {
+                            val refusal = Caching.refusal(layer)
+                            if (refusal != null) {
+                                Trail.say(refusal)
+                                return@Key
+                            }
+                            val canvas = CanvasHolder.canvas
+                            val box = canvas?.visibleBox()
+                            if (canvas == null || box == null) {
+                                Trail.say("The map has not settled yet")
+                                return@Key
+                            }
+                            val plan = Caching.plan(box[0], box[1], box[2], box[3], canvas.currentZoom(), layer)
+                            if (plan.tiles.isEmpty()) {
+                                Trail.say("Nothing to fetch at this zoom")
+                                return@Key
+                            }
+                            caching = true
+                            Trail.say(
+                                "Caching ${plan.tiles.size} tiles, zoom ${plan.fromZoom} to ${plan.toZoom}, about " +
+                                    Caching.formatBytes(Caching.estimateBytes(plan.tiles.size)) +
+                                    if (plan.truncated) " (of ${plan.wanted}: zoom in for the rest)" else ""
+                            )
+                            scope.launch {
+                                val failed = canvas.cacheVisible(layer, plan) { done, total, bad ->
+                                    Trail.say("Caching $done of $total" + if (bad > 0) ", $bad did not come" else "")
+                                }
+                                caching = false
+                                Trail.say(
+                                    if (failed == 0) {
+                                        "Cached ${plan.tiles.size} tiles. This view works offline now."
+                                    } else {
+                                        "Cached ${plan.tiles.size - failed} of ${plan.tiles.size}. $failed did not come: press CH again."
+                                    }
+                                )
+                            }
+                        },
+                    )
+                    Key("↥", "export", enabled = LastTrack.file != null, lit = false, onClick = onExport)
+                    Key("✜", "tools", enabled = true, lit = false, onClick = { tools = true })
+                }
+            }
         }
 
         if (tools) {
             ToolsFace(
                 sensors = sensors,
+                store = store,
                 fix = fix,
+                version = version,
                 onZero = onZeroLevel,
+                onChooseMapFile = onChooseMapFile,
+                onChooseExportFolder = onChooseExportFolder,
+                onImportKeys = onImportKeys,
                 onClose = { tools = false },
             )
         }
     }
 }
 
-/**
- * The map itself. Two surfaces, one position: ours, drawn by mapsforge, and Google's, drawn by
- * Google. The controls above do not know which is underneath.
- */
 @Composable
 private fun MapSurface(
     layer: MapLayer,
@@ -180,8 +271,6 @@ private fun MapSurface(
         },
     )
 
-    // The line and the dot belong to the app, not to the layer under them, so they are redrawn
-    // from the state that arrived rather than rebuilt when the map changes.
     LaunchedEffect(line.size, fix?.timeMs, layer.id) {
         CanvasHolder.canvas?.drawTrack(line)
         CanvasHolder.canvas?.drawPosition(fix)
@@ -194,11 +283,8 @@ object CanvasHolder {
 }
 
 /**
- * THE CROSSHAIR. It sits at the centre of the screen and it does not move: the map moves under
- * it. That is what makes it a sight rather than a decoration — whatever is in it is what the
- * coordinates at the top describe.
- *
- * It is sand when there is a fix and dim when there is not, because colour is the state channel.
+ * THE CROSSHAIR sits at the centre and does not move: the map moves under it. That is what makes
+ * it a sight rather than a decoration.
  */
 @Composable
 private fun Crosshair(modifier: Modifier = Modifier, hasFix: Boolean) {
@@ -208,7 +294,7 @@ private fun Crosshair(modifier: Modifier = Modifier, hasFix: Boolean) {
         val arm = size.minDimension / 2f
         val gap = arm * 0.28f
         val stroke = 2.dp.toPx()
-        drawCircle(ink, radius = arm * 0.55f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawCircle(ink, radius = arm * 0.55f, center = c, style = Stroke(stroke))
         drawLine(ink, Offset(c.x - arm, c.y), Offset(c.x - gap, c.y), stroke)
         drawLine(ink, Offset(c.x + gap, c.y), Offset(c.x + arm, c.y), stroke)
         drawLine(ink, Offset(c.x, c.y - arm), Offset(c.x, c.y - gap), stroke)
@@ -217,35 +303,26 @@ private fun Crosshair(modifier: Modifier = Modifier, hasFix: Boolean) {
     }
 }
 
-/** Where the phone says it is, how wrong it might be, and what it is standing on. */
 @Composable
 private fun FixStrip(fix: Fix?, sensors: Sensors) {
     Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Label(fix?.let { Geo.formatLat(it.lat) } ?: "N --- --.---", ink(fix != null))
-            Label(fix?.let { Geo.formatLon(it.lon) } ?: "E --- --.---", ink(fix != null))
+            Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 13)
+            Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 13)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Label(fix?.accuracyM?.let { "±${it.toInt()} m" } ?: "± -", accuracyInk(fix?.accuracyM), size = 12)
+            Label(fix?.ele?.let { "${it.toInt()} m" } ?: "- m", ink(fix?.ele != null), size = 12)
+            Label(fix?.satellites?.let { "$it sat" } ?: "- sat", ink(fix?.satellites != null), size = 12)
             Label(
-                text = fix?.accuracyM?.let { "±${it.toInt()} m" } ?: "± -",
-                colour = accuracyInk(fix?.accuracyM),
-            )
-            Label(fix?.ele?.let { "${it.toInt()} m" } ?: "- m", ink(fix?.ele != null))
-            Label(fix?.satellites?.let { "$it sat" } ?: "- sat", ink(fix?.satellites != null))
-            Label(
-                text = sensors.declination?.let { "${Geo.cardinal(sensors.heading())} true" }
-                    ?: "${Geo.cardinal(sensors.heading())} mag",
+                text = Geo.cardinal(sensors.heading()) + if (sensors.declination != null) " true" else " mag",
                 colour = ink(sensors.hasCompass),
+                size = 12,
             )
         }
     }
 }
 
-/**
- * An accuracy is the one number on this screen that means something on its own, so it carries the
- * state colour: amber while it is worse than ten metres, sand once it is good enough to navigate
- * by, dim when the phone will not say.
- */
 private fun accuracyInk(metres: Float?): Color = when {
     metres == null -> Paint.Dim
     metres <= 10f -> Paint.Sand
@@ -255,18 +332,15 @@ private fun accuracyInk(metres: Float?): Color = when {
 
 private fun ink(active: Boolean): Color = if (active) Paint.Sand else Paint.Dim
 
-/** The walk so far. Present when nothing is recording, and quiet. */
 @Composable
 private fun TrackStrip(stats: TrackStats, rejected: Int, recording: Boolean) {
     Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Label(Geo.formatDistance(stats.distanceM), ink(recording))
-            Label(Geo.formatDuration(stats.durationMs), ink(recording))
-            Label("↑ ${stats.ascentM.toInt()} m", ink(recording))
-            Label("${stats.points} pts", ink(recording))
-            // Refused fixes are shown, always. A track app that hides what it threw away is
-            // asking to be trusted about the thing nobody can check.
-            Label("$rejected refused", if (rejected > 0) Paint.Amber else Paint.Dim)
+            Label(Geo.formatDistance(stats.distanceM), ink(recording), size = 12)
+            Label(Geo.formatDuration(stats.durationMs), ink(recording), size = 12)
+            Label("↑ ${stats.ascentM.toInt()} m", ink(recording), size = 12)
+            Label("${stats.points} pts", ink(recording), size = 12)
+            Label("$rejected refused", if (rejected > 0) Paint.Amber else Paint.Dim, size = 12)
         }
     }
 }
@@ -274,11 +348,14 @@ private fun TrackStrip(stats: TrackStats, rejected: Int, recording: Boolean) {
 @Composable
 private fun NoteLine(note: String?) {
     Panel(Modifier.alpha(if (note == null) 0f else 1f)) {
-        Label(note ?: " ", Paint.Amber, align = TextAlign.Start)
+        Label(note ?: " ", Paint.Amber, size = 12, align = TextAlign.Start)
     }
 }
 
-/** Four maps, one in force, chosen the way one-of-many is always chosen (design-language.md 6). */
+/**
+ * Four maps, one in force (design-language.md 6). Each says in one word what it does with no
+ * signal, because that is the only question that matters about a map in the mountains.
+ */
 @Composable
 private fun LayerRow(current: MapLayer, onPick: (MapLayer) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
@@ -288,64 +365,40 @@ private fun LayerRow(current: MapLayer, onPick: (MapLayer) -> Unit) {
             Box(
                 Modifier
                     .weight(1f)
-                    .height(40.dp)
+                    .height(46.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(if (chosen) Paint.Amber else Paint.Surface)
                     .clickable(enabled = usable) { onPick(layer) },
                 contentAlignment = Alignment.Center,
             ) {
-                Label(
-                    text = layer.label,
-                    colour = when {
-                        chosen -> Paint.Ground
-                        usable -> Paint.Sand
-                        else -> Paint.Dim
-                    },
-                    size = 12,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Label(
+                        text = shortName(layer),
+                        colour = if (chosen) Paint.Ground else if (usable) Paint.Sand else Paint.Dim,
+                        size = 12,
+                    )
+                    Label(
+                        text = offlineWord(layer),
+                        colour = if (chosen) Paint.Ground else Paint.Dim,
+                        size = 9,
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * The five controls, evenly spaced, in one row that never changes its shape. The record key says
- * what the next press will DO (design-language.md 5): a circle to start, a square to stop.
- */
-@Composable
-private fun ControlRow(
-    hasFix: Boolean,
-    recording: Boolean,
-    paused: Boolean,
-    canExport: Boolean,
-    onWhereAmI: () -> Unit,
-    onRecord: () -> Unit,
-    onPause: () -> Unit,
-    onExport: () -> Unit,
-    onTools: () -> Unit,
-) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-        Key("⊕", "where", enabled = true, lit = hasFix, onClick = onWhereAmI, weight = 1f)
-        Key(
-            glyph = if (recording) "■" else "●",
-            name = "record",
-            enabled = true,
-            lit = recording,
-            tint = Paint.Red,
-            onClick = onRecord,
-            weight = 1f,
-        )
-        Key(
-            glyph = if (paused) "▶" else "❚❚",
-            name = "pause",
-            enabled = recording,
-            lit = paused,
-            onClick = onPause,
-            weight = 1f,
-        )
-        Key("↥", "export", enabled = canExport, lit = false, onClick = onExport, weight = 1f)
-        Key("✜", "tools", enabled = true, lit = false, onClick = onTools, weight = 1f)
-    }
+private fun shortName(layer: MapLayer): String = when (layer.id) {
+    Layers.OAM.id -> "OAM"
+    Layers.TK25.id -> "TK25"
+    Layers.OPENTOPO.id -> "Topo"
+    else -> "Google"
+}
+
+private fun offlineWord(layer: MapLayer): String = when (layer.offline) {
+    MapLayer.Offline.COMPLETE -> "offline"
+    MapLayer.Offline.CACHED_ONLY -> "cached"
+    MapLayer.Offline.NONE -> "online"
 }
 
 @Composable
@@ -355,12 +408,11 @@ private fun RowScope.Key(
     enabled: Boolean,
     lit: Boolean,
     onClick: () -> Unit,
-    weight: Float,
     tint: Color = Paint.Amber,
 ) {
     Box(
         Modifier
-            .weight(weight)
+            .weight(1f)
             .height(ROW)
             .clip(RoundedCornerShape(8.dp))
             .background(if (lit) tint else Paint.Surface)
@@ -369,25 +421,50 @@ private fun RowScope.Key(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Label(glyph, if (lit) Paint.Ground else tint, size = 20)
+            Label(glyph, if (lit) Paint.Ground else tint, size = 18)
             Label(name, if (lit) Paint.Ground else Paint.Dim, size = 10)
         }
     }
 }
 
+/** The one key that changes which of the two views is on, always in the same corner. */
+@Composable
+private fun ViewKey(glyph: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(Paint.Surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Label(glyph, Paint.Sand, size = 18) }
+}
+
 /**
- * THE SECOND FACE: the compass and the spirit level, both of which work with no signal at all.
- *
- * Half the screen each, so the level can be read while the tripod is being turned — an instrument
- * that has to be left to be adjusted is an instrument adjusted blind (design-language.md 11).
+ * THE SECOND FACE: the compass, the level, and the few settings this app has. All of it works
+ * with no signal, and the way out is at the right-hand end of its top row.
  */
 @Composable
-private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: () -> Unit) {
+private fun ToolsFace(
+    sensors: Sensors,
+    store: Store,
+    fix: Fix?,
+    version: String,
+    onZero: () -> Unit,
+    onChooseMapFile: () -> Unit,
+    onChooseExportFolder: () -> Unit,
+    onImportKeys: () -> Unit,
+    onClose: () -> Unit,
+) {
     var heading by remember { mutableStateOf(0.0) }
     var reading by remember { mutableStateOf(sensors.level) }
 
-    // Bounded by the composition: it dies with the face. Twenty a second is smooth to the eye
-    // and cheap enough that the sensors, not the screen, set the pace.
+    // What a picker changed is read again when UiTick moves, which is the whole reason it exists.
+    val mapFileState = remember(UiTick.n) { if (store.mapFileUri != null) "chosen" else "none chosen" }
+    val exportState = remember(UiTick.n) { if (store.exportTreeUri != null) "chosen" else "none chosen" }
+    val keyState = remember(UiTick.n) { if (store.keyCount > 0) "${store.keyCount} held" else "none held" }
+
+    // Bounded by the composition: it dies with the face.
     LaunchedEffect(Unit) {
         while (true) {
             heading = sensors.heading()
@@ -397,50 +474,34 @@ private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: 
     }
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
-        Column(Modifier.fillMaxSize().padding(GAP), verticalArrangement = Arrangement.spacedBy(GAP)) {
+        Column(
+            Modifier.fillMaxSize().safeDrawingPadding().padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
             Row(
-                Modifier.fillMaxWidth().height(40.dp),
+                Modifier.fillMaxWidth().height(46.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Label("compass and level", Paint.Dim, size = 12)
+                Label("compass · level · settings", Paint.Dim, size = 12)
                 Label(
                     text = if (sensors.declination != null) "true north" else "magnetic north",
                     colour = if (sensors.declination != null) Paint.Sand else Paint.Amber,
                     size = 12,
                 )
-                // THE WAY OUT IS AT THE RIGHT-HAND END OF ITS ROW, on every screen, always.
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Paint.Surface)
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) { Label("✕", Paint.Sand, size = 18) }
-            }
-
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                CompassDial(heading)
+                ViewKey(glyph = "✕", onClick = onClose)
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
-                Label(
-                    text = fix?.let { "${Geo.formatLat(it.lat)}  ${Geo.formatLon(it.lon)}" } ?: "no fix",
-                    colour = ink(fix != null),
-                    size = 12,
-                )
-            }
-
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                BubbleVial(reading)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { CompassDial(heading) }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { BubbleVial(reading) }
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 16)
                 Label(
                     text = if (reading.trustworthy) {
-                        "${fmt(reading.pitch)}°  ${fmt(reading.roll)}°   tilt ${fmt(reading.tilt)}°"
+                        "${fmt(reading.pitch)}° ${fmt(reading.roll)}°  tilt ${fmt(reading.tilt)}°"
                     } else {
                         "hold it still"
                     },
@@ -449,19 +510,57 @@ private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: 
                         reading.level -> Paint.Green
                         else -> Paint.Sand
                     },
-                    size = 16,
+                    size = 14,
                 )
-                Box(
-                    Modifier
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Surface)
-                        .clickable(onClick = onZero)
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Label("zero here", Paint.Amber, size = 12) }
             }
+
+            SettingRow("zero the level on this surface", "set it down first", onZero)
+            SettingRow(
+                "offline map file",
+                mapFileState,
+                onChooseMapFile,
+            )
+            SettingRow(
+                "folder for exported tracks",
+                exportState,
+                onChooseExportFolder,
+            )
+            // A KEY IS IMPORTED FROM A FILE, BY SHAPE, AND NEVER SHOWN (secrets.md). What is on
+            // the screen is how many were found, not any part of one.
+            SettingRow(
+                "API keys, from a file",
+                keyState,
+                onImportKeys,
+            )
+            Label(
+                text = "Google's own key is read from the app at install, so a key imported here " +
+                    "drives tile services that take one in the URL, not Google's view.",
+                colour = Paint.Dim,
+                size = 10,
+                align = TextAlign.Start,
+            )
+            Label("Mantra Trail v$version", Paint.Dim, size = 10)
         }
+    }
+}
+
+@Composable
+private fun SettingRow(title: String, state: String, onPress: () -> Unit) {
+    // Label on its own line above the state and the action, so nothing has to be narrowed to fit
+    // and nothing clips in either language (design-language.md 10).
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Paint.Surface)
+            .clickable(onClick = onPress)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Label(title, Paint.Sand, size = 12, align = TextAlign.Start)
+        Label(state, Paint.Amber, size = 11)
     }
 }
 
@@ -469,11 +568,10 @@ private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%+.1f",
 
 @Composable
 private fun CompassDial(heading: Double) {
-    Canvas(Modifier.size(260.dp)) {
+    Canvas(Modifier.size(150.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
-        val r = size.minDimension / 2f - 8f
-        drawCircle(Paint.Slate, radius = r, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
-        // The card turns, the needle does not: a compass is read at the top of the dial.
+        val r = size.minDimension / 2f - 6f
+        drawCircle(Paint.Slate, radius = r, center = c, style = Stroke(3f))
         for (tick in 0 until 72) {
             val angle = Math.toRadians(tick * 5.0 - heading - 90.0)
             val long = tick % 6 == 0
@@ -491,15 +589,14 @@ private fun CompassDial(heading: Double) {
     }
 }
 
-/** A round vial. Green when it is level, sand when it is not, and never red: a tripod is not a fault. */
 @Composable
 private fun BubbleVial(reading: Level.Reading) {
     val (bx, by) = Level.bubble(reading)
-    Canvas(Modifier.size(200.dp)) {
+    Canvas(Modifier.size(150.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension / 2f - 6f
-        drawCircle(Paint.Slate, radius = r, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
-        drawCircle(Paint.Slate, radius = r * 0.18f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
+        drawCircle(Paint.Slate, radius = r, center = c, style = Stroke(3f))
+        drawCircle(Paint.Slate, radius = r * 0.18f, center = c, style = Stroke(2f))
         drawLine(Paint.Slate, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1.5f)
         drawLine(Paint.Slate, Offset(c.x, c.y - r), Offset(c.x, c.y + r), 1.5f)
         val colour = when {
@@ -541,5 +638,7 @@ private fun Label(
         fontSize = size.sp,
         fontFamily = FontFamily.Monospace,
         textAlign = align,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
     )
 }

@@ -621,4 +621,131 @@ class CoreTest {
             assertNotNull(it.id, it.url)
         }
     }
+
+    // --- Caching the view -----------------------------------------------------------------------
+
+    @Test fun aPlanCoversTheZoomOnScreenAndTwoCloser() {
+        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OPENTOPO)
+        assertEquals(13, p.fromZoom)
+        assertEquals(15, p.toZoom)
+        assertTrue(p.tiles.any { it.zoom == 13 })
+        assertTrue(p.tiles.any { it.zoom == 15 })
+    }
+
+    @Test fun aPlanStartsWithTheZoomBeingLookedAt() {
+        // A cancelled run must leave the level on screen complete, so it is fetched first.
+        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OPENTOPO)
+        assertEquals(13, p.tiles.first().zoom)
+    }
+
+    @Test fun oneZoomCloserIsFourTimesTheTiles() {
+        val p = Caching.plan(44.0, 15.0, 44.5, 15.5, 12, Layers.OPENTOPO, extraZooms = 1)
+        val atTwelve = p.tiles.count { it.zoom == 12 }
+        val atThirteen = p.tiles.count { it.zoom == 13 }
+        assertTrue("12: $atTwelve  13: $atThirteen", atThirteen >= atTwelve * 3)
+    }
+
+    @Test fun aPlanNeverGoesPastWhatTheLayerHas() {
+        val p = Caching.plan(44.0, 15.0, 44.1, 15.1, 16, Layers.TK25, extraZooms = 4)
+        assertTrue(p.tiles.all { it.zoom <= Layers.TK25.maxZoom })
+    }
+
+    @Test fun cornersGivenTheWrongWayRoundStillMakeABox() {
+        val right = Caching.plan(44.0, 15.0, 44.2, 15.2, 12, Layers.OPENTOPO)
+        val swapped = Caching.plan(44.2, 15.2, 44.0, 15.0, 12, Layers.OPENTOPO)
+        assertEquals(right.tiles.size, swapped.tiles.size)
+    }
+
+    @Test fun theCeilingHoldsAndSaysSo() {
+        val p = Caching.plan(42.0, 13.0, 47.0, 20.0, 10, Layers.OPENTOPO, ceiling = 100)
+        assertEquals(100, p.tiles.size)
+        assertTrue(p.truncated)
+        assertTrue(p.wanted > 100)
+    }
+
+    @Test fun aSmallPlanIsNotTruncated() {
+        val p = Caching.plan(44.30, 15.20, 44.31, 15.21, 14, Layers.OPENTOPO)
+        assertFalse(p.truncated)
+        assertEquals(p.wanted, p.tiles.size)
+    }
+
+    @Test fun everyTileInAPlanIsUnique() {
+        val p = Caching.plan(44.30, 15.20, 44.40, 15.30, 13, Layers.OPENTOPO)
+        assertEquals(p.tiles.size, p.tiles.toSet().size)
+    }
+
+    @Test fun googleIsRefusedWithAReason() {
+        val why = Caching.refusal(Layers.GOOGLE)
+        assertNotNull(why)
+        assertTrue(why!!.contains("Google"))
+    }
+
+    @Test fun theOfflineFileIsRefusedBecauseItIsAlreadyOffline() {
+        assertNotNull(Caching.refusal(Layers.OAM))
+    }
+
+    @Test fun ourOwnRasterLayersAreNotRefused() {
+        assertNull(Caching.refusal(Layers.OPENTOPO))
+        assertNull(Caching.refusal(Layers.TK25))
+    }
+
+    @Test fun sizesAreWrittenInUnitsSomebodyCanJudge() {
+        assertEquals("15 kB", Caching.formatBytes(15_000))
+        assertEquals("1 MB", Caching.formatBytes(1_500_000))
+    }
+
+    // --- Importing a key from a file -------------------------------------------------------------
+
+    private val fakeKey = "AIza" + "B".repeat(35)
+    private val otherKey = "AIza" + "C".repeat(35)
+
+    @Test fun aKeyIsFoundByItsShape() {
+        val found = Keys.parse("some notes\n$fakeKey\n")
+        assertEquals(1, found.size)
+        assertEquals(fakeKey, found[0].key)
+    }
+
+    @Test fun theAccountNameComesWithTheKey() {
+        val found = Keys.parse("AV LIVE VMIX\n$fakeKey\n")
+        assertEquals("AV LIVE VMIX", found[0].label)
+    }
+
+    @Test fun aKeyringBlockIsUnderstood() {
+        val text = "# keyring v1\n\nprovider: google-maps\nlabel: phone\nkey: $fakeKey\n"
+        val found = Keys.parse(text)
+        assertEquals(1, found.size)
+        assertEquals(fakeKey, found[0].key)
+    }
+
+    @Test fun twoBlocksAreTwoKeys() {
+        val found = Keys.parse("first\n$fakeKey\n\nsecond\n$otherKey\n")
+        assertEquals(2, found.size)
+    }
+
+    @Test fun theSameKeyTwiceIsOneKey() {
+        val found = Keys.parse("one\n$fakeKey\n\ntwo\n$fakeKey\n")
+        assertEquals(1, found.size)
+    }
+
+    @Test fun aFileOfProseYieldsNothing() {
+        assertTrue(Keys.parse("cafeteria\nkitchen\nthe wifi password is upstairs").isEmpty())
+    }
+
+    @Test fun aTrackingUrlIsNotAKeyAndNotALabel() {
+        val found = Keys.parse("https://example.com/?srsltid=AbCdEfGhIjKlMnOpQrStUvWxYz012345\nmy account\n$fakeKey")
+        assertEquals(1, found.size)
+        assertEquals("my account", found[0].label)
+    }
+
+    @Test fun anEmptyFileYieldsNothingRatherThanThrowing() {
+        assertTrue(Keys.parse("").isEmpty())
+        assertTrue(Keys.parse("   \n\n  ").isEmpty())
+    }
+
+    @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {
+        val d = Keys.describe(0, 3, fakeKey)
+        assertTrue(d.contains("1 of 3"))
+        assertTrue(d.contains("${fakeKey.length}"))
+        assertFalse(d.contains(fakeKey.substring(0, 8)))
+    }
 }

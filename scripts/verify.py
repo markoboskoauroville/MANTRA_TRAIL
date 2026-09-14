@@ -10,11 +10,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 80
+TEST_FLOOR = 100
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
-PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt"]
+PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Caching.kt", "Keys.kt"]
 
 failures, checks = [], []
 
@@ -104,7 +104,8 @@ check("the control row draws all five keys unconditionally",
 check("the keys are governed by enabled, not by being drawn or not",
       len(enabled) >= 5, f"{len(enabled)} enabled arguments")
 check("the way out of the tools face is a close control in its own row",
-      "onClose" in screens and "clickable(onClick = onClose)" in screens, "present")
+      "onClose" in screens and 'ViewKey(glyph = "\u2715", onClick = onClose)' in screens,
+      "the same ✕ key the full-screen view uses, in the same corner")
 
 # 8 the test floor ratchets
 tests = TESTS.read_text()
@@ -120,6 +121,30 @@ check("the workflow publishes a release, so the build can be downloaded",
 check("no committed local.properties could point a build at a desk's SDK",
       not (ROOT / "local.properties").exists() or "local.properties" in (ROOT / ".gitignore").read_text(),
       "ignored")
+
+
+# NOTHING OF OURS UNDER THE SYSTEM BARS, AND TWO VIEWS ONLY (design-language.md, written
+# 14.9.2026 from the v4 screenshot). These are the checks that would have caught it, and they
+# exist because nothing on a desk has a status bar to be covered by.
+pads = screens.count("safeDrawingPadding()")
+activity = (MAIN / "MainActivity.kt").read_text()
+check("every overlay of the map sits inside the safe area", pads >= 4,
+      f"{pads} safeDrawingPadding calls: top strip, controls, tools face, full-screen key")
+check("the window is told we draw edge to edge ourselves",
+      "setDecorFitsSystemWindows(window, false)" in activity, "present")
+check("full screen hides the system bars, and coming back shows them",
+      "hide(WindowInsetsCompat.Type.systemBars())" in activity and
+      "show(WindowInsetsCompat.Type.systemBars())" in activity, "both directions present")
+check("no row of keys holds more than three",
+      max((len(re.findall(r"\bKey\(", chunk)) for chunk in screens.split("Row(")), default=0) <= 3,
+      "three across a 390 px phone is the ceiling; six clips the labels")
+
+# CH caches what is on the view, and never Google's tiles
+check("CH refuses Google with a sentence rather than a dead button",
+      "Caching.refusal(layer)" in screens and "Google" in (MAIN / "Caching.kt").read_text(),
+      "the refusal is shown, not swallowed")
+check("the cache run says what did not come", "did not come" in screens,
+      "failed tiles are counted on the screen, never hidden")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

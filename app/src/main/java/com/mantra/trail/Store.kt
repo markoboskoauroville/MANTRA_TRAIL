@@ -39,6 +39,17 @@ class Store(context: Context) {
         get() = java.lang.Double.longBitsToDouble(prefs.getLong(KEY_ROLL_ZERO, 0L))
         set(v) = prefs.edit().putLong(KEY_ROLL_ZERO, java.lang.Double.doubleToRawLongBits(v)).apply()
 
+    /**
+     * The keys imported from a file. They live in the app's own private storage and nowhere else:
+     * not in the repository, not in a log line, not on the screen. What the screen may show is
+     * how many there are (secrets.md 3, keyring.md 10d).
+     */
+    var keys: List<String>
+        get() = prefs.getString(KEY_KEYS, "")?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+        set(v) = prefs.edit().putString(KEY_KEYS, v.joinToString("\n")).apply()
+
+    val keyCount: Int get() = keys.size
+
     fun calibration(): Level.Calibration = Level.Calibration(levelPitchZero, levelRollZero)
 
     /** The last place the map was looking, so opening the app does not start in the Atlantic. */
@@ -56,6 +67,7 @@ class Store(context: Context) {
 
     companion object {
         private const val KEY_LAYER = "layer"
+        private const val KEY_KEYS = "keys"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_PITCH_ZERO = "pitchZero"

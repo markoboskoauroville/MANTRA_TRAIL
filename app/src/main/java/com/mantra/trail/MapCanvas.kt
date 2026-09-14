@@ -11,6 +11,7 @@ import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.Layer
 import org.mapsforge.map.layer.cache.TileCache
+import org.mapsforge.map.layer.download.DownloadJob
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.AbstractTileSource
 import org.mapsforge.map.layer.overlay.Circle
@@ -18,7 +19,10 @@ import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.FileInputStream
+import java.net.HttpURLConnection
 import java.net.MalformedURLException
 import java.net.URL
 
@@ -131,7 +135,9 @@ class MapCanvas(private val context: Context, private val store: Store) {
                 null
             }
 
-            LayerKind.GOOGLE -> "Google draws its own view"
+            // Google draws its own view. That is not a problem and must not be reported as
+            // one: a note the person cannot act on teaches them to ignore the note line.
+            LayerKind.GOOGLE -> null
         }
         view.setZoomLevelMin(layer.minZoom.toByte())
         view.setZoomLevelMax(layer.maxZoom.toByte())
@@ -206,6 +212,60 @@ class MapCanvas(private val context: Context, private val store: Store) {
         trackLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         here?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+    }
+
+    /** The corners of what is on the screen now, which is what CH means by "this view". */
+    fun visibleBox(): DoubleArray? {
+        val b = view.boundingBox ?: return null
+        return doubleArrayOf(b.minLatitude, b.minLongitude, b.maxLatitude, b.maxLongitude)
+    }
+
+    fun currentZoom(): Int = view.model.mapViewPosition.zoomLevel.toInt()
+
+    /**
+     * CH: FETCH EVERY TILE OF THIS VIEW INTO THE CACHE THE LAYER ALREADY READS FROM.
+     *
+     * Tiles already held are skipped rather than fetched again, so pressing it twice on the same
+     * view costs nothing and pressing it after moving a little costs only the edge.
+     *
+     * A tile that will not come is counted, not thrown: one dead tile in four hundred is a
+     * server hiccup, and stopping the whole run for it would leave the map worse than before.
+     * The count is reported, because a cache that silently has holes in it is the thing you find
+     * out about on the mountain.
+     */
+    suspend fun cacheVisible(
+        layer: MapLayer,
+        plan: Caching.Plan,
+        onProgress: (done: Int, total: Int, failed: Int) -> Unit,
+    ): Int = withContext(Dispatchers.IO) {
+        val cache = tileCache ?: return@withContext 0
+        val source = WebTileSource(layer)
+        val tileSize = view.model.displayModel.tileSize
+        var done = 0
+        var failed = 0
+        for (ref in plan.tiles) {
+            val tile = Tile(ref.x, ref.y, ref.zoom.toByte(), tileSize)
+            val job = DownloadJob(tile, source)
+            if (!cache.containsKey(job)) {
+                try {
+                    val connection = source.getTileUrl(tile).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 15_000
+                    connection.readTimeout = 15_000
+                    connection.setRequestProperty("User-Agent", source.userAgent)
+                    connection.inputStream.use { stream ->
+                        val bitmap = factory.createTileBitmap(stream, tileSize, false)
+                        cache.put(job, bitmap)
+                    }
+                    connection.disconnect()
+                } catch (e: Exception) {
+                    failed++
+                }
+            }
+            done++
+            if (done % 8 == 0 || done == plan.tiles.size) onProgress(done, plan.tiles.size, failed)
+        }
+        view.repaint()
+        failed
     }
 
     fun centreOn(fix: Fix) {

@@ -12,6 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 
@@ -51,7 +54,36 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return@registerForActivityResult
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         store.mapFileUri = uri.toString()
+        UiTick.bump()
         Trail.say(canvas?.show(Layers.OAM))
+    }
+
+    /**
+     * A key arrives as a FILE and is read by shape, never by eye (secrets.md 2). What comes back
+     * to the screen is a count; the value itself never reaches the interface or a log.
+     */
+    private val pickKeyFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            if (text == null) {
+                Trail.say("That file could not be read")
+                return@registerForActivityResult
+            }
+            val found = Keys.parse(text)
+            if (found.isEmpty()) {
+                // Zero is never "there were no keys": it is a format nobody here recognises yet.
+                Trail.say("No key-shaped string in that file. If the format is new, say so and it gets added.")
+                return@registerForActivityResult
+            }
+            store.keys = (store.keys + found.map { it.key }).distinct()
+            UiTick.bump()
+            Trail.say("${found.size} imported, ${store.keyCount} held")
+        } catch (e: Exception) {
+            Trail.say("Import failed: ${e.javaClass.simpleName}")
+        }
     }
 
     private val pickExportFolder = registerForActivityResult(
@@ -63,11 +95,16 @@ class MainActivity : ComponentActivity() {
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
         )
         store.exportTreeUri = uri.toString()
+        UiTick.bump()
         exportLastTrack()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // From targetSdk 35 Android draws every app edge to edge and insets nothing for us, so
+        // the window is the whole glass and the bars are painted over whatever is under them.
+        // The screen applies safeDrawingPadding; this line is the other half of the same fact.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         AndroidGraphicFactory.createInstance(application)
         store = Store(this)
         locator = Locator(this)
@@ -77,13 +114,17 @@ class MainActivity : ComponentActivity() {
             TrailApp(
                 store = store,
                 sensors = sensors,
+                version = BuildConfig.VERSION_NAME,
                 onCanvas = { canvas = it },
                 onWhereAmI = ::whereAmI,
                 onRecord = ::toggleRecording,
                 onPause = ::togglePause,
                 onExport = ::exportLastTrack,
                 onChooseMapFile = { pickMapFile.launch(arrayOf("*/*")) },
+                onChooseExportFolder = { pickExportFolder.launch(null) },
+                onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
                 onZeroLevel = ::zeroLevel,
+                onFullScreen = ::setFullScreen,
             )
         }
 
@@ -111,6 +152,22 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         canvas?.destroy()
         super.onDestroy()
+    }
+
+    /**
+     * THE SECOND VIEW. The system's bars go out with ours, so the map is the whole glass and the
+     * one way back is the key the screen keeps in the top right corner. Sticky immersive, so a
+     * swipe shows the bars for a moment without dropping out of the view.
+     */
+    private fun setFullScreen(on: Boolean) {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (on) {
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     private fun whereAmI() {
