@@ -103,6 +103,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    // play-services-maps drags in a pre-AndroidX-era fragment, and registerForActivityResult is
+    // unsafe against it (InvalidFragmentVersionForActivityResult, build 3). Naming a modern one
+    // here raises the resolved version rather than turning the check off: the check was right.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

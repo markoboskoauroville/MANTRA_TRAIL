@@ -77,3 +77,12 @@ reading the next result** (four-tests.md Test 3: exclude the error you caused yo
 `androidsvg-aar` alongside it put both on the path, and `checkReleaseDuplicateClasses` counted
 every class in the library twice. The line came out: the library is still there, brought by the
 module that needs it, which is also the module that will keep choosing the right version.
+
+## 14.9.2026 — v3 was red on a lint check that was right
+
+`play-services-maps` brings a fragment library old enough that `registerForActivityResult` is
+unsafe against it, and lint said so three times. The temptation was to disable the check; what it
+was reporting is real, and the file pickers and the permission request all go through exactly that
+call. A modern `androidx.fragment` was named as a dependency so resolution raises the version.
+**A blocking lint is narrowed in the session it cries wolf, never carried, and never silenced when
+it is telling the truth.**
