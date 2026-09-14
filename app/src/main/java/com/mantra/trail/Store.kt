@@ -20,7 +20,7 @@ class Store(context: Context) {
         app.getSharedPreferences("mantra-trail", Context.MODE_PRIVATE)
 
     var layerId: String
-        get() = prefs.getString(KEY_LAYER, Layers.OAM.id) ?: Layers.OAM.id
+        get() = prefs.getString(KEY_LAYER, Layers.OFFLINE.id) ?: Layers.OFFLINE.id
         set(v) = prefs.edit().putString(KEY_LAYER, v).apply()
 
     /** The .map file for the offline vector layer, chosen with the file picker. */
