@@ -117,7 +117,9 @@ dependencies {
     implementation("org.mapsforge:mapsforge-map:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
-    implementation("com.caverock:androidsvg-aar:1.4")
+    // androidsvg is NOT declared here: mapsforge-map-android already brings the plain jar, and
+    // declaring the aar as well put both on the path and every class in it twice
+    // (checkReleaseDuplicateClasses, build 2). One copy, and it is the one mapsforge chose.
 
     // The fix: GPS, Wi-Fi and cell fused by the system, plus the raw satellite status underneath it.
     implementation("com.google.android.gms:play-services-location:21.3.0")

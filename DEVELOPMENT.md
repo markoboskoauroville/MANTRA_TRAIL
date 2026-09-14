@@ -70,3 +70,10 @@ The restore is worth its own line. The first attempt to put the deliberately bro
 after a `return` in a shell function and never executed, so the next run reported 51 errors that
 were all my own sabotage. **When you sabotage something on purpose, confirm the repair before
 reading the next result** (four-tests.md Test 3: exclude the error you caused yourself).
+
+## 14.9.2026 — v2 was red on a dependency declared twice
+
+`mapsforge-map-android` already depends on `com.caverock:androidsvg` as a plain jar. Declaring
+`androidsvg-aar` alongside it put both on the path, and `checkReleaseDuplicateClasses` counted
+every class in the library twice. The line came out: the library is still there, brought by the
+module that needs it, which is also the module that will keep choosing the right version.
