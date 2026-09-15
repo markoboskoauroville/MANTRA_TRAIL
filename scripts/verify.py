@@ -430,8 +430,22 @@ check("two taps in a row are what lock it",
 check("a map can be taken out of the toggle and still be in the list",
       "store.inToggle" in screens and "fun inToggle" in (MAIN / "Store.kt").read_text(),
       "excluding a map from the toggle is not the same as not having it")
-check("the toggle skips what he took out of it",
-      "if (!store.inToggle(candidate.id)) return@repeat" in screens, "in the same place it skips what has no key")
+# Rewritten 15.9.2026: the toggle used to walk the FAMILIES, one remembered style each, so three
+# ticked Thunderforest maps got him one and the other two were unreachable from the map screen.
+check("the toggle walks every ticked map, not one per family",
+      "if (!store.inToggle(candidate.id)) continue" in screens
+      and "for (step in 1..all.size)" in screens,
+      "the list is the order, the ticks are the filter")
+check("a group can be taken out without forgetting what was ticked inside it",
+      "fun familyInToggle" in (MAIN / "Store.kt").read_text()
+      and "store.familyInToggle(candidate.family)" in screens,
+      "ticking the group again brings back exactly the maps he chose")
+check("the toggle is a tick, not two words",
+      "private fun Tick(" in screens and '"not in toggle"' not in screens,
+      "a checkbox, drawn rather than typed")
+check("a group is told from its maps by more than position",
+      "familyLabel(family).uppercase()" in screens and "padding(start = 22.dp)" in screens,
+      "capitals and amber for the group, title case and sand for its maps, pushed in")
 check("the crosshair is hairlines", "val hair = 1.dp.toPx()" in screens, "one pixel, four of them")
 check("choosing a map closes the settings and shows it",
       "settings = false\n                    scope.launch { showLayer(store, picked) }" in screens,

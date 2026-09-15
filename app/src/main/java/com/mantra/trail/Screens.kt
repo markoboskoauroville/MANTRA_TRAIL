@@ -413,16 +413,23 @@ private fun MapSurface(
 }
 
 /**
- * The next map the key should turn to: the chosen style of the next family that has what it
- * needs. If nothing else can draw, it stays where it is rather than moving to a blank screen.
+ * THE NEXT MAP THE KEY TURNS TO: the next TICKED one, wherever it lives.
+ *
+ * This used to walk the FAMILIES and show each one's remembered style, which meant that ticking
+ * three Thunderforest maps got him one of them and the other two were unreachable from the map
+ * screen (15.9.2026). The list is the order, the ticks are the filter, and a family unticked
+ * takes all of its maps out at once while remembering which were ticked inside it.
+ *
+ * A map that cannot draw — no key, no file — is stepped over too, and if nothing else can be
+ * shown the key stays where it is rather than moving to a blank screen.
  */
 private fun nextUsable(store: Store, current: MapLayer): MapLayer {
-    var family = current.family
-    repeat(MapLayer.Family.entries.size * 2) {
-        family = Layers.nextFamily(Layers.firstOf(family))
-        val candidate = store.styleOf(family)
-        // A map he took out of the toggle is not offered by it, however usable it is.
-        if (!store.inToggle(candidate.id)) return@repeat
+    val all = Layers.ALL
+    val from = all.indexOfFirst { it.id == current.id }.let { if (it < 0) 0 else it }
+    for (step in 1..all.size) {
+        val candidate = all[(from + step) % all.size]
+        if (!store.familyInToggle(candidate.family)) continue
+        if (!store.inToggle(candidate.id)) continue
         val ready = when {
             candidate.provider != null -> !store.key(candidate.provider).isNullOrEmpty()
             candidate.kind == LayerKind.VECTOR_FILE -> store.hasOfflineMap
@@ -614,6 +621,43 @@ private fun TrackLine(stats: TrackStats) {
             Label(Geo.formatDuration(stats.durationMs), Paint.Sand, size = 13)
             Label("↑ ${stats.ascentM.toInt()} m", Paint.Sand, size = 13)
             Label("${stats.points} pts", Paint.Sand, size = 13)
+        }
+    }
+}
+
+/**
+ * A TICK, and it is a tick rather than two words. Dimmed when the group it belongs to is out of
+ * the switcher: the map is still ticked, and it is still not in the toggle, and both of those
+ * are true at once.
+ */
+@Composable
+private fun Tick(checked: Boolean, onChange: (Boolean) -> Unit, dimmed: Boolean = false) {
+    Box(
+        Modifier
+            .width(56.dp)
+            .height(42.dp)
+            .clickable { onChange(!checked) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val side = size.minDimension
+            val stroke = 1.5.dp.toPx()
+            val ink = if (dimmed) Paint.Dim else Paint.Amber
+            drawRoundRect(
+                color = if (checked) ink else Paint.Dim,
+                size = androidx.compose.ui.geometry.Size(side, side),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                style = if (checked) androidx.compose.ui.graphics.drawscope.Fill else Stroke(stroke),
+            )
+            if (checked) {
+                // The mark inside, drawn rather than typed, so it cannot be a font that is missing.
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(side * 0.24f, side * 0.53f)
+                    lineTo(side * 0.43f, side * 0.72f)
+                    lineTo(side * 0.78f, side * 0.29f)
+                }
+                drawPath(path, Paint.Ground, style = Stroke(2.dp.toPx()))
+            }
         }
     }
 }
@@ -1076,34 +1120,55 @@ private fun SettingsFace(
             // TRACKS FIRST, because it is the thing he opens the settings for most (15.9.2026).
             SettingRow("tracks (gpx)", "$trackCount", onTracks)
 
-            // THE MAPS, IN FOLDING SECTIONS (15.9.2026). Seventeen chips in one block is a wall,
-            // and the fold state is remembered between sessions, because a section somebody
-            // closed yesterday is a section they do not want to close again every morning.
+            // THE MAPS: A GROUP AND THE MAPS INSIDE IT, and they are told apart by more than
+            // position (15.9.2026). The group is in capitals, in the amber, flush to the edge;
+            // its maps are in title case, in the sand, pushed in. A tick decides whether a thing
+            // is in the switcher; a tick on the group takes all of its maps out at once and
+            // remembers which of them were ticked for when it comes back.
             MapLayer.Family.entries.forEach { family ->
                 val key = family.name.lowercase()
                 var folded by remember(key) { mutableStateOf(store.collapsed(key)) }
+                var familyOn by remember(key, UiTick.n) { mutableStateOf(store.familyInToggle(family)) }
+
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .height(40.dp)
+                        .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
-                        .clickable {
-                            folded = !folded
-                            store.setCollapsed(key, folded)
-                        }
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .background(Paint.Veil),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Label(familyLabel(family), Paint.Sand, size = 12, align = TextAlign.Start)
-                    Label(if (folded) "▸ ${Layers.of(family).size}" else "▾", Paint.Amber, size = 12)
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clickable {
+                                folded = !folded
+                                store.setCollapsed(key, folded)
+                            }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Label(if (folded) "▸" else "▾", Paint.Amber, size = 12)
+                            Label(
+                                text = "  " + familyLabel(family).uppercase(),
+                                colour = Paint.Amber,
+                                size = 13,
+                                align = TextAlign.Start,
+                            )
+                        }
+                    }
+                    Tick(
+                        checked = familyOn,
+                        onChange = {
+                            familyOn = it
+                            store.setFamilyInToggle(family, it)
+                        },
+                    )
                 }
+
                 if (!folded) {
-                    // ONE ROW PER MAP, because each one now carries two decisions: which map to
-                    // show, and whether it is in the toggle on the map screen at all (15.9.2026).
-                    // Two decisions need two hit areas, and a chip a third of a phone wide cannot
-                    // hold both without one of them being pressed by mistake.
                     Layers.of(family).forEach { layer ->
                         val chosen = layer.id == current.id
                         val needsKey = layer.provider != null && store.key(layer.provider) == null
@@ -1113,9 +1178,10 @@ private fun SettingsFace(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .padding(start = 22.dp)
+                                .height(42.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (chosen) Paint.Amber else Paint.Veil),
+                                .background(if (chosen) Paint.Amber else Color.Transparent),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
@@ -1128,32 +1194,20 @@ private fun SettingsFace(
                                 contentAlignment = Alignment.CenterStart,
                             ) {
                                 Label(
-                                    text = layer.name + if (needsKey) " · needs a key" else "",
+                                    text = layer.name + if (needsKey) "  · needs a key" else "",
                                     colour = if (chosen) Paint.Ground else Paint.Sand,
-                                    size = 12,
+                                    size = 13,
                                     align = TextAlign.Start,
                                 )
                             }
-                            Box(
-                                Modifier
-                                    .width(92.dp)
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        included = !included
-                                        store.setInToggle(layer.id, included)
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Label(
-                                    text = if (included) "in toggle" else "not in toggle",
-                                    colour = when {
-                                        chosen -> Paint.Ground
-                                        included -> Paint.Amber
-                                        else -> Paint.Dim
-                                    },
-                                    size = 10,
-                                )
-                            }
+                            Tick(
+                                checked = included,
+                                dimmed = !familyOn,
+                                onChange = {
+                                    included = it
+                                    store.setInToggle(layer.id, it)
+                                },
+                            )
                         }
                     }
                 }

@@ -111,6 +111,17 @@ class Store(context: Context) {
     fun setInToggle(layerId: String, value: Boolean) =
         prefs.edit().putBoolean("toggle-$layerId", value).apply()
 
+    /**
+     * Whether a whole family is in the toggle. Unticking it hides every map of that family from
+     * the switcher WITHOUT forgetting which of them were ticked (15.9.2026), so ticking the
+     * family again brings back exactly the maps he had chosen rather than all of them.
+     */
+    fun familyInToggle(family: MapLayer.Family): Boolean =
+        prefs.getBoolean("family-toggle-${family.name}", true)
+
+    fun setFamilyInToggle(family: MapLayer.Family, value: Boolean) =
+        prefs.edit().putBoolean("family-toggle-${family.name}", value).apply()
+
     /** Whether a settings section is folded away. Remembered between sessions (15.9.2026). */
     fun collapsed(section: String): Boolean = prefs.getBoolean("collapsed-$section", section != "thunderforest")
 
