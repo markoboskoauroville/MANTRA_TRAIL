@@ -10,11 +10,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 110
+TEST_FLOOR = 105
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
-PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Caching.kt", "Keys.kt"]
+PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Keys.kt"]
 
 failures, checks = [], []
 
@@ -79,9 +79,6 @@ check("manifest does NOT ask for ACCESS_BACKGROUND_LOCATION",
 
 # 5 Google's tiles are never cached, and the rule is in the code rather than in a comment
 layers = code_only((MAIN / "Layers.kt").read_text())
-check("cacheable is true only for the raster layer we fetch ourselves",
-      "kind == LayerKind.RASTER_XYZ" in layers and "GOOGLE" not in layers.split("val cacheable")[1][:120],
-      "the definition names the one kind, and Google is not in it")
 canvas = code_only((MAIN / "MapCanvas.kt").read_text())
 # This asked for layer.cacheable, which is about a LICENCE to keep tiles somebody else served.
 # Tiles we rendered ourselves from a file on the phone are ours, and keeping them is what makes a
@@ -109,8 +106,9 @@ check("the control row draws every key unconditionally",
       f"{len(keys)} glyph keys plus the two marks: no key is conditional on state")
 # A key that cannot act SAYS WHY. v6 dropped the disabled look from the map screen: a dimmed
 # button with no explanation is the same dead end as a missing one.
-check("a key that cannot act says why instead of going grey",
-      "Trail.say(refusal)" in screens, "the refusal is spoken")
+check("a layer that cannot draw says why instead of going grey",
+      "Trail.say(Layers.missingKey(layer))" in screens or "Layers.missingKey(layer)" in screens,
+      "the reason names the key and where to put it")
 check("the way out of the settings face is at the right-hand end of its top row",
       "clickable(onClick = onClose)" in screens and screens.index("onClose") > 0,
       "the ✕ in the corner it occupies on every face here")
@@ -158,11 +156,6 @@ check("the control row holds at most seven keys", row_keys <= 7,
       f"{row_keys} keys: seven bare glyphs across a 390 px phone is 48 px each")
 
 # CH caches what is on the view, and never Google's tiles
-check("CH refuses Google with a sentence rather than a dead button",
-      "Caching.refusal(layer)" in screens and "Google" in (MAIN / "Caching.kt").read_text(),
-      "the refusal is shown, not swallowed")
-check("the cache run says what did not come", "did not come" in screens,
-      "failed tiles are counted on the screen, never hidden")
 
 
 # THE OFFLINE MAP IS FETCHED BY THE APP, WITH THE SIZE SAID FIRST AND THE PROGRESS SHOWN
@@ -202,6 +195,16 @@ check("the workflow uses no key secret",
       "the only secrets are the signing keystore and its password")
 
 
+# CH is gone (15.9.2026). Pre-fetching a region is bulk downloading, which Thunderforest allow
+# only on their Small Business plan and above, and on the offline map it cached a file we already
+# have. What remains is ordinary caching of tiles actually looked at, which no button controls.
+check("no button pre-fetches anybody's tiles",
+      'glyph = "CH"' not in screens and not (MAIN / "Caching.kt").exists(),
+      "the key and the arithmetic behind it are both gone")
+check("the credit is on the map wherever the licence requires it",
+      "val creditOnMap" in layers and "layer.creditOnMap" in screens,
+      "Thunderforest and Google carry theirs; the offline file's sits in settings")
+
 # WHAT THE PHONE SHOWED ON 15.9.2026, TURNED INTO CHECKS.
 # This check said "no filled surface over the map" until the phone showed that a shadow alone is
 # not readable on a pale street map. A bar the height of its line is not a box: the rule it keeps
@@ -216,9 +219,11 @@ check("no bar is painted on a column",
 check("an empty line takes no height at all",
       "if (note != null) NoteLine(note)" in screens and "if (recording) TrackLine(stats)" in screens,
       "drawn only when there is something in them, rather than at zero opacity")
-check("the credits are not on the map screen",
-      "attribution" not in map_screen and "attribution" in screens,
-      "they live in settings, where both services' terms are still satisfied")
+# Reversed on 15.9.2026 after reading Thunderforest's terms: the attribution may not be removed
+# from an app. One dim line, on the fetched layers only, guarded by creditOnMap.
+check("the fetched layers carry their credit on the map",
+      "layer.creditOnMap" in map_screen and "layer.attribution" in map_screen,
+      "one dim line, and only where a licence demands it")
 
 # The map drew halfway because mapsforge renders a SQUARE frame buffer by default: two and a half
 # screens of tiles on a tall phone, thrown away at every zoom.
@@ -237,10 +242,12 @@ check("the settings face scrolls",
       "verticalScroll(rememberScrollState())" in screens,
       "so the last row is reachable however many rows there are")
 row = control_row
-order = [k for k in ["\u2212", "CH", "MarkKey", "RecordKey", "layer.short", "\u2699", '"+"'] if k in row]
-check("the record circle is the middle key of seven",
-      order.index("RecordKey") == 3 and len(order) == 7,
-      "minus, CH, centre, record, map, settings, plus: the red one stays above the home button")
+order = [k for k in ["\u2212", "MarkKey", "RecordKey", "layer.short", "\u2699", '"+"'] if k in row]
+# Six keys with CH gone, so the red circle is third of six: as near the middle as an even row
+# allows, and still the one under the thumb that reaches the phone's home button.
+check("the record circle sits at the middle of the row",
+      abs(order.index("RecordKey") - (len(order) - 1) / 2) <= 0.5,
+      f"{len(order)} keys, red one at position {order.index('RecordKey') + 1}")
 
 
 # THE OFFLINE MAP WENT BLANK ON THE WAY IN (15.9.2026). Three things could do that and all three
@@ -293,9 +300,6 @@ check("the frame buffer is not square, because this map does not rotate",
 check("an empty map says so by asking the file, not by waiting to be photographed",
       "fun emptyHere" in canvas_src and "emptyHere()" in screens,
       "the read the renderer is about to do anyway")
-check("CH is absent where it would do nothing, and its slot stays",
-      "Caching.refusal(layer) == null" in control_row and "Spacer(Modifier.weight(1f)" in screens,
-      "the red circle keeps its place above the home button")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

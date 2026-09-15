@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,7 +99,6 @@ fun TrailApp(
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
-    var caching by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
 
@@ -124,44 +122,6 @@ fun TrailApp(
             CanvasHolder.canvas?.currentZoom()?.let { if (it != zoom) zoom = it }
             delay(500)
         }
-    }
-
-    // CH, lifted out of the row so that the row of keys reads as a row of keys.
-    val onCache: () -> Unit = onCache@{
-
-                    val refusal = Caching.refusal(layer)
-                    if (refusal != null) {
-                        Trail.say(refusal)
-                        return@onCache
-                    }
-                    val canvas = CanvasHolder.canvas
-                    val box = canvas?.visibleBox()
-                    if (canvas == null || box == null) {
-                        Trail.say("The map has not settled yet")
-                        return@onCache
-                    }
-                    val plan = Caching.plan(box[0], box[1], box[2], box[3], canvas.currentZoom(), layer)
-                    if (plan.tiles.isEmpty()) {
-                        Trail.say("Nothing to fetch at this zoom")
-                        return@onCache
-                    }
-                    caching = true
-                    Trail.say(
-                        "Caching ${plan.tiles.size} tiles, about " +
-                            Caching.formatBytes(Caching.estimateBytes(plan.tiles.size)) +
-                            if (plan.truncated) ", of ${plan.wanted}: zoom in for the rest" else ""
-                    )
-                    scope.launch {
-                        val failed = canvas.cacheVisible(layer, plan, layer.provider?.let { store.key(it) }) { done, total, bad ->
-                            Trail.say("Caching $done of $total" + if (bad > 0) ", $bad did not come" else "")
-                        }
-                        caching = false
-                        Trail.say(
-                            if (failed == 0) "Cached ${plan.tiles.size} tiles: this view works offline now"
-                            else "Cached ${plan.tiles.size - failed} of ${plan.tiles.size}, press CH again for the rest"
-                        )
-                    }
-                
     }
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
@@ -213,6 +173,13 @@ fun TrailApp(
                 // A line with nothing in it takes no room at all now. It used to be drawn at zero
                 // opacity, which is invisible but still occupies its height — and with a
                 // background behind the column, that height was a shaded band over the map.
+                // THE CREDIT IS BACK ON THE MAP, and only where it has to be. Thunderforest do not
+                // permit removing their attribution or OpenStreetMap's from an app, so the layers
+                // whose tiles we fetch carry one dim line. The offline file does not: its credit
+                // sits in settings, where it is read once.
+                if (layer.creditOnMap) {
+                    Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
+                }
                 if (note != null) NoteLine(note)
                 if (recording) TrackLine(stats)
                 // THE ORDER IS THE THUMB'S, NOT THE LIST'S. Baba, 15.9.2026: the record circle sits
@@ -226,15 +193,6 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
-                    // CH ONLY EXISTS WHERE IT DOES SOMETHING. Baba, 15.9.2026: on the offline map
-                    // it cached nothing, because the map is already a file on the phone. The slot
-                    // stays so the red circle keeps its place above the home button; the key in
-                    // it does not, because a key that does nothing is worse than no key.
-                    if (Caching.refusal(layer) == null) {
-                        Key(glyph = "CH", lit = caching, onClick = onCache)
-                    } else {
-                        Spacer(Modifier.weight(1f).height(KEY))
-                    }
                     MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
                     // ONE BUTTON FOR THE MAP. It says which one is on and turns to the next.

@@ -12,7 +12,6 @@ import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.Layer
 import org.mapsforge.map.layer.cache.TileCache
-import org.mapsforge.map.layer.download.DownloadJob
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.AbstractTileSource
 import org.mapsforge.map.layer.overlay.Circle
@@ -20,10 +19,7 @@ import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.FileInputStream
-import java.net.HttpURLConnection
 import java.net.MalformedURLException
 import java.net.URL
 
@@ -287,83 +283,6 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     fun currentZoom(): Int = view.model.mapViewPosition.zoomLevel.toInt()
-
-    /**
-     * CH: FETCH EVERY TILE OF THIS VIEW INTO THE CACHE THE LAYER ALREADY READS FROM.
-     *
-     * Tiles already held are skipped rather than fetched again, so pressing it twice on the same
-     * view costs nothing and pressing it after moving a little costs only the edge.
-     *
-     * A tile that will not come is counted, not thrown: one dead tile in four hundred is a
-     * server hiccup, and stopping the whole run for it would leave the map worse than before.
-     * The count is reported, because a cache that silently has holes in it is the thing you find
-     * out about on the mountain.
-     */
-    suspend fun cacheVisible(
-        layer: MapLayer,
-        plan: Caching.Plan,
-        key: String?,
-        onProgress: (done: Int, total: Int, failed: Int) -> Unit,
-    ): Int = withContext(Dispatchers.IO) {
-        val cache = tileCache ?: return@withContext 0
-        val source = WebTileSource(layer, key = key)
-        val tileSize = view.model.displayModel.tileSize
-        var done = 0
-        var failed = 0
-        for (ref in plan.tiles) {
-            val tile = Tile(ref.x, ref.y, ref.zoom.toByte(), tileSize)
-            val job = DownloadJob(tile, source)
-            if (!cache.containsKey(job)) {
-                try {
-                    val connection = source.getTileUrl(tile).openConnection() as HttpURLConnection
-                    connection.connectTimeout = 15_000
-                    connection.readTimeout = 15_000
-                    connection.setRequestProperty("User-Agent", source.userAgent)
-                    connection.inputStream.use { stream ->
-                        val bitmap = factory.createTileBitmap(stream, tileSize, false)
-                        cache.put(job, bitmap)
-                    }
-                    connection.disconnect()
-                } catch (e: Exception) {
-                    failed++
-                }
-            }
-            done++
-            if (done % 8 == 0 || done == plan.tiles.size) onProgress(done, plan.tiles.size, failed)
-        }
-        view.repaint()
-        failed
-    }
-
-    /**
-     * WHAT THE OFFLINE MAP ACTUALLY HAS, HERE, AT THIS ZOOM.
-     *
-     * A blank map has several possible causes and they look identical on the glass: no file, a
-     * file that does not cover this place, a file with no data at this zoom, or a renderer that
-     * is failing. This asks the file itself and reports the counts, so the next report is a fact
-     * rather than "it disappeared" (delivery-gate.md 14: print what you examined).
-     */
-    fun diagnose(): String {
-        val file = mapFile ?: return "No offline map file is open. Settings: download Croatia."
-        return try {
-            val info = file.mapFileInfo
-            val centre = view.model.mapViewPosition.center
-            val z = currentZoom()
-            val tile = Tile(
-                Geo.tileX(centre.longitude, z),
-                Geo.tileY(centre.latitude, z),
-                z.toByte(),
-                view.model.displayModel.tileSize,
-            )
-            val inside = info.boundingBox.contains(centre)
-            val read = runCatching { file.readMapData(tile) }.getOrNull()
-            "z$z · file ${info.fileSize / 1_000_000} MB, zooms ${info.zoomLevelMin}-${info.zoomLevelMax} · " +
-                "here ${if (inside) "inside" else "OUTSIDE"} the map · " +
-                "this tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points"
-        } catch (e: Exception) {
-            "The map file could not be questioned: ${e.javaClass.simpleName}"
-        }
-    }
 
     /**
      * Null when the file has something to draw under the crosshair, or a sentence when it has

@@ -52,8 +52,13 @@ data class MapLayer(
         HYBRID("satellite", true),
     }
 
-    /** True only where the licence allows the tiles to be kept on the phone. */
-    val cacheable: Boolean get() = kind == LayerKind.RASTER_XYZ
+    /**
+     * Whether the credit has to be on the map itself rather than in settings. Thunderforest's
+     * terms say the Thunderforest and OpenStreetMap attribution may not be removed from an app,
+     * and Google says the same about its own. A file on the phone is a different case: its credit
+     * is in settings.
+     */
+    val creditOnMap: Boolean get() = kind != LayerKind.VECTOR_FILE
 }
 
 object Layers {
@@ -83,10 +88,10 @@ object Layers {
      * URL, which is exactly the kind of key the picker can feed, and its tiles may be cached — so
      * CH on this one is what fills a valley before you walk into it.
      */
-    val OUTDOORS = MapLayer(
+    val THUNDERFOREST = MapLayer(
         id = "outdoors",
-        label = "Outdoors",
-        short = "OUT",
+        label = "Thunderforest",
+        short = "TF",
         kind = LayerKind.RASTER_XYZ,
         offline = MapLayer.Offline.CACHED_ONLY,
         attribution = "Maps © Thunderforest, Data © OpenStreetMap contributors",
@@ -115,7 +120,7 @@ object Layers {
 
     /** The order the one button turns through: what works offline first, Google's four last. */
     val ALL: List<MapLayer> = listOf(
-        OFFLINE, OSM, OUTDOORS, GOOGLE, GOOGLE_SATELLITE, GOOGLE_TERRAIN, GOOGLE_HYBRID,
+        OFFLINE, OSM, THUNDERFOREST, GOOGLE, GOOGLE_SATELLITE, GOOGLE_TERRAIN, GOOGLE_HYBRID,
     )
 
     fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
@@ -150,7 +155,7 @@ object Layers {
             "Google needs your own key. Settings, API keys, pick the file it is in."
 
         Keys.Provider.THUNDERFOREST ->
-            "Outdoors needs a Thunderforest key. Settings, API keys, pick the file it is in."
+            "Thunderforest needs your key. Settings, API keys, pick the file it is in."
 
         null -> null
     }

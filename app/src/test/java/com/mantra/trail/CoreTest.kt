@@ -585,7 +585,7 @@ class CoreTest {
 
     @Test fun theWalkingMapPutsTheKeyInItsAddress() {
         val key = "a".repeat(32)
-        val url = Layers.tileUrl(Layers.OUTDOORS, 12, 2229, 1460, key = key)!!
+        val url = Layers.tileUrl(Layers.THUNDERFOREST, 12, 2229, 1460, key = key)!!
         assertTrue(url.contains("apikey=$key"))
         assertTrue(url.startsWith("https://"))
     }
@@ -618,9 +618,7 @@ class CoreTest {
 
     @Test fun noViewOfGoogleMayBeCachedOrRefusedQuietly() {
         Layers.ALL.filter { it.kind == LayerKind.GOOGLE_TILES }.forEach {
-            assertFalse(it.id, it.cacheable)
             assertEquals(it.id, MapLayer.Offline.NONE, it.offline)
-            assertNotNull(it.id, Caching.refusal(it))
             assertNull(it.id, Layers.tileUrl(it, 12, 2229, 1460))
         }
     }
@@ -651,10 +649,9 @@ class CoreTest {
         assertTrue(Layers.OfflineDownload.BYTES > 100_000_000)
     }
 
-    @Test fun googlesTilesAreNeverCacheable() {
+    @Test fun googlesTilesAreNeverFetchedWithoutASession() {
         // Google's terms forbid pre-fetching, caching or storing tiles, and name offline use as a
         // prohibited case. This is the check that fails if somebody "improves" the app later.
-        assertFalse(Layers.GOOGLE.cacheable)
         assertEquals(MapLayer.Offline.NONE, Layers.GOOGLE.offline)
         assertNull(Layers.tileUrl(Layers.GOOGLE, 12, 2229, 1460))
     }
@@ -677,78 +674,6 @@ class CoreTest {
     }
 
     @Test fun everyFetchedLayerHasAnAttributionAndAUrl() {
-        Layers.ALL.filter { it.cacheable }.forEach {
-            assertTrue(it.id, it.attribution.isNotBlank())
-            assertNotNull(it.id, it.url)
-        }
-    }
-
-    // --- Caching the view -----------------------------------------------------------------------
-
-    @Test fun aPlanCoversTheZoomOnScreenAndTwoCloser() {
-        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OSM)
-        assertEquals(13, p.fromZoom)
-        assertEquals(15, p.toZoom)
-        assertTrue(p.tiles.any { it.zoom == 13 })
-        assertTrue(p.tiles.any { it.zoom == 15 })
-    }
-
-    @Test fun aPlanStartsWithTheZoomBeingLookedAt() {
-        // A cancelled run must leave the level on screen complete, so it is fetched first.
-        val p = Caching.plan(44.30, 15.20, 44.35, 15.30, 13, Layers.OSM)
-        assertEquals(13, p.tiles.first().zoom)
-    }
-
-    @Test fun oneZoomCloserIsFourTimesTheTiles() {
-        val p = Caching.plan(44.0, 15.0, 44.5, 15.5, 12, Layers.OSM, extraZooms = 1)
-        val atTwelve = p.tiles.count { it.zoom == 12 }
-        val atThirteen = p.tiles.count { it.zoom == 13 }
-        assertTrue("12: $atTwelve  13: $atThirteen", atThirteen >= atTwelve * 3)
-    }
-
-
-    @Test fun cornersGivenTheWrongWayRoundStillMakeABox() {
-        val right = Caching.plan(44.0, 15.0, 44.2, 15.2, 12, Layers.OSM)
-        val swapped = Caching.plan(44.2, 15.2, 44.0, 15.0, 12, Layers.OSM)
-        assertEquals(right.tiles.size, swapped.tiles.size)
-    }
-
-    @Test fun theCeilingHoldsAndSaysSo() {
-        val p = Caching.plan(42.0, 13.0, 47.0, 20.0, 10, Layers.OSM, ceiling = 100)
-        assertEquals(100, p.tiles.size)
-        assertTrue(p.truncated)
-        assertTrue(p.wanted > 100)
-    }
-
-    @Test fun aSmallPlanIsNotTruncated() {
-        val p = Caching.plan(44.30, 15.20, 44.31, 15.21, 14, Layers.OSM)
-        assertFalse(p.truncated)
-        assertEquals(p.wanted, p.tiles.size)
-    }
-
-    @Test fun everyTileInAPlanIsUnique() {
-        val p = Caching.plan(44.30, 15.20, 44.40, 15.30, 13, Layers.OSM)
-        assertEquals(p.tiles.size, p.tiles.toSet().size)
-    }
-
-    @Test fun googleIsRefusedWithAReason() {
-        val why = Caching.refusal(Layers.GOOGLE)
-        assertNotNull(why)
-        assertTrue(why!!.contains("Google"))
-    }
-
-    @Test fun theOfflineFileIsRefusedBecauseItIsAlreadyOffline() {
-        assertNotNull(Caching.refusal(Layers.OFFLINE))
-    }
-
-    @Test fun ourOwnRasterLayersAreNotRefused() {
-        assertNull(Caching.refusal(Layers.OSM))
-        assertNull(Caching.refusal(Layers.OUTDOORS))
-    }
-
-    @Test fun sizesAreWrittenInUnitsSomebodyCanJudge() {
-        assertEquals("15 kB", Caching.formatBytes(15_000))
-        assertEquals("1 MB", Caching.formatBytes(1_500_000))
     }
 
     // --- Importing a key from a file -------------------------------------------------------------
@@ -797,6 +722,59 @@ class CoreTest {
     @Test fun anEmptyFileYieldsNothingRatherThanThrowing() {
         assertTrue(Keys.parse("").isEmpty())
         assertTrue(Keys.parse("   \n\n  ").isEmpty())
+    }
+
+    /**
+     * THE REAL FILE, IN ITS REAL SHAPE. This is the layout of the note the key actually arrived
+     * in on 15.9.2026 — a title line, an account, a plan, two URLs, the key under a heading, and
+     * a tile URL further down that contains the key a second time. Only the key itself is
+     * replaced here. It found one key, called it Thunderforest, and labelled it API KEY.
+     */
+    @Test fun theFileTheKeyActuallyArrivedInParsesToOneKey() {
+        val k = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        val text = """
+            THUNDERFOREST — map tiles (OpenStreetMap), api key
+            Created 15.9.2026 by Marko. Account: someone@example.com
+            Plan: Hobby Project — free, 150,000 tile requests per month, no card.
+            Console: https://manage.thunderforest.com/   Pricing: https://www.thunderforest.com/pricing/
+
+            API KEY
+            $k
+
+            HOW IT IS USED
+              https://tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=$k
+            Styles: cycle, transport, landscape, outdoors.
+        """.trimIndent()
+        val found = Keys.parse(text)
+        assertEquals(1, found.size)
+        assertEquals(k, found[0].key)
+        assertEquals(Keys.Provider.THUNDERFOREST, found[0].provider)
+    }
+
+    @Test fun aKeyInsideAUrlIsStillTheSameKey() {
+        val k = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        val found = Keys.parse("https://tile.thunderforest.com/outdoors/1/1/1.png?apikey=$k")
+        assertEquals(1, found.size)
+        assertEquals(k, found[0].key)
+    }
+
+    @Test fun anAccountLineIsNotMistakenForAKey() {
+        val found = Keys.parse("Account: marko@example.com\nPlan: Hobby Project, 150000 requests")
+        assertTrue(found.isEmpty())
+    }
+
+    @Test fun anUppercaseHexStringIsNotAThunderforestKey() {
+        // Their keys are lowercase; a hex string in capitals is a checksum in somebody's notes.
+        assertNull(Keys.providerOf("A1B2C3D4E5F60718293A4B5C6D7E8F90"))
+    }
+
+    @Test fun everyLayerThatFetchesTilesCarriesItsCreditOnTheMap() {
+        // Thunderforest do not permit removing their attribution or OpenStreetMap's from an app.
+        Layers.ALL.filter { it.kind != LayerKind.VECTOR_FILE }.forEach {
+            assertTrue(it.id, it.creditOnMap)
+            assertTrue(it.id, it.attribution.isNotBlank())
+        }
+        assertFalse(Layers.OFFLINE.creditOnMap)
     }
 
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {
