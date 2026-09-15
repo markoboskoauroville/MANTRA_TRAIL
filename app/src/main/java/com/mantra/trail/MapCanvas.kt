@@ -113,11 +113,14 @@ class MapCanvas(private val context: Context, private val store: Store) {
         mapFile?.close()
         mapFile = null
 
+        // TWO SCREENFULS, NOT ONE. A cache sized to exactly what is on screen has nothing left
+        // for the zoom level being rendered into, and the symptom of that is a map that goes
+        // blank on the way in and comes back on the way out.
         val cache = AndroidUtil.createTileCache(
             context,
             "tiles-${layer.id}",
             view.model.displayModel.tileSize,
-            1f,
+            2f,
             view.model.frameBufferModel.overdrawFactor,
             // Persistent: the tiles fetched on the road are the map in the mountains. Only for
             // the layers whose licence allows it — Google's never reaches this code.
@@ -150,7 +153,12 @@ class MapCanvas(private val context: Context, private val store: Store) {
             // one: a note the person cannot act on teaches them to ignore the note line.
         }
         view.setZoomLevelMin(layer.minZoom.toByte())
-        view.setZoomLevelMax(layer.maxZoom.toByte())
+        // The offline map is drawn from vector data, so it can be enlarged past the zoom any
+        // tile service stops at: the detail thins out but the map does not end. Clamping it at
+        // 18, as this did, is one of the two things that could have made it vanish on the way in.
+        view.setZoomLevelMax(
+            if (layer.kind == LayerKind.VECTOR_FILE) 22 else layer.maxZoom.toByte().toInt()
+        )
         restoreOverlays()
         view.repaint()
         return problem

@@ -100,6 +100,7 @@ fun TrailApp(
     var settings by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var caching by remember { mutableStateOf(false) }
+    var zoom by remember { mutableIntStateOf(13) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -113,6 +114,15 @@ fun TrailApp(
     // after that every change goes through the toggle or the settings list.
     LaunchedEffect(Unit) {
         showLayer(store, layer)
+    }
+
+    // The zoom on the screen follows the map rather than the other way round. Twice a second is
+    // enough for a number that changes when a thumb moves, and it stops with the composition.
+    LaunchedEffect(Unit) {
+        while (true) {
+            CanvasHolder.canvas?.currentZoom()?.let { if (it != zoom) zoom = it }
+            delay(500)
+        }
     }
 
     // CH, lifted out of the row so that the row of keys reads as a row of keys.
@@ -180,7 +190,7 @@ fun TrailApp(
                 Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding().padding(GAP),
                 verticalArrangement = Arrangement.spacedBy(GAP),
             ) {
-                FixLine(fix)
+                FixLine(fix, zoom)
             }
 
             Column(
@@ -341,13 +351,16 @@ private fun CentreMark(hasFix: Boolean) {
 
 /** One line of numbers, and only the ones that decide something. */
 @Composable
-private fun FixLine(fix: Fix?) {
+private fun FixLine(fix: Fix?, zoom: Int) {
     Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 13)
             Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 13)
             Label(fix?.accuracyM?.let { "±${it.toInt()} m" } ?: "± -", accuracyInk(fix?.accuracyM), size = 13)
             Label(fix?.ele?.let { "${it.toInt()} m" } ?: "- m", ink(fix?.ele != null), size = 13)
+            // The zoom is on screen because a map that fails at one zoom and not another cannot
+            // be reported without the number, and "it disappeared" is not a number.
+            Label("z${zoom}", Paint.Dim, size = 13)
         }
     }
 }

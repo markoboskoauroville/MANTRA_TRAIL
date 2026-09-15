@@ -214,6 +214,21 @@ check("the record circle is the middle key of five",
       order.index("RecordKey") == 2 and len(order) == 5,
       "CH, centre, record, map, settings: the red one lands above the phone's home button")
 
+
+# THE OFFLINE MAP WENT BLANK ON THE WAY IN (15.9.2026). Three things could do that and all three
+# are now closed; the checks keep them closed.
+canvas_src = (MAIN / "MapCanvas.kt").read_text()
+check("the vector map is not clamped to a tile service's zoom",
+      "LayerKind.VECTOR_FILE) 22" in canvas_src,
+      "vector data enlarges past 18; only tile layers stop where their tiles stop")
+check("the tile cache holds more than one screenful",
+      '"tiles-${layer.id}",' in canvas_src and "2f," in canvas_src,
+      "two screenfuls, so there is room for the level being rendered into")
+check("the app asks for the large heap a country file at street zoom needs",
+      'android:largeHeap="true"' in mf, "present")
+check("the zoom is on the screen, so a fault can be reported with a number",
+      'Label("z${zoom}"' in screens, "present on the top line")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))
