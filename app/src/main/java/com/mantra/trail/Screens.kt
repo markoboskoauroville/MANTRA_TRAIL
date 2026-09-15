@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,7 +74,7 @@ private val GAP = 10.dp
 private val KEY = 46.dp
 
 /** The one size for the marks: the centre of the map, the where key and the record circle. */
-private val MARK = 22.dp
+private val MARK = 20.dp
 
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
@@ -118,6 +120,7 @@ fun TrailApp(
     var ready by remember { mutableStateOf(false) }
     // LOCKED TO THE MIDDLE (15.9.2026). One press centres and holds; the next lets the map go.
     var follow by remember { mutableStateOf(false) }
+    var lastCentreTap by remember { mutableLongStateOf(0L) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -226,11 +229,27 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
+                    // ONE TAP CENTRES, TWO IN A ROW LOCK (15.9.2026). A second tap inside a
+                    // second is somebody saying "and keep it there"; a second tap later is just
+                    // somebody centring again. While it is locked, one tap lets the map go.
                     MarkKey(
                         lit = follow,
                         onClick = {
-                            follow = !follow
-                            onWhereAmI()
+                            val now = System.currentTimeMillis()
+                            when {
+                                follow -> {
+                                    follow = false
+                                    Trail.say("The map is free again")
+                                }
+
+                                now - lastCentreTap < 1_000L -> {
+                                    follow = true
+                                    Trail.say("Locked to the middle")
+                                }
+
+                                else -> onWhereAmI()
+                            }
+                            lastCentreTap = now
                         },
                     ) { hasFix -> CentreMark(hasFix, locked = follow) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
@@ -370,9 +389,11 @@ private fun MapSurface(
  */
 private fun nextUsable(store: Store, current: MapLayer): MapLayer {
     var family = current.family
-    repeat(MapLayer.Family.entries.size) {
+    repeat(MapLayer.Family.entries.size * 2) {
         family = Layers.nextFamily(Layers.firstOf(family))
         val candidate = store.styleOf(family)
+        // A map he took out of the toggle is not offered by it, however usable it is.
+        if (!store.inToggle(candidate.id)) return@repeat
         val ready = when {
             candidate.provider != null -> !store.key(candidate.provider).isNullOrEmpty()
             candidate.kind == LayerKind.VECTOR_FILE -> store.hasOfflineMap
@@ -483,14 +504,27 @@ private fun CentreMark(hasFix: Boolean, locked: Boolean = false) {
     val ink = if (hasFix) Paint.AmberBright else Paint.Amber
     Canvas(Modifier.size(MARK)) {
         val c = Offset(size.width / 2f, size.height / 2f)
-        val r = size.minDimension / 2f - 2f
-        // Locked to the middle: the ring gains a second ring, so the state is on the mark itself
-        // and not only on the key behind it.
-        if (locked) drawCircle(ink, radius = r * 0.55f, center = c, style = Stroke(1.dp.toPx()))
-        drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(3.5.dp.toPx()))
-        drawCircle(ink, radius = r, center = c, style = Stroke(2.dp.toPx()))
-        drawCircle(Paint.Ground, radius = 2.4.dp.toPx(), center = c)
-        drawCircle(ink, radius = 1.6.dp.toPx(), center = c)
+        val arm = size.minDimension / 2f
+        val gap = arm * 0.34f
+        val hair = 1.dp.toPx()
+        val shadow = 2.dp.toPx()
+
+        // HAIRLINES, LIKE THE SNIPER HAD (15.9.2026). The mark before this was a ring thick
+        // enough to hide a path under it. Each line is drawn twice — near-black a little wider,
+        // then the colour — which is what makes a hairline readable on a white street and under
+        // fir without making it thick.
+        fun cross(colour: androidx.compose.ui.graphics.Color, width: Float) {
+            drawLine(colour, Offset(c.x - arm, c.y), Offset(c.x - gap, c.y), width)
+            drawLine(colour, Offset(c.x + gap, c.y), Offset(c.x + arm, c.y), width)
+            drawLine(colour, Offset(c.x, c.y - arm), Offset(c.x, c.y - gap), width)
+            drawLine(colour, Offset(c.x, c.y + gap), Offset(c.x, c.y + arm), width)
+        }
+        cross(Paint.Ground, shadow)
+        cross(ink, hair)
+        drawCircle(Paint.Ground, radius = gap, center = c, style = Stroke(shadow))
+        drawCircle(ink, radius = gap, center = c, style = Stroke(hair))
+        // Locked: the centre fills. One dot, and the state is on the mark itself.
+        if (locked) drawCircle(ink, radius = hair * 1.6f, center = c)
     }
 }
 
@@ -946,25 +980,60 @@ private fun SettingsFace(
                     Label(if (folded) "▸ ${Layers.of(family).size}" else "▾", Paint.Amber, size = 12)
                 }
                 if (!folded) {
-                    Layers.of(family).chunked(3).forEach { row ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-                            row.forEach { layer ->
-                                val chosen = layer.id == current.id
-                                val needsKey = layer.provider != null && store.key(layer.provider) == null
-                                Box(
-                                    Modifier
-                                        .weight(1f)
-                                        .height(44.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (chosen) Paint.Amber else Paint.Veil)
-                                        .alpha(if (needsKey) 0.55f else 1f)
-                                        .clickable { onPick(layer) },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Label(layer.name, if (chosen) Paint.Ground else Paint.Sand, size = 11)
-                                }
+                    // ONE ROW PER MAP, because each one now carries two decisions: which map to
+                    // show, and whether it is in the toggle on the map screen at all (15.9.2026).
+                    // Two decisions need two hit areas, and a chip a third of a phone wide cannot
+                    // hold both without one of them being pressed by mistake.
+                    Layers.of(family).forEach { layer ->
+                        val chosen = layer.id == current.id
+                        val needsKey = layer.provider != null && store.key(layer.provider) == null
+                        var included by remember(layer.id, UiTick.n) {
+                            mutableStateOf(store.inToggle(layer.id))
+                        }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (chosen) Paint.Amber else Paint.Veil),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .alpha(if (needsKey) 0.55f else 1f)
+                                    .clickable { onPick(layer) }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Label(
+                                    text = layer.name + if (needsKey) " · needs a key" else "",
+                                    colour = if (chosen) Paint.Ground else Paint.Sand,
+                                    size = 12,
+                                    align = TextAlign.Start,
+                                )
                             }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                            Box(
+                                Modifier
+                                    .width(92.dp)
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        included = !included
+                                        store.setInToggle(layer.id, included)
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Label(
+                                    text = if (included) "in toggle" else "not in toggle",
+                                    colour = when {
+                                        chosen -> Paint.Ground
+                                        included -> Paint.Amber
+                                        else -> Paint.Dim
+                                    },
+                                    size = 10,
+                                )
+                            }
                         }
                     }
                 }

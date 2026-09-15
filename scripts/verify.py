@@ -370,6 +370,18 @@ check("touching the field stops the countdown, not just typing in it",
 check("the position can be locked to the middle of the screen",
       "if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)" in screens,
       "one press holds it, the next lets the map go")
+# Refined 15.9.2026: one tap centres, TWO IN A ROW lock. A second tap a minute later is somebody
+# centring again, not somebody asking for a lock.
+check("two taps in a row are what lock it",
+      "now - lastCentreTap < 1_000L" in screens, "a second inside a second")
+check("a map can be taken out of the toggle and still be in the list",
+      "store.inToggle" in screens and "fun inToggle" in (MAIN / "Store.kt").read_text(),
+      "excluding a map from the toggle is not the same as not having it")
+check("the toggle skips what he took out of it",
+      "if (!store.inToggle(candidate.id)) return@repeat" in screens, "in the same place it skips what has no key")
+check("the centre mark is hairlines",
+      "val hair = 1.dp.toPx()" in screens and "cross(ink, hair)" in screens,
+      "each line drawn twice, near-black then colour, so a hairline still reads")
 check("choosing a map closes the settings and shows it",
       "settings = false\n                    scope.launch { showLayer(store, picked) }" in screens,
       "one decision, not two")

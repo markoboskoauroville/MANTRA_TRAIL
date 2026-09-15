@@ -77,7 +77,10 @@ class Store(context: Context) {
     fun styleOf(family: MapLayer.Family): MapLayer {
         val id = prefs.getString("style-${family.name}", null)
         val remembered = id?.let { saved -> Layers.of(family).firstOrNull { it.id == saved } }
-        return remembered ?: Layers.firstOf(family)
+        // If the remembered style has been taken out of the toggle, the toggle offers the first
+        // one of that family that is still in it rather than offering nothing.
+        if (remembered != null && inToggle(remembered.id)) return remembered
+        return Layers.of(family).firstOrNull { inToggle(it.id) } ?: remembered ?: Layers.firstOf(family)
     }
 
     fun rememberStyle(layer: MapLayer) {
@@ -97,6 +100,16 @@ class Store(context: Context) {
             mapFileUri != null -> "a file is chosen"
             else -> "not yet"
         }
+
+    /**
+     * Whether a map appears in the toggle on the map screen (15.9.2026). Everything is in it
+     * until he takes it out; the settings list still holds all of them, because excluding a map
+     * from the toggle is not the same as not having it.
+     */
+    fun inToggle(layerId: String): Boolean = prefs.getBoolean("toggle-$layerId", true)
+
+    fun setInToggle(layerId: String, value: Boolean) =
+        prefs.edit().putBoolean("toggle-$layerId", value).apply()
 
     /** Whether a settings section is folded away. Remembered between sessions (15.9.2026). */
     fun collapsed(section: String): Boolean = prefs.getBoolean("collapsed-$section", section != "thunderforest")
