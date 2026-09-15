@@ -223,10 +223,10 @@ check("the credits are not on the map screen",
 # The map drew halfway because mapsforge renders a SQUARE frame buffer by default: two and a half
 # screens of tiles on a tall phone, thrown away at every zoom.
 check("the frame buffer is the shape of the screen, not a square",
-      "Parameters.SQUARE_FRAME_BUFFER = false" in canvas_src,
+      "Parameters.SQUARE_FRAME_BUFFER = false" in (MAIN / "MapCanvas.kt").read_text(),
       "the square buffer is for rotation, and this map does not rotate")
 check("rendered tiles are kept on disk for every layer but Google",
-      "layer.kind != LayerKind.GOOGLE_TILES," in canvas_src,
+      "layer.kind != LayerKind.GOOGLE_TILES," in (MAIN / "MapCanvas.kt").read_text(),
       "a zoom visited once comes back instantly")
 check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
