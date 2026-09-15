@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import org.mapsforge.core.graphics.Style
+import org.mapsforge.core.util.Parameters
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.core.model.Tile
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
@@ -77,6 +78,20 @@ class WebTileSource(
  */
 class MapCanvas(private val context: Context, private val store: Store) {
 
+    init {
+        // WHY THE MAP DREW HALFWAY AND THEN STOPPED.
+        //
+        // Left alone mapsforge allocates a SQUARE frame buffer: on a 1080 by 2400 screen that is
+        // 2400 by 2400, so it renders roughly two and a half screens of tiles before the one you
+        // are looking at is finished. Every zoom threw that work away and began again — which is
+        // exactly what a map that "draws halfway, and at the next zoom nothing" looks like. The
+        // square buffer exists for rotating the map, and this map does not rotate.
+        Parameters.SQUARE_FRAME_BUFFER = false
+        // 16-bit colour for the buffer: half the memory per tile, and on a street map nobody can
+        // tell. Memory is what the renderer runs out of first on a dense city at street zoom.
+        Parameters.ANDROID_32BIT_COLOR = false
+    }
+
     val view: MapView = MapView(context).apply {
         setClickable(true)
         // 256 px tiles, fixed. Left to itself mapsforge scales the tile to the screen density,
@@ -127,9 +142,12 @@ class MapCanvas(private val context: Context, private val store: Store) {
             view.model.displayModel.tileSize,
             2f,
             view.model.frameBufferModel.overdrawFactor,
-            // Persistent: the tiles fetched on the road are the map in the mountains. Only for
-            // the layers whose licence allows it — Google's never reaches this code.
-            layer.cacheable,
+            // KEPT ON DISK FOR EVERYTHING EXCEPT GOOGLE. Fetched tiles are the map in the
+            // mountains, and tiles WE rendered from a file on the phone are ours twice over —
+            // caching them means a zoom that was visited once comes back instantly instead of
+            // being rendered from the country file again. Google's terms forbid it, and Google
+            // is the only layer this is false for.
+            layer.kind != LayerKind.GOOGLE_TILES,
         )
         tileCache = cache
 

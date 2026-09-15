@@ -196,36 +196,34 @@ fun TrailApp(
             // and the symbols... because I don't see them in the map."* The shadow alone was not
             // enough on a pale street map. The bar runs the full width and only as tall as the
             // line it carries, so it costs a strip rather than a panel.
+            // THE BAR IS THE HEIGHT OF ITS LINE AND NOTHING MORE. Putting the background on the
+            // column meant it also covered the safe-area inset and every invisible row inside it,
+            // which is how a strip of text ended up shading half the map.
             Column(
-                Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .background(Paint.Bar)
-                    .safeDrawingPadding()
-                    .padding(horizontal = GAP, vertical = 6.dp),
+                Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding(),
             ) {
                 FixLine(fix, zoom)
             }
 
             Column(
-                Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(Paint.Bar)
-                    .safeDrawingPadding()
-                    .padding(horizontal = GAP, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                Modifier.fillMaxWidth().align(Alignment.BottomCenter).safeDrawingPadding(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                NoteLine(note)
-                Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
-                TrackLine(stats, recording)
+                // A line with nothing in it takes no room at all now. It used to be drawn at zero
+                // opacity, which is invisible but still occupies its height — and with a
+                // background behind the column, that height was a shaded band over the map.
+                if (note != null) NoteLine(note)
+                if (recording) TrackLine(stats)
                 // THE ORDER IS THE THUMB'S, NOT THE LIST'S. Baba, 15.9.2026: the record circle sits
                 // in the middle, straight above the phone's own home button, with the centre key
                 // beside it; the three that are pressed rarely spread out from there.
                 // SEVEN KEYS, AND THE RED ONE IS STILL THE MIDDLE OF THEM. Zoom sits at both ends
                 // where either thumb reaches it: Baba, 15.9.2026, *"give me plus and minus so I
                 // don't need to zoom with my pinching. It hurts."*
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
                     Key(glyph = "CH", lit = caching, onClick = onCache)
                     MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
@@ -429,8 +427,8 @@ private fun ink(active: Boolean): Color = if (active) Paint.Sand else Paint.Dim
 
 /** The walk, shown only while there is one. Idle it is empty space, not a row of zeros. */
 @Composable
-private fun TrackLine(stats: TrackStats, recording: Boolean) {
-    Panel(Modifier.alpha(if (recording) 1f else 0f)) {
+private fun TrackLine(stats: TrackStats) {
+    Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Label(Geo.formatDistance(stats.distanceM), Paint.Sand, size = 13)
             Label(Geo.formatDuration(stats.durationMs), Paint.Sand, size = 13)
@@ -442,7 +440,7 @@ private fun TrackLine(stats: TrackStats, recording: Boolean) {
 
 @Composable
 private fun NoteLine(note: String?) {
-    Panel(Modifier.alpha(if (note == null) 0f else 1f)) {
+    Panel {
         Label(note ?: " ", Paint.Amber, size = 12, align = TextAlign.Start)
     }
 }
@@ -604,6 +602,15 @@ private fun SettingsFace(
 
             SettingRow("download the offline map, ${Layers.OfflineDownload.LABEL}", mapState, onDownloadMap)
             SettingRow("or choose a .map file", "picker", onChooseMapFile)
+            // The credits live here, not over the map. Baba, 15.9.2026: *"I don't want to see
+            // copyright OpenStreetMap in my first screen."* Both services require attribution to
+            // be shown; neither requires it to be shown on top of the map.
+            Label(
+                text = Layers.ALL.map { it.attribution }.distinct().joinToString(" · "),
+                colour = Paint.Dim,
+                size = 9,
+                align = TextAlign.Start,
+            )
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
@@ -693,11 +700,18 @@ private fun BubbleVial(reading: Level.Reading) {
     }
 }
 
+/**
+ * A BAR THE HEIGHT OF ITS OWN TEXT. Baba, 15.9.2026: *"only height of this bar is height of the
+ * text, not cover my whole map."* So the background belongs to the line, not to the column that
+ * holds it, and the ink is thin enough to read the map through.
+ */
 @Composable
 private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier
+            .fillMaxWidth()
+            .background(Paint.Bar)
+            .padding(horizontal = GAP, vertical = 3.dp),
         content = content,
     )
 }

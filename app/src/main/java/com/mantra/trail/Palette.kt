@@ -27,11 +27,11 @@ object Paint {
     val Veil = Color(0x800B0D10)
 
     /**
-     * The bar behind the top line and the bottom row. Dark and mostly opaque, because the map
-     * underneath is every colour at once and a shadow on each letter was not enough on a pale
-     * street map — the words have to be readable before they are unobtrusive.
+     * The bar behind a line of text. Thin ink: the map reads through it, and the words are still
+     * legible because each of them also carries a shadow. It is the height of its line and never
+     * taller — a bar that covers map is worse than no bar.
      */
-    val Bar = Color(0xCC0B0D10)
+    val Bar = Color(0x730B0D10)
 
     /** Ink for something present but not usable yet. The same ink, quieter. */
     val Dim = Color(0x8CF2DDB4)

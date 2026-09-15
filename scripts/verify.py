@@ -83,9 +83,12 @@ check("cacheable is true only for the raster layer we fetch ourselves",
       "kind == LayerKind.RASTER_XYZ" in layers and "GOOGLE" not in layers.split("val cacheable")[1][:120],
       "the definition names the one kind, and Google is not in it")
 canvas = code_only((MAIN / "MapCanvas.kt").read_text())
-check("the tile cache is persistent only when the layer allows it",
-      "layer.cacheable," in canvas,
-      "the cache is created with the layer's own answer, not with true")
+# This asked for layer.cacheable, which is about a LICENCE to keep tiles somebody else served.
+# Tiles we rendered ourselves from a file on the phone are ours, and keeping them is what makes a
+# revisited zoom instant. The one layer that may never be kept is Google, and that is the test.
+check("the tile cache is kept on disk for every layer except Google",
+      "layer.kind != LayerKind.GOOGLE_TILES," in canvas,
+      "Google is the only false, and its terms are the reason")
 
 # 6 the track is written as the walk happens, not assembled at the end
 svc = code_only((MAIN / "TrailService.kt").read_text())
@@ -203,9 +206,28 @@ check("the workflow uses no key secret",
 # This check said "no filled surface over the map" until the phone showed that a shadow alone is
 # not readable on a pale street map. A bar the height of its line is not a box: the rule it keeps
 # is that nothing takes map it does not need.
-check("the map screen carries two bars and no panels",
-      screens.split("private fun SettingsFace")[0].count("Paint.Bar") == 2,
-      "one strip at the top, one at the bottom, each as tall as the line it carries")
+# A bar belongs to a LINE, never to the column that holds it: on the column it also covers the
+# safe-area inset and every empty row inside, which is how a strip of text shaded half the map.
+map_screen = screens.split("private fun SettingsFace")[0]
+check("no bar is painted on a column",
+      ".background(Paint.Bar)" not in map_screen.split("private fun Panel")[0] or
+      "Column(\n                Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding()" in map_screen,
+      "the background belongs to the line and to the key row, not to their container")
+check("an empty line takes no height at all",
+      "if (note != null) NoteLine(note)" in screens and "if (recording) TrackLine(stats)" in screens,
+      "drawn only when there is something in them, rather than at zero opacity")
+check("the credits are not on the map screen",
+      "attribution" not in map_screen and "attribution" in screens,
+      "they live in settings, where both services' terms are still satisfied")
+
+# The map drew halfway because mapsforge renders a SQUARE frame buffer by default: two and a half
+# screens of tiles on a tall phone, thrown away at every zoom.
+check("the frame buffer is the shape of the screen, not a square",
+      "Parameters.SQUARE_FRAME_BUFFER = false" in canvas_src,
+      "the square buffer is for rotation, and this map does not rotate")
+check("rendered tiles are kept on disk for every layer but Google",
+      "layer.kind != LayerKind.GOOGLE_TILES," in canvas_src,
+      "a zoom visited once comes back instantly")
 check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
 check("the centre mark is the colour of the position, not the ink colour",
