@@ -101,6 +101,7 @@ fun TrailApp(
     var bare by remember { mutableStateOf(false) }
     var caching by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
+    var ready by remember { mutableStateOf(false) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -110,10 +111,9 @@ fun TrailApp(
     val recording = recordingSince != null
     val scope = rememberCoroutineScope()
 
-    // The map the app opened on. It is put up once the view exists, and never again from here:
-    // after that every change goes through the toggle or the settings list.
-    LaunchedEffect(Unit) {
-        showLayer(store, layer)
+    // The map the app opened on, drawn as soon as the view is real and not a moment before.
+    LaunchedEffect(ready) {
+        if (ready) showLayer(store, layer)
     }
 
     // The zoom on the screen follows the map rather than the other way round. Twice a second is
@@ -165,7 +165,13 @@ fun TrailApp(
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
 
-        MapSurface(store = store, fix = fix, line = Trail.line.collectAsState().value, onCanvas = onCanvas)
+        MapSurface(
+            store = store,
+            fix = fix,
+            line = Trail.line.collectAsState().value,
+            onCanvas = onCanvas,
+            onReady = { ready = true },
+        )
 
         // THE TAP IN THE MIDDLE. A small target, so panning the map anywhere else is untouched,
         // and the mark that says where the centre is sits inside it.
@@ -186,16 +192,29 @@ fun TrailApp(
         }
 
         if (!bare) {
+            // A BAR BEHIND THE WORDS. Baba, 15.9.2026: *"80% transparent bar behind the letters
+            // and the symbols... because I don't see them in the map."* The shadow alone was not
+            // enough on a pale street map. The bar runs the full width and only as tall as the
+            // line it carries, so it costs a strip rather than a panel.
             Column(
-                Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding().padding(GAP),
-                verticalArrangement = Arrangement.spacedBy(GAP),
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Paint.Bar)
+                    .safeDrawingPadding()
+                    .padding(horizontal = GAP, vertical = 6.dp),
             ) {
                 FixLine(fix, zoom)
             }
 
             Column(
-                Modifier.fillMaxWidth().align(Alignment.BottomCenter).safeDrawingPadding().padding(GAP),
-                verticalArrangement = Arrangement.spacedBy(GAP),
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(Paint.Bar)
+                    .safeDrawingPadding()
+                    .padding(horizontal = GAP, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 NoteLine(note)
                 Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
@@ -203,7 +222,11 @@ fun TrailApp(
                 // THE ORDER IS THE THUMB'S, NOT THE LIST'S. Baba, 15.9.2026: the record circle sits
                 // in the middle, straight above the phone's own home button, with the centre key
                 // beside it; the three that are pressed rarely spread out from there.
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                // SEVEN KEYS, AND THE RED ONE IS STILL THE MIDDLE OF THEM. Zoom sits at both ends
+                // where either thumb reaches it: Baba, 15.9.2026, *"give me plus and minus so I
+                // don't need to zoom with my pinching. It hurts."*
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
                     Key(glyph = "CH", lit = caching, onClick = onCache)
                     MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
@@ -219,6 +242,7 @@ fun TrailApp(
                         },
                     )
                     Key("⚙", lit = false, onClick = { settings = true })
+                    Key(glyph = "+", lit = false, onClick = { CanvasHolder.canvas?.zoomIn() })
                 }
             }
         }
@@ -250,7 +274,13 @@ fun TrailApp(
 }
 
 @Composable
-private fun MapSurface(store: Store, fix: Fix?, line: List<Fix>, onCanvas: (MapCanvas) -> Unit) {
+private fun MapSurface(
+    store: Store,
+    fix: Fix?,
+    line: List<Fix>,
+    onCanvas: (MapCanvas) -> Unit,
+    onReady: () -> Unit,
+) {
     // ONE SURFACE FOR EVERY MAP. Google's own SDK is gone with the key that was compiled in:
     // its tiles now come through the Map Tiles API with the key from the picker, which makes it
     // the same kind of layer as the others and leaves nothing to switch between.
@@ -260,6 +290,13 @@ private fun MapSurface(store: Store, fix: Fix?, line: List<Fix>, onCanvas: (MapC
             val made = MapCanvas(context, store)
             CanvasHolder.canvas = made
             onCanvas(made)
+            // THE VIEW EXISTS NOW, AND NOT BEFORE. This is the whole bug of v6 to v10: the first
+            // showLayer ran from a LaunchedEffect, which fires after composition but BEFORE
+            // AndroidView builds its view, so CanvasHolder.canvas was still null, showLayer
+            // returned at its first line, and no layer was ever put on the map. A blank white
+            // screen at every zoom, with nothing said — and zooming could not fix what was never
+            // there. The map is now told to draw itself from here, where the view is real.
+            onReady()
             made.view
         },
     )
@@ -278,24 +315,40 @@ private fun MapSurface(store: Store, fix: Fix?, line: List<Fix>, onCanvas: (MapC
  * made here — once, when the view is actually chosen, because Google bills per tile.
  */
 suspend fun showLayer(store: Store, layer: MapLayer) {
-    val canvas = CanvasHolder.canvas ?: return
-    val key = layer.provider?.let { store.key(it) }
-    if (layer.provider != null && key.isNullOrEmpty()) {
-        Trail.say(Layers.missingKey(layer))
+    val canvas = CanvasHolder.canvas
+    if (canvas == null) {
+        // This return used to be silent, which is how a blank screen kept its secret for five
+        // versions (silent-failure.md). It cannot be silent again.
+        Trail.say("The map view is not up yet")
         return
     }
+    val problem = attempt(canvas, store, layer)
+    if (problem == null) {
+        Trail.say(null)
+        return
+    }
+    // A MAP THAT CANNOT DRAW LEAVES THE SCREEN EMPTY, and an empty screen teaches nothing. So the
+    // reason is said AND the one map that always works is put up underneath it, rather than
+    // leaving somebody looking at white paper wondering whether the app is broken.
+    if (layer.id == Layers.OSM.id) {
+        Trail.say(problem)
+        return
+    }
+    val fallback = attempt(canvas, store, Layers.OSM)
+    Trail.say(if (fallback == null) "$problem — showing OpenStreetMap meanwhile" else problem)
+}
+
+/** One attempt at one layer. Returns null when it drew, or the reason it did not. */
+private suspend fun attempt(canvas: MapCanvas, store: Store, layer: MapLayer): String? {
+    val key = layer.provider?.let { store.key(it) }
+    if (layer.provider != null && key.isNullOrEmpty()) return Layers.missingKey(layer)
     if (layer.kind == LayerKind.GOOGLE_TILES) {
         val view = layer.googleView ?: MapLayer.GoogleView.NORMAL
         Trail.say("Asking Google for a session…")
         val result = GoogleTiles.session(view, key!!)
-        if (result.token == null) {
-            Trail.say(result.problem)
-            return
-        }
-        Trail.say(canvas.show(layer, session = result.token, key = key))
-        return
+        return result.token?.let { canvas.show(layer, session = it, key = key) } ?: result.problem
     }
-    Trail.say(canvas.show(layer, key = key))
+    return canvas.show(layer, key = key)
 }
 
 /**

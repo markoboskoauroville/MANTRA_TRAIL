@@ -26,6 +26,13 @@ object Paint {
     /** Half-strength ground: the background of everything that sits over the map. */
     val Veil = Color(0x800B0D10)
 
+    /**
+     * The bar behind the top line and the bottom row. Dark and mostly opaque, because the map
+     * underneath is every colour at once and a shadow on each letter was not enough on a pale
+     * street map — the words have to be readable before they are unobtrusive.
+     */
+    val Bar = Color(0xCC0B0D10)
+
     /** Ink for something present but not usable yet. The same ink, quieter. */
     val Dim = Color(0x8CF2DDB4)
 }

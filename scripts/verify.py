@@ -147,9 +147,12 @@ key_body = screens.split("private fun RowScope.Key")[1].split("\n}\n")[0]
 check("no key carries a word under its glyph any more",
       screens.count("private fun RowScope.Key") == 1 and key_body.count("Label(") == 1,
       f"{key_body.count('Label(')} Label call in the key body: the glyph, and nothing under it")
-check("the control row holds at most five keys",
-      max((len(re.findall(r"\b(Record)?Key\(", chunk)) for chunk in screens.split("Row(")), default=0) <= 5,
-      "five bare glyphs across a 390 px phone is 60 px each")
+# Seven bare glyphs at a 4 dp gap is 48 px each on a 390 px phone, which is still a thumb. The
+# ceiling rose because the keys lost their words, not because the phone got wider.
+control_row = screens.split("Arrangement.spacedBy(4.dp)) {")[1].split("\n                }")[0]
+row_keys = len(re.findall(r"\b(?:Record|Mark)?Key\(", control_row))
+check("the control row holds at most seven keys", row_keys <= 7,
+      f"{row_keys} keys: seven bare glyphs across a 390 px phone is 48 px each")
 
 # CH caches what is on the view, and never Google's tiles
 check("CH refuses Google with a sentence rather than a dead button",
@@ -197,9 +200,12 @@ check("the workflow uses no key secret",
 
 
 # WHAT THE PHONE SHOWED ON 15.9.2026, TURNED INTO CHECKS.
-check("nothing over the map sits on a box of its own",
-      "Paint.Veil" not in screens.split("private fun SettingsFace")[0],
-      "the map screen uses no filled surface; only the settings face does")
+# This check said "no filled surface over the map" until the phone showed that a shadow alone is
+# not readable on a pale street map. A bar the height of its line is not a box: the rule it keeps
+# is that nothing takes map it does not need.
+check("the map screen carries two bars and no panels",
+      screens.split("private fun SettingsFace")[0].count("Paint.Bar") == 2,
+      "one strip at the top, one at the bottom, each as tall as the line it carries")
 check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
 check("the centre mark is the colour of the position, not the ink colour",
@@ -208,11 +214,11 @@ check("the centre mark is the colour of the position, not the ink colour",
 check("the settings face scrolls",
       "verticalScroll(rememberScrollState())" in screens,
       "so the last row is reachable however many rows there are")
-row = screens.split("horizontalArrangement = Arrangement.spacedBy(GAP)) {")[1].split("\n                }")[0]
-order = [k for k in ["CH", "MarkKey", "RecordKey", "layer.short", "\u2699"] if k in row]
-check("the record circle is the middle key of five",
-      order.index("RecordKey") == 2 and len(order) == 5,
-      "CH, centre, record, map, settings: the red one lands above the phone's home button")
+row = control_row
+order = [k for k in ["\u2212", "CH", "MarkKey", "RecordKey", "layer.short", "\u2699", '"+"'] if k in row]
+check("the record circle is the middle key of seven",
+      order.index("RecordKey") == 3 and len(order) == 7,
+      "minus, CH, centre, record, map, settings, plus: the red one stays above the home button")
 
 
 # THE OFFLINE MAP WENT BLANK ON THE WAY IN (15.9.2026). Three things could do that and all three
@@ -228,6 +234,22 @@ check("the app asks for the large heap a country file at street zoom needs",
       'android:largeHeap="true"' in mf, "present")
 check("the zoom is on the screen, so a fault can be reported with a number",
       'Label("z${zoom}"' in screens, "present on the top line")
+
+
+# THE RACE THAT KEPT THE MAP BLANK FROM v6 TO v10. The first draw ran from an effect that fires
+# before AndroidView builds its view, so it found no canvas and returned at its first line —
+# silently. Two checks, because either half alone would let it back in.
+check("the first draw is triggered by the view existing, not by a bare effect",
+      "onReady()" in screens and "LaunchedEffect(ready)" in screens,
+      "the factory says when the view is real")
+check("no path out of showLayer is silent",
+      "The map view is not up yet" in screens,
+      "the missing canvas now says so")
+check("a layer that cannot draw falls back to one that can",
+      "showing OpenStreetMap meanwhile" in screens,
+      "the screen is never white without a sentence on it")
+check("zoom is on the screen as keys, not only as a pinch",
+      "zoomOut()" in screens and "zoomIn()" in screens, "minus and plus at both ends of the row")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
