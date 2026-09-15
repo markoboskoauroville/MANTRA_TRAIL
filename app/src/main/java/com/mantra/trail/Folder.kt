@@ -2,6 +2,7 @@ package com.mantra.trail
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 
 /**
@@ -39,21 +40,36 @@ object Folder {
     /**
      * Rename one, keeping its extension: he types a name, not a file name. Returns null when it
      * worked, or the reason.
+     *
+     * THE BUG THIS FIXES, 15.9.2026: it used to go through DocumentFile.fromSingleUri, and what
+     * that returns is a SingleDocumentFile, which does not implement renameTo at all. Pressing
+     * rename did nothing and said nothing. DocumentsContract.renameDocument is the call that
+     * works on a document taken out of a tree, and it answers with the new address.
      */
     fun rename(context: Context, entry: Entry, newName: String): String? {
-        val document = DocumentFile.fromSingleUri(context, entry.uri) ?: return "That track is gone"
         val wanted = Tracks.safeFileName(newName)
         if (wanted.equals(entry.fileName, ignoreCase = true)) return null
         return try {
-            if (document.renameTo(wanted)) null else "The folder would not rename it"
+            val moved = DocumentsContract.renameDocument(context.contentResolver, entry.uri, wanted)
+            if (moved != null) null else "The folder would not rename it"
+        } catch (e: UnsupportedOperationException) {
+            "This folder does not allow renaming. A folder on the phone's own storage does."
+        } catch (e: IllegalStateException) {
+            // The provider throws this when the name is taken, which is worth saying plainly.
+            "There is already a track called $newName"
         } catch (e: Exception) {
             "Renaming failed: ${e.javaClass.simpleName}"
         }
     }
 
     fun delete(context: Context, entry: Entry): String? = try {
-        val document = DocumentFile.fromSingleUri(context, entry.uri)
-        if (document?.delete() == true) null else "The folder would not delete it"
+        // The same lesson as rename: go to the provider directly rather than through a wrapper
+        // that may not implement what is being asked of it.
+        if (DocumentsContract.deleteDocument(context.contentResolver, entry.uri)) {
+            null
+        } else {
+            "The folder would not delete it"
+        }
     } catch (e: Exception) {
         "Deleting failed: ${e.javaClass.simpleName}"
     }

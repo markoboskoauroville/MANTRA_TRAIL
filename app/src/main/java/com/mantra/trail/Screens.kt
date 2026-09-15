@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -284,15 +283,15 @@ fun TrailApp(
         // second thought — but the countdown STOPS the moment he touches the field, because a
         // box that closes while somebody is typing in it is worse than no box at all.
         justFinished?.let { file ->
-            RenamePopup(
-                suggested = Tracks.displayName(file.name),
-                // EITHER ANSWER SAVES IT. Keeping the date is a name too, and a walk that ends
-                // with the popup closing itself must still be in the folder afterwards.
-                onKeep = {
+            // EITHER ANSWER SAVES THE WALK. Cancel means "do not rename it", not "throw it
+            // away": the track goes into the folder under the date it already has.
+            NameBox(
+                current = Tracks.displayName(file.name),
+                onCancel = {
                     Trail.dealtWith()
                     onRenameJustFinished(file, Tracks.displayName(file.name))
                 },
-                onRename = { name ->
+                onOk = { name ->
                     Trail.dealtWith()
                     onRenameJustFinished(file, name)
                 },
@@ -695,34 +694,19 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
 
 
 /**
- * THE RENAME POPUP, WHICH TAKES ITSELF AWAY.
+ * THE NAME BOX: empty, OK, cancel, and it waits.
  *
- * Baba, 15.9.2026: *"When I press stop for recording, there will be a popup asking me to rename
- * track. After 3 seconds, this popup disappears automatically."*
+ * Baba, 15.9.2026, rebuilding it from the ground up: *"no timeout anymore, it stays forever...
+ * menu just have option OK or cancel, no other confusing text there."*
  *
- * So it does — but the three seconds are a countdown to LEAVING THE NAME ALONE, not to discarding
- * what somebody is in the middle of typing. The first touch of the field cancels the timer, and
- * from then on it waits. A box that closes under a thumb is the kind of helpfulness that loses
- * work, and a track is a walk that cannot be walked again.
+ * The countdown is gone, and with it the whole apparatus of deciding whether somebody had started
+ * typing. A box that waits needs no such apparatus. The field starts empty whatever the track is
+ * called, because he is typing a new name, not correcting an old one; the name it has now is the
+ * grey text behind, so cancel is never a guess about what it will be left as.
  */
 @Composable
-private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String) -> Unit) {
-    // EMPTY WHEN THE APP MADE THE NAME, FULL WHEN HE DID (15.9.2026). Nobody wants to delete a
-    // date before they can type, and nobody wants to retype a name they already chose.
-    val appNamed = Tracks.isDefaultName(suggested)
-    var text by remember(suggested) { mutableStateOf(if (appNamed) "" else suggested) }
-    var touched by remember(suggested) { mutableStateOf(false) }
-    var secondsLeft by remember(suggested) { mutableIntStateOf(3) }
-
-    LaunchedEffect(suggested, touched) {
-        if (touched) return@LaunchedEffect
-        while (secondsLeft > 0) {
-            delay(1_000)
-            if (touched) return@LaunchedEffect
-            secondsLeft -= 1
-        }
-        onKeep()
-    }
+private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Unit) {
+    var text by remember(current) { mutableStateOf("") }
 
     Box(
         Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP * 2),
@@ -736,32 +720,14 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
                 .padding(GAP),
             verticalArrangement = Arrangement.spacedBy(GAP),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Label("track saved. name it?", Paint.Sand, size = 13, align = TextAlign.Start)
-                Label(
-                    text = if (touched) "waiting" else "${secondsLeft}s",
-                    colour = if (touched) Paint.Dim else Paint.Amber,
-                    size = 13,
-                )
-            }
+            Label(current, Paint.Dim, size = 12, align = TextAlign.Start)
             BasicTextField(
                 value = text,
-                onValueChange = {
-                    touched = true
-                    text = it
-                },
-                decorationBox = { field ->
-                    Box {
-                        if (text.isEmpty()) {
-                            Label(suggested, Paint.Dim, size = 15, align = TextAlign.Start)
-                        }
-                        field()
-                    }
-                },
+                onValueChange = { text = it },
                 singleLine = true,
                 textStyle = androidx.compose.ui.text.TextStyle(
                     color = Paint.Sand,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontFamily = FontFamily.Monospace,
                 ),
                 cursorBrush = SolidColor(Paint.Amber),
@@ -769,31 +735,29 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(Paint.Veil)
-                    // THE CLOCK STOPS AT THE FIRST TOUCH, not at the first character. Tapping the
-                    // field is somebody saying they intend to type, and three seconds is not
-                    // enough to type a name in.
-                    .onFocusChanged { if (it.isFocused) touched = true }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                 Box(
                     Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Paint.Veil)
-                        .clickable(onClick = onKeep),
+                        .clickable(onClick = onCancel),
                     contentAlignment = Alignment.Center,
-                ) { Label(if (appNamed) "keep the date" else "leave it", Paint.Sand, size = 12) }
+                ) { Label("cancel", Paint.Sand, size = 14) }
                 Box(
                     Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Amber)
-                        .clickable { if (text.isNotBlank()) onRename(text) else onKeep() },
+                        .background(if (text.isBlank()) Paint.Veil else Paint.Amber)
+                        .clickable { if (text.isNotBlank()) onOk(text.trim()) },
                     contentAlignment = Alignment.Center,
-                ) { Label("save this name", Paint.Ground, size = 12) }
+                ) {
+                    Label("OK", if (text.isBlank()) Paint.Dim else Paint.Ground, size = 14)
+                }
             }
         }
     }
@@ -936,10 +900,10 @@ private fun TracksFace(
         }
 
         renaming?.let { track ->
-            RenamePopup(
-                suggested = track.name,
-                onKeep = { renaming = null },
-                onRename = { name ->
+            NameBox(
+                current = track.fileName,
+                onCancel = { renaming = null },
+                onOk = { name ->
                     renaming = null
                     onRename(track, name)
                 },

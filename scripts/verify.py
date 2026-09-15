@@ -352,11 +352,9 @@ check("the desk reproduction is kept", probe.exists() and "executeJob" in probe.
 # THE TRACK, AFTER THE WALK (15.9.2026): a popup that names it, a folder he can see the name of,
 # and a manager that renames and deletes.
 tracks_src = (MAIN / "Tracks.kt").read_text()
-check("the popup's countdown stops the moment he types",
-      "if (touched) return@LaunchedEffect" in screens,
-      "three seconds to leave the name alone, never three seconds to finish typing")
-check("the popup offers both answers",
-      "keep the date" in screens and "save this name" in screens, "and closes on either")
+check("cancelling after a walk still saves it",
+      "onCancel = {\n                    Trail.dealtWith()" in screens,
+      "cancel means do not rename, never throw the walk away")
 check("renaming never writes over another walk",
       "already exists" in tracks_src, "a name collision refuses rather than overwrites")
 # Export became one action on 15.9.2026: Android's own save dialog asks where and what to call it,
@@ -397,17 +395,28 @@ check("the tools are a window of their own, not a settings row",
 
 
 # WHAT HE ASKED FOR ON 15.9.2026, AFTER THE MAP SERVER LANDED.
-check("the rename field is empty only when the app made the name",
-      "Tracks.isDefaultName(suggested)" in screens,
-      "his own name comes back for editing; a date does not have to be deleted first")
+# Rebuilt from the ground up on 15.9.2026: the box waits, it is empty, and it has two words on it.
+check("the name box has no clock in it",
+      "secondsLeft" not in screens and "touched" not in screens,
+      "it waits; there is nothing to decide about whether he has started typing")
+check("the name box starts empty and says what the name is now",
+      'mutableStateOf("")' in screens.split("private fun NameBox")[1][:400],
+      "he is typing a new name, not correcting an old one")
+check("the name box has two answers and they are named OK and cancel",
+      '"cancel"' in screens and '"OK"' in screens,
+      "no third thing to read on a hillside")
 # The reason it was not empty: the file name was being built from a date stamp AND a name that
 # was already a date, so nothing matched the pattern and the box opened full of numbers.
 check("a track file is named after the track and nothing else",
       "Tracks.safeFileName(name)" in (MAIN / "TrailService.kt").read_text()
       and "fun fileName" not in (MAIN / "Gpx.kt").read_text(),
       "the builder that stamped a second date is gone, not merely unused")
-check("touching the field stops the countdown, not just typing in it",
-      "onFocusChanged { if (it.isFocused) touched = true }" in screens, "the first tap is enough")
+# The rename in the manager did nothing and said nothing: DocumentFile.fromSingleUri returns a
+# SingleDocumentFile, which does not implement renameTo at all.
+check("renaming goes to the provider, not through a wrapper that cannot do it",
+      "DocumentsContract.renameDocument" in folder_src, "the call that works on a tree's document")
+check("deleting goes the same way",
+      "DocumentsContract.deleteDocument" in folder_src, "one lesson, applied twice")
 check("the position can be locked to the middle of the screen",
       "if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)" in screens,
       "one press holds it, the next lets the map go")
