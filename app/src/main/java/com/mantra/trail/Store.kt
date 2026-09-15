@@ -65,6 +65,10 @@ class Store(context: Context) {
      * Which style of a family was last chosen. The map key turns through families, so this is
      * what decides whether "Thunderforest" means Outdoors or Landscape when it comes round.
      */
+    /** True when there is an offline map to draw, from either of its two places. */
+    val hasOfflineMap: Boolean
+        get() = MapDownload.isPresent(app) || mapFileUri != null
+
     fun styleOf(family: MapLayer.Family): MapLayer {
         val id = prefs.getString("style-${family.name}", null)
         val remembered = id?.let { saved -> Layers.of(family).firstOrNull { it.id == saved } }

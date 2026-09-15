@@ -182,9 +182,8 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // The offline map is drawn from vector data, so it can be enlarged past the zoom any
         // tile service stops at: the detail thins out but the map does not end. Clamping it at
         // 18, as this did, is one of the two things that could have made it vanish on the way in.
-        view.setZoomLevelMax(
-            if (layer.kind == LayerKind.VECTOR_FILE) 22.toByte() else layer.maxZoom.toByte()
-        )
+        // The view goes further than the tiles do; mapsforge scales the last real one.
+        view.setZoomLevelMax(layer.viewMaxZoom.toByte())
         restoreOverlays()
         view.repaint()
         return problem

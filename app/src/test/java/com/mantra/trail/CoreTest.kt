@@ -584,6 +584,39 @@ class CoreTest {
         MapLayer.Family.entries.forEach { assertTrue(it.name, Layers.of(it).isNotEmpty()) }
     }
 
+    @Test fun theViewGoesFurtherThanTheTilesDo() {
+        // The complaint this closes: OpenStreetMap stopped dead at 18 because that was where its
+        // tiles stopped. Past the last real tile the map is scaled, not fetched.
+        assertTrue(Layers.OSM.viewMaxZoom > Layers.OSM.maxZoom)
+        assertEquals(22, Layers.OFFLINE.viewMaxZoom)
+        Layers.ALL.forEach {
+            assertTrue(it.id, it.viewMaxZoom >= it.maxZoom)
+            // mapsforge only scales a parent four levels up; beyond that it has nothing to draw.
+            assertTrue(it.id, it.viewMaxZoom - it.maxZoom <= 4)
+            assertTrue(it.id, it.viewMaxZoom <= 22)
+        }
+    }
+
+    @Test fun everyThunderforestStyleIsCalledThunderforest() {
+        Layers.of(MapLayer.Family.THUNDERFOREST).forEach {
+            assertTrue(it.label, it.label.startsWith("Thunderforest"))
+            assertEquals(it.id, "THU", it.short)
+        }
+    }
+
+    @Test fun everyGoogleViewIsCalledGoogle() {
+        Layers.of(MapLayer.Family.GOOGLE).forEach {
+            assertTrue(it.label, it.label.startsWith("Google"))
+            assertEquals(it.id, "GOO", it.short)
+        }
+    }
+
+    @Test fun aSpeedIsWrittenInAUnitSomebodyCanJudge() {
+        assertEquals("0 B/s", Geo.formatRate(0))
+        assertEquals("340 kB/s", Geo.formatRate(340_000))
+        assertEquals("2.5 MB/s", Geo.formatRate(2_500_000))
+    }
+
     @Test fun everyShortNameFitsTheKey() {
         Layers.ALL.forEach { assertTrue("${it.id}: ${it.short}", it.short.length <= 4) }
     }

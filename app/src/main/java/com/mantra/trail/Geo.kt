@@ -136,6 +136,17 @@ object Geo {
         else -> "${((metres / 10.0).roundToInt() / 100.0)} km"
     }
 
+    /**
+     * Bytes a second, in the unit somebody can judge at a glance. It lives here, with the other
+     * formatting, because this file imports nothing from Android and so Test 1 can attack it —
+     * the network indicator itself cannot be tested on a desk, but the thing it prints can.
+     */
+    fun formatRate(bytesPerSecond: Long): String = when {
+        bytesPerSecond >= 1_000_000 -> "${bytesPerSecond / 100_000 / 10.0} MB/s"
+        bytesPerSecond >= 1_000 -> "${bytesPerSecond / 1_000} kB/s"
+        else -> "$bytesPerSecond B/s"
+    }
+
     /** A duration as h:mm:ss, or mm:ss under an hour. */
     fun formatDuration(millis: Long): String {
         if (millis < 0) return "-"

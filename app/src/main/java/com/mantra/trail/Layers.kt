@@ -36,6 +36,7 @@ data class MapLayer(
     val offline: Offline,
     val attribution: String,
     val url: String? = null,
+    /** The last zoom this service actually has tiles for. Past it, the map is scaled, not fetched. */
     val maxZoom: Int = 18,
     val minZoom: Int = 2,
     /** The service whose key this layer needs, or null when it needs none. */
@@ -72,6 +73,17 @@ data class MapLayer(
      * is in settings.
      */
     val creditOnMap: Boolean get() = kind != LayerKind.VECTOR_FILE
+
+    /**
+     * How far the VIEW may go, which is not the same as how far the tiles go. Baba, 15.9.2026:
+     * *"OpenStreetMap goes to zoom level 18 and it stops. No more zoom levels than that. Why?"*
+     * Because the view was being clamped to the last zoom the service publishes. Past that,
+     * mapsforge draws the last real tile enlarged — coarse, but it is a map, and on a mountain
+     * the question is where the path goes, not how sharp the letters are. Three levels beyond is
+     * the limit because mapsforge only scales a parent four levels up.
+     */
+    val viewMaxZoom: Int
+        get() = if (kind == LayerKind.VECTOR_FILE) 22 else minOf(22, maxZoom + 3)
 }
 
 object Layers {
@@ -95,7 +107,8 @@ object Layers {
         offline = MapLayer.Offline.CACHED_ONLY,
         attribution = "© OpenStreetMap contributors",
         url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        maxZoom = 18,
+        // OpenStreetMap publishes tiles to 19. The view goes to 22 and scales the rest.
+        maxZoom = 19,
     )
 
     /**
@@ -106,7 +119,7 @@ object Layers {
      * signal; fetching a region he has not looked at is what their terms call bulk downloading,
      * and that needs their Small Business plan, so this app has no button for it.
      */
-    private fun thunderforest(style: String, label: String, short: String) = MapLayer(
+    private fun thunderforest(style: String, label: String, short: String = "THU") = MapLayer(
         family = MapLayer.Family.THUNDERFOREST,
         id = "tf-$style",
         label = label,
@@ -120,27 +133,27 @@ object Layers {
     )
 
     /** The walking one: contour lines, marked trails, the shape of a hill. */
-    val THUNDERFOREST = thunderforest("outdoors", "Outdoors", "OUT")
-    val TF_CYCLE = thunderforest("cycle", "OpenCycleMap", "CYC")
-    val TF_TRANSPORT = thunderforest("transport", "Transport", "TRN")
-    val TF_LANDSCAPE = thunderforest("landscape", "Landscape", "LND")
-    val TF_TRANSPORT_DARK = thunderforest("transport-dark", "Transport dark", "TDK")
-    val TF_SPINAL = thunderforest("spinal-map", "Spinal map", "SPN")
-    val TF_PIONEER = thunderforest("pioneer", "Pioneer", "PIO")
-    val TF_MOBILE_ATLAS = thunderforest("mobile-atlas", "Mobile atlas", "MATL")
-    val TF_NEIGHBOURHOOD = thunderforest("neighbourhood", "Neighbourhood", "NBH")
-    val TF_ATLAS = thunderforest("atlas", "Atlas", "ATL")
+    val THUNDERFOREST = thunderforest("outdoors", "Thunderforest Outdoors")
+    val TF_CYCLE = thunderforest("cycle", "Thunderforest Cycle")
+    val TF_TRANSPORT = thunderforest("transport", "Thunderforest Transport")
+    val TF_LANDSCAPE = thunderforest("landscape", "Thunderforest Landscape")
+    val TF_TRANSPORT_DARK = thunderforest("transport-dark", "Thunderforest Transport dark")
+    val TF_SPINAL = thunderforest("spinal-map", "Thunderforest Spinal")
+    val TF_PIONEER = thunderforest("pioneer", "Thunderforest Pioneer")
+    val TF_MOBILE_ATLAS = thunderforest("mobile-atlas", "Thunderforest Mobile atlas")
+    val TF_NEIGHBOURHOOD = thunderforest("neighbourhood", "Thunderforest Neighbourhood")
+    val TF_ATLAS = thunderforest("atlas", "Thunderforest Atlas")
 
     val THUNDERFOREST_ALL: List<MapLayer> = listOf(
         THUNDERFOREST, TF_LANDSCAPE, TF_CYCLE, TF_TRANSPORT, TF_TRANSPORT_DARK,
         TF_ATLAS, TF_PIONEER, TF_NEIGHBOURHOOD, TF_MOBILE_ATLAS, TF_SPINAL,
     )
 
-    private fun google(id: String, label: String, short: String, view: MapLayer.GoogleView) = MapLayer(
+    private fun google(id: String, label: String, view: MapLayer.GoogleView) = MapLayer(
         family = MapLayer.Family.GOOGLE,
         id = id,
         label = label,
-        short = short,
+        short = "GOO",
         kind = LayerKind.GOOGLE_TILES,
         offline = MapLayer.Offline.NONE,
         attribution = "Google",
@@ -150,10 +163,10 @@ object Layers {
         googleView = view,
     )
 
-    val GOOGLE = google("google", "Google map", "GGL", MapLayer.GoogleView.NORMAL)
-    val GOOGLE_SATELLITE = google("google-sat", "Google satellite", "SAT", MapLayer.GoogleView.SATELLITE)
-    val GOOGLE_TERRAIN = google("google-ter", "Google terrain", "TER", MapLayer.GoogleView.TERRAIN)
-    val GOOGLE_HYBRID = google("google-hyb", "Google hybrid", "HYB", MapLayer.GoogleView.HYBRID)
+    val GOOGLE = google("google", "Google map", MapLayer.GoogleView.NORMAL)
+    val GOOGLE_SATELLITE = google("google-sat", "Google satellite", MapLayer.GoogleView.SATELLITE)
+    val GOOGLE_TERRAIN = google("google-ter", "Google terrain", MapLayer.GoogleView.TERRAIN)
+    val GOOGLE_HYBRID = google("google-hyb", "Google hybrid", MapLayer.GoogleView.HYBRID)
 
     val GOOGLE_ALL: List<MapLayer> = listOf(GOOGLE, GOOGLE_SATELLITE, GOOGLE_TERRAIN, GOOGLE_HYBRID)
 

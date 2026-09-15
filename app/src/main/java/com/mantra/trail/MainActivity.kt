@@ -192,12 +192,14 @@ class MainActivity : ComponentActivity() {
             return
         }
         downloading = true
+        Net.job = "downloading the offline map"
         Trail.say("Fetching ${Layers.OfflineDownload.LABEL}. It can run in the background.")
         lifecycleScope.launch {
             val problem = MapDownload.fetch(this@MainActivity) { p ->
                 Trail.say("Map ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB")
             }
             downloading = false
+            Net.job = null
             UiTick.bump()
             if (problem != null) {
                 Trail.say(problem)

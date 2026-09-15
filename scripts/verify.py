@@ -253,9 +253,12 @@ check("the record circle sits at the middle of the row",
 # THE OFFLINE MAP WENT BLANK ON THE WAY IN (15.9.2026). Three things could do that and all three
 # are now closed; the checks keep them closed.
 canvas_src = (MAIN / "MapCanvas.kt").read_text()
-check("the vector map is not clamped to a tile service's zoom",
-      "LayerKind.VECTOR_FILE) 22.toByte()" in canvas_src,
-      "vector data enlarges past 18; only tile layers stop where their tiles stop")
+# The rule grew: it is not only the vector map that may be enlarged past its data. Every layer now
+# carries two ceilings — where its tiles stop, and how far the view may go while mapsforge scales
+# the last real tile (Baba, 15.9.2026: "OpenStreetMap goes to zoom level 18 and it stops. Why?").
+check("the view is never clamped to where the tiles stop",
+      "layer.viewMaxZoom.toByte()" in canvas_src and "val viewMaxZoom" in layers,
+      "two ceilings: the service's tiles, and the view over them")
 check("the tile cache holds more than one screenful",
       '"tiles-${layer.id}",' in canvas_src and "2f," in canvas_src,
       "two screenfuls, so there is room for the level being rendered into")
@@ -300,6 +303,23 @@ check("the frame buffer is not square, because this map does not rotate",
 check("an empty map says so by asking the file, not by waiting to be photographed",
       "fun emptyHere" in canvas_src and "emptyHere()" in screens,
       "the read the renderer is about to do anyway")
+
+
+# THE SILENCE COMPLAINT, 15.9.2026: "I'm waiting for it to download. Since I don't have indicator,
+# I don't know what's going on." Long work in silence is the failure mode this whole app keeps
+# repeating, so the network has a line of its own.
+net_src = (MAIN / "Net.kt").read_text()
+check("the speed is measured by the phone, not reported by the thing being measured",
+      "TrafficStats.getUidRxBytes" in net_src,
+      "so mapsforge's own tile fetching is counted too")
+check("a negative counter never becomes a negative speed",
+      "rx < 0 || tx < 0" in net_src, "UNSUPPORTED is -1 on some devices")
+check("the status line is on the map screen",
+      "StatusLine(net)" in screens, "present above the note line")
+check("the map key skips what cannot draw",
+      "fun nextUsable" in screens, "a press that does nothing is not a press")
+check("a blank offline map explains itself at the zoom it goes blank",
+      "emptyHere()" in screens, "the file is asked, not the user")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

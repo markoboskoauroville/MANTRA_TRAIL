@@ -107,6 +107,7 @@ fun TrailApp(
     val recordingSince by Trail.recordingSince.collectAsState()
     val paused by Trail.paused.collectAsState()
     val note by Trail.note.collectAsState()
+    val net by Net.line.collectAsState()
     val recording = recordingSince != null
     val scope = rememberCoroutineScope()
 
@@ -115,11 +116,29 @@ fun TrailApp(
         if (ready) showLayer(store, layer)
     }
 
+    // The network line: sampled from the phone's own byte counters once a second, so it reports
+    // mapsforge's tile fetching too, which happens inside the library. Bounded by the composition.
+    LaunchedEffect(Unit) {
+        while (true) {
+            Net.sample(System.currentTimeMillis())
+            delay(1_000)
+        }
+    }
+
     // The zoom on the screen follows the map rather than the other way round. Twice a second is
     // enough for a number that changes when a thumb moves, and it stops with the composition.
     LaunchedEffect(Unit) {
         while (true) {
-            CanvasHolder.canvas?.currentZoom()?.let { if (it != zoom) zoom = it }
+            CanvasHolder.canvas?.currentZoom()?.let {
+                if (it != zoom) {
+                    zoom = it
+                    // A blank offline map at a zoom explains itself now, rather than waiting to
+                    // be photographed: the file is asked what it holds under the crosshair.
+                    if (layer.kind == LayerKind.VECTOR_FILE) {
+                        Trail.say(CanvasHolder.canvas?.emptyHere())
+                    }
+                }
+            }
             delay(500)
         }
     }
@@ -180,6 +199,7 @@ fun TrailApp(
                 if (layer.creditOnMap) {
                     Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
                 }
+                if (net != null) StatusLine(net)
                 if (note != null) NoteLine(note)
                 if (recording) TrackLine(stats)
                 // THE ORDER IS THE THUMB'S, NOT THE LIST'S. Baba, 15.9.2026: the record circle sits
@@ -200,7 +220,12 @@ fun TrailApp(
                         glyph = layer.short,
                         lit = false,
                         onClick = {
-                            val picked = store.styleOf(Layers.nextFamily(layer))
+                            // ONLY THROUGH WHAT CAN ACTUALLY DRAW. Baba, 15.9.2026: *"I want to
+                            // show only map which is selected in the settings, not going through
+                            // all these different ways."* A family with no key and a family with
+                            // no file are presses that do nothing, so the key skips them and the
+                            // settings list still holds every map.
+                            val picked = nextUsable(store, layer)
                             layer = picked
                             store.layerId = picked.id
                             scope.launch { showLayer(store, picked) }
@@ -271,6 +296,25 @@ private fun MapSurface(
         CanvasHolder.canvas?.drawTrack(line)
         CanvasHolder.canvas?.drawPosition(fix)
     }
+}
+
+/**
+ * The next map the key should turn to: the chosen style of the next family that has what it
+ * needs. If nothing else can draw, it stays where it is rather than moving to a blank screen.
+ */
+private fun nextUsable(store: Store, current: MapLayer): MapLayer {
+    var family = current.family
+    repeat(MapLayer.Family.entries.size) {
+        family = Layers.nextFamily(Layers.firstOf(family))
+        val candidate = store.styleOf(family)
+        val ready = when {
+            candidate.provider != null -> !store.key(candidate.provider).isNullOrEmpty()
+            candidate.kind == LayerKind.VECTOR_FILE -> store.hasOfflineMap
+            else -> true
+        }
+        if (ready) return candidate
+    }
+    return current
 }
 
 /**
@@ -412,6 +456,16 @@ private fun TrackLine(stats: TrackStats) {
             Label(Geo.formatDuration(stats.durationMs), Paint.Sand, size = 13)
             Label("↑ ${stats.ascentM.toInt()} m", Paint.Sand, size = 13)
             Label("${stats.points} pts", Paint.Sand, size = 13)
+        }
+    }
+}
+
+/** What the network is doing. Absent when nothing is moving and nothing is being waited for. */
+@Composable
+private fun StatusLine(status: String?) {
+    Panel {
+        Box(Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = GAP, vertical = 2.dp)) {
+            Label(status ?: " ", Paint.Sand, size = 11, align = TextAlign.Start)
         }
     }
 }
