@@ -96,6 +96,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * EXPORT IS ONE ACTION NOW (15.9.2026). Android's own save dialog asks where and what to call
+     * it; when it comes back, the track on the phone takes the name he typed there. Rename and
+     * export were two ways of saying the same thing, and this is the one that already has a
+     * keyboard, a folder browser and a name field in it.
+     */
+    private val saveTrackAs = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/gpx+xml")
+    ) { uri: Uri? ->
+        val source = pendingExport
+        pendingExport = null
+        if (uri == null || source == null) {
+            report(null)
+            return@registerForActivityResult
+        }
+        report("Saving…")
+        lifecycleScope.launch {
+            val message = withContext(Dispatchers.IO) {
+                try {
+                    contentResolver.openOutputStream(uri)?.use { out ->
+                        source.inputStream().use { it.copyTo(out) }
+                    } ?: return@withContext "The file could not be written"
+                    // THE MANAGER PICKS THE NAME UP FROM THE DISK. Whatever he called it in the
+                    // dialog is what the track is called here too, so the two never drift apart.
+                    val chosen = DocumentFile.fromSingleUri(this@MainActivity, uri)?.name
+                    if (chosen != null && Tracks.displayName(chosen) != Tracks.displayName(source.name)) {
+                        val (_, problem) = Tracks.rename(source, Tracks.displayName(chosen))
+                        if (problem != null) return@withContext "Saved as ${Tracks.displayName(chosen)} ($problem)"
+                    }
+                    "Saved as ${Tracks.displayName(chosen ?: source.name)}"
+                } catch (e: Exception) {
+                    "Saving failed: ${e.javaClass.simpleName}"
+                }
+            }
+            report(message)
+            UiTick.bump()
+        }
+    }
+
     private val pickExportFolder = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -128,11 +167,6 @@ class MainActivity : ComponentActivity() {
         UiTick.bump()
     }
 
-    private fun renameTrack(file: java.io.File, newName: String) {
-        val (_, problem) = Tracks.rename(file, newName)
-        report(problem ?: "Renamed to $newName")
-        UiTick.bump()
-    }
 
     private fun deleteTrack(file: java.io.File) {
         val name = Tracks.displayName(file.name)
@@ -141,7 +175,15 @@ class MainActivity : ComponentActivity() {
         UiTick.bump()
     }
 
-    private fun exportTrack(file: java.io.File) = exportFile(file)
+    /** Hand it to Android's save dialog, with the name it has now as the suggestion. */
+    private fun exportTrack(file: java.io.File) {
+        if (!file.exists()) {
+            report("That track is no longer there")
+            return
+        }
+        pendingExport = file
+        saveTrackAs.launch(Tracks.safeFileName(Tracks.displayName(file.name)))
+    }
 
     /** Read a saved walk back and draw it over the map in the colour he chose. */
     private fun showTrack(file: java.io.File) {
@@ -193,7 +235,6 @@ class MainActivity : ComponentActivity() {
                 onBare = ::setFullScreen,
                 tracks = { Tracks.list(trackFolder()) },
                 onRenameJustFinished = ::renameAndSave,
-                onRenameTrack = ::renameTrack,
                 onDeleteTrack = ::deleteTrack,
                 onExportTrack = ::exportTrack,
                 onShowTrack = ::showTrack,

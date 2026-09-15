@@ -359,6 +359,16 @@ check("the popup offers both answers",
       "keep the date" in screens and "save this name" in screens, "and closes on either")
 check("renaming never writes over another walk",
       "already exists" in tracks_src, "a name collision refuses rather than overwrites")
+# Export became one action on 15.9.2026: Android's own save dialog asks where and what to call it,
+# and the track on the phone takes that name afterwards. Rename in the manager is gone with it.
+check("export goes through the system save dialog",
+      "ActivityResultContracts.CreateDocument" in activity, "one action, not rename then export")
+check("the manager takes the name back from the disk",
+      "DocumentFile.fromSingleUri(this@MainActivity, uri)?.name" in activity,
+      "so the two names never drift apart")
+check("the manager offers three actions and rename is not one",
+      '"rename"' not in screens.split("private fun TracksFace")[1].split("\n}")[0],
+      "show, export, delete")
 check("deleting a track asks twice",
       "sure? delete" in screens, "one thumb on a hillside is not a decision")
 check("the settings row names the folder rather than saying chosen",

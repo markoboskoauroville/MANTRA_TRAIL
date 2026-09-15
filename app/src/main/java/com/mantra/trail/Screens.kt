@@ -111,7 +111,6 @@ fun TrailApp(
     onBare: (Boolean) -> Unit,
     tracks: () -> List<Tracks.TrackFile>,
     onRenameJustFinished: (java.io.File, String) -> Unit,
-    onRenameTrack: (java.io.File, String) -> Unit,
     onDeleteTrack: (java.io.File) -> Unit,
     onExportTrack: (java.io.File) -> Unit,
     onShowTrack: (java.io.File) -> Unit,
@@ -330,7 +329,6 @@ fun TrailApp(
                     CanvasHolder.canvas?.clearSavedTrack()
                     Trail.say(null)
                 },
-                onRename = onRenameTrack,
                 onDelete = onDeleteTrack,
                 onExport = onExportTrack,
                 onClose = { showTracks = false },
@@ -810,7 +808,6 @@ private fun TracksFace(
     tracks: List<Tracks.TrackFile>,
     colour: Long,
     onColour: (Long) -> Unit,
-    onRename: (java.io.File, String) -> Unit,
     onDelete: (java.io.File) -> Unit,
     onExport: (java.io.File) -> Unit,
     onShow: (java.io.File) -> Unit,
@@ -818,7 +815,6 @@ private fun TracksFace(
     onClose: () -> Unit,
 ) {
     LaunchedEffect(Unit) { Trail.sayInManager(null) }
-    var renaming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
     var confirming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
@@ -890,7 +886,6 @@ private fun TracksFace(
                     Label(track.name, Paint.Sand, size = 13, align = TextAlign.Start)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Label(Tracks.formatSize(track.bytes), Paint.Dim, size = 11)
-                        Label("rename", Paint.Amber, size = 12, modifier = Modifier.clickable { renaming = track })
                         Label("show", Paint.Green, size = 12, modifier = Modifier.clickable { onShow(track.file) })
                         Label("export", Paint.Amber, size = 12, modifier = Modifier.clickable { onExport(track.file) })
                         Label(
@@ -911,16 +906,6 @@ private fun TracksFace(
             }
         }
 
-        renaming?.let { track ->
-            RenamePopup(
-                suggested = track.name,
-                onKeep = { renaming = null },
-                onRename = { name ->
-                    renaming = null
-                    onRename(track.file, name)
-                },
-            )
-        }
     }
 }
 
@@ -1068,12 +1053,14 @@ private fun SettingsFace(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Label("settings", Paint.Dim, size = 13)
-                Label(if (sensors.declination != null) "true north" else "magnetic north", Paint.Dim, size = 11)
                 Box(
                     Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) { Label("✕", Paint.Sand, size = 18) }
             }
+
+            // TRACKS FIRST, because it is the thing he opens the settings for most (15.9.2026).
+            SettingRow("tracks (gpx)", "$trackCount", onTracks)
 
             // THE MAPS, IN FOLDING SECTIONS (15.9.2026). Seventeen chips in one block is a wall,
             // and the fold state is remembered between sessions, because a section somebody
@@ -1166,7 +1153,6 @@ private fun SettingsFace(
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
             SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
-            SettingRow("tracks (gpx)", "$trackCount", onTracks)
             SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)
