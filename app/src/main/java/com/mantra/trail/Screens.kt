@@ -74,7 +74,10 @@ private val GAP = 10.dp
 private val KEY = 46.dp
 
 /** The one size for the marks: the centre of the map, the where key and the record circle. */
-private val MARK = 20.dp
+private val MARK = 22.dp
+
+/** The crosshair over the map: bigger than the key's mark, and far quieter. */
+private val CROSS = 34.dp
 
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
@@ -191,7 +194,7 @@ fun TrailApp(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            CentreMark(hasFix = fix != null)
+            CentreCross()
         }
 
         if (!bare) {
@@ -251,7 +254,7 @@ fun TrailApp(
                             }
                             lastCentreTap = now
                         },
-                    ) { hasFix -> CentreMark(hasFix, locked = follow) }
+                    ) { hasFix -> PositionMark(hasFix, locked = follow) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
                     // ONE BUTTON FOR THE MAP. It says which one is on and turns to the next.
                     Key(
@@ -499,32 +502,46 @@ object CanvasHolder {
  * wider, then the amber on top. That black edge is what makes it readable on snow and under
  * fir, and no single colour does that on its own.
  */
+/**
+ * THE CROSSHAIR IN THE MIDDLE OF THE MAP: four black hairlines, half transparent, and nothing in
+ * the middle. Baba, 15.9.2026, and it is the whole specification.
+ *
+ * Half-transparent black rather than a colour because it has to sit over every map this app can
+ * show — a white street, a satellite photograph, a dark forest — and a shadow of the ground is
+ * readable on all of them without being a mark anybody looks at. The middle is empty because the
+ * middle is the thing being pointed at.
+ */
 @Composable
-private fun CentreMark(hasFix: Boolean, locked: Boolean = false) {
+private fun CentreCross() {
+    Canvas(Modifier.size(CROSS)) {
+        val c = Offset(size.width / 2f, size.height / 2f)
+        val arm = size.minDimension / 2f
+        val gap = arm * 0.36f
+        val hair = 1.dp.toPx()
+        val ink = androidx.compose.ui.graphics.Color(0x80000000)
+        drawLine(ink, Offset(c.x - arm, c.y), Offset(c.x - gap, c.y), hair)
+        drawLine(ink, Offset(c.x + gap, c.y), Offset(c.x + arm, c.y), hair)
+        drawLine(ink, Offset(c.x, c.y - arm), Offset(c.x, c.y - gap), hair)
+        drawLine(ink, Offset(c.x, c.y + gap), Offset(c.x, c.y + arm), hair)
+    }
+}
+
+/**
+ * THE MARK ON THE KEY, WHICH DOES NOT CHANGE (15.9.2026: "keep the icon on the action bar same as
+ * before"). It is the ring and dot in the position colour, ringed in near-black so it reads on
+ * any map, and its centre fills while the map is locked to the middle.
+ */
+@Composable
+private fun PositionMark(hasFix: Boolean, locked: Boolean = false) {
     val ink = if (hasFix) Paint.AmberBright else Paint.Amber
     Canvas(Modifier.size(MARK)) {
         val c = Offset(size.width / 2f, size.height / 2f)
-        val arm = size.minDimension / 2f
-        val gap = arm * 0.34f
-        val hair = 1.dp.toPx()
-        val shadow = 2.dp.toPx()
-
-        // HAIRLINES, LIKE THE SNIPER HAD (15.9.2026). The mark before this was a ring thick
-        // enough to hide a path under it. Each line is drawn twice — near-black a little wider,
-        // then the colour — which is what makes a hairline readable on a white street and under
-        // fir without making it thick.
-        fun cross(colour: androidx.compose.ui.graphics.Color, width: Float) {
-            drawLine(colour, Offset(c.x - arm, c.y), Offset(c.x - gap, c.y), width)
-            drawLine(colour, Offset(c.x + gap, c.y), Offset(c.x + arm, c.y), width)
-            drawLine(colour, Offset(c.x, c.y - arm), Offset(c.x, c.y - gap), width)
-            drawLine(colour, Offset(c.x, c.y + gap), Offset(c.x, c.y + arm), width)
-        }
-        cross(Paint.Ground, shadow)
-        cross(ink, hair)
-        drawCircle(Paint.Ground, radius = gap, center = c, style = Stroke(shadow))
-        drawCircle(ink, radius = gap, center = c, style = Stroke(hair))
-        // Locked: the centre fills. One dot, and the state is on the mark itself.
-        if (locked) drawCircle(ink, radius = hair * 1.6f, center = c)
+        val r = size.minDimension / 2f - 2f
+        drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(3.5.dp.toPx()))
+        drawCircle(ink, radius = r, center = c, style = Stroke(2.dp.toPx()))
+        drawCircle(Paint.Ground, radius = 2.4.dp.toPx(), center = c)
+        drawCircle(ink, radius = if (locked) 2.0.dp.toPx() else 1.6.dp.toPx(), center = c)
+        if (locked) drawCircle(ink, radius = r * 0.55f, center = c, style = Stroke(1.dp.toPx()))
     }
 }
 

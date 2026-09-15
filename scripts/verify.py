@@ -234,9 +234,15 @@ check("rendered tiles are kept on disk for every layer but Google",
       "a zoom visited once comes back instantly")
 check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
-check("the centre mark is the colour of the position, not the ink colour",
-      "Paint.AmberBright" in screens.split("private fun CentreMark")[1][:400],
-      "amber, ringed in black so it reads on a white street and under fir")
+# Split in two on 15.9.2026: the crosshair over the map and the mark on the key are different
+# things, and only the key's mark is a position colour.
+check("the crosshair over the map is four black hairlines and nothing else",
+      "Color(0x80000000)" in screens.split("private fun CentreCross")[1][:600]
+      and "drawCircle" not in screens.split("private fun CentreCross")[1].split("\n}")[0],
+      "half transparent, middle empty")
+check("the key's mark is unchanged and still the position colour",
+      "Paint.AmberBright" in screens.split("private fun PositionMark")[1][:400],
+      "ring and dot, ringed in near-black")
 check("the settings face scrolls",
       "verticalScroll(rememberScrollState())" in screens,
       "so the last row is reachable however many rows there are")
@@ -379,9 +385,7 @@ check("a map can be taken out of the toggle and still be in the list",
       "excluding a map from the toggle is not the same as not having it")
 check("the toggle skips what he took out of it",
       "if (!store.inToggle(candidate.id)) return@repeat" in screens, "in the same place it skips what has no key")
-check("the centre mark is hairlines",
-      "val hair = 1.dp.toPx()" in screens and "cross(ink, hair)" in screens,
-      "each line drawn twice, near-black then colour, so a hairline still reads")
+check("the crosshair is hairlines", "val hair = 1.dp.toPx()" in screens, "one pixel, four of them")
 check("choosing a map closes the settings and shows it",
       "settings = false\n                    scope.launch { showLayer(store, picked) }" in screens,
       "one decision, not two")
