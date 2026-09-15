@@ -63,7 +63,10 @@ class TrailService : Service() {
         // The working copy is app-private, because it is written to a thousand times and a
         // document tree is not the place for that. The export is a copy, made when it is finished.
         val dir = File(filesDir, "tracks").apply { mkdirs() }
-        val f = File(dir, Gpx.fileName(startedMs, name))
+        // THE NAME IS THE NAME. Gpx.fileName put its own date stamp in front of a name that was
+        // already a date, so a track came out called 2026-09-15_1130_2026-09-15-11-30-track and
+        // the rename box opened full of numbers somebody had to delete by hand (15.9.2026).
+        val f = File(dir, Tracks.safeFileName(name))
         file = f
         writer = try {
             OutputStreamWriter(FileOutputStream(f), Charsets.UTF_8).also {

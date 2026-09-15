@@ -25,9 +25,6 @@ object Gpx {
     private val STAMP: DateTimeFormatter =
         DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC)
 
-    private val FILE_STAMP: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm").withZone(ZoneOffset.UTC)
-
     /** UTC, always, whatever the phone's clock is set to. A track is read in other time zones. */
     fun isoUtc(millis: Long): String = STAMP.format(Instant.ofEpochMilli(millis))
 
@@ -93,20 +90,6 @@ object Gpx {
     fun segmentBreak(): String = "    </trkseg>\n    <trkseg>\n"
 
     fun footer(): String = "    </trkseg>\n  </trk>\n</gpx>\n"
-
-    /**
-     * The file name. The date leads it so a folder of tracks sorts into the order they were
-     * walked, which is the only order anybody looks for them in.
-     */
-    fun fileName(startedMs: Long, trackName: String): String {
-        val slug = trackName.lowercase(Locale.US)
-            .map { if (it.isLetterOrDigit()) it else '-' }
-            .joinToString("")
-            .split('-').filter { it.isNotEmpty() }.joinToString("-")
-            .take(40)
-        val stamp = FILE_STAMP.format(Instant.ofEpochMilli(startedMs))
-        return if (slug.isEmpty()) "$stamp.gpx" else "${stamp}_$slug.gpx"
-    }
 
     /**
      * A whole file in one string, for a track that is already finished — the export of something

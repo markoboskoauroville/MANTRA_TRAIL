@@ -53,8 +53,13 @@ object Tracks {
      * empty or opens with the name in it (15.9.2026): nobody wants to delete a date before they
      * can type, and nobody wants to retype a name they already chose.
      */
-    fun isDefaultName(name: String): Boolean =
-        Regex("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} Track$").matches(name.trim())
+    fun isDefaultName(name: String): Boolean {
+        val trimmed = name.trim()
+        // Anything this app named begins with the date it was walked. Nobody types a name that
+        // starts with a date, so this also catches the double-stamped names the old builder left
+        // on the phone — and those are exactly the ones that were unbearable to edit.
+        return Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(trimmed)
+    }
 
     data class TrackFile(val file: File, val name: String, val bytes: Long, val modifiedMs: Long)
 

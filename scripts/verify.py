@@ -371,6 +371,12 @@ check("the saved message says where it went",
 check("the rename field is empty only when the app made the name",
       "Tracks.isDefaultName(suggested)" in screens,
       "his own name comes back for editing; a date does not have to be deleted first")
+# The reason it was not empty: the file name was being built from a date stamp AND a name that
+# was already a date, so nothing matched the pattern and the box opened full of numbers.
+check("a track file is named after the track and nothing else",
+      "Tracks.safeFileName(name)" in (MAIN / "TrailService.kt").read_text()
+      and "fun fileName" not in (MAIN / "Gpx.kt").read_text(),
+      "the builder that stamped a second date is gone, not merely unused")
 check("touching the field stops the countdown, not just typing in it",
       "onFocusChanged { if (it.isFocused) touched = true }" in screens, "the first tap is enough")
 check("the position can be locked to the middle of the screen",

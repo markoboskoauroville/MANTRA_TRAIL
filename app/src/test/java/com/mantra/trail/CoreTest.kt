@@ -444,19 +444,8 @@ class CoreTest {
         assertEquals(1, countOf(s, "<trkseg>"))
     }
 
-    @Test fun theFileNameLeadsWithTheDate() {
-        val n = Gpx.fileName(1_789_387_200_000L, "Velebit sjever")
-        assertEquals("2026-09-14_1200_velebit-sjever.gpx", n)
-    }
 
-    @Test fun aFileNameWithNoNameIsStillAFileName() {
-        assertEquals("2026-09-14_1200.gpx", Gpx.fileName(1_789_387_200_000L, "   "))
-    }
 
-    @Test fun aFileNameCannotContainASlash() {
-        val n = Gpx.fileName(1_789_387_200_000L, "north/south")
-        assertFalse(n.contains("/"))
-    }
 
     // --- The level ------------------------------------------------------------------------------
 
@@ -1063,8 +1052,33 @@ class CoreTest {
     @Test fun aNameTheAppMadeIsToldFromANameHeChose() {
         assertTrue(Tracks.isDefaultName("2026-09-15 11:30 Track"))
         assertFalse(Tracks.isDefaultName("Velebit sjever"))
-        assertFalse(Tracks.isDefaultName("2026-09-15 11:30 Velebit"))
         assertFalse(Tracks.isDefaultName(""))
+    }
+
+    @Test fun theDoubleStampedNamesTheOldBuilderLeftAreAlsoAppMade() {
+        // These are on the phone already, and they are the ones that were unbearable to edit by
+        // hand. The rename box must open EMPTY for them too.
+        assertTrue(Tracks.isDefaultName("2026-09-15_1130_2026-09-15-11-30-track"))
+        assertTrue(Tracks.isDefaultName("2026-09-14_1200_velebit-sjever"))
+    }
+
+    @Test fun theTrackFileIsNamedAfterTheTrackAndNothingElse() {
+        // The fault this closes: a date stamp in front of a name that was already a date.
+        val name = Tracks.defaultName(1_789_387_200_000L, java.time.ZoneOffset.UTC)
+        val fileName = Tracks.safeFileName(name)
+        // The colon becomes a dash: a colon is not a character a file name can carry everywhere,
+        // and a track copied to an SD card or a Windows machine must still open.
+        assertEquals("2026-09-14 12-00 Track.gpx", fileName)
+        assertEquals("2026-09-14 12-00 Track", Tracks.displayName(fileName))
+        // And the name survives the round trip, which is what makes the popup able to open empty.
+        assertTrue(Tracks.isDefaultName(Tracks.displayName(fileName)))
+    }
+
+    @Test fun aNameHeChoseSurvivesBecomingAFileNameAndComingBack() {
+        val fileName = Tracks.safeFileName("Velebit sjever")
+        assertEquals("Velebit sjever.gpx", fileName)
+        assertEquals("Velebit sjever", Tracks.displayName(fileName))
+        assertFalse(Tracks.isDefaultName(Tracks.displayName(fileName)))
     }
 
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {
