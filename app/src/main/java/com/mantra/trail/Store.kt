@@ -122,11 +122,6 @@ class Store(context: Context) {
         get() = prefs.getLong(KEY_TRACK_COLOUR, 0xFF34D399)
         set(v) = prefs.edit().putLong(KEY_TRACK_COLOUR, v).apply()
 
-    /** The map name to ask the local server for. */
-    var serverMap: String
-        get() = prefs.getString(KEY_SERVER_MAP, "croatia") ?: "croatia"
-        set(v) = prefs.edit().putString(KEY_SERVER_MAP, v).apply()
-
     fun calibration(): Level.Calibration = Level.Calibration(levelPitchZero, levelRollZero)
 
     /** The last place the map was looking, so opening the app does not start in the Atlantic. */
@@ -146,7 +141,6 @@ class Store(context: Context) {
         private const val KEY_LAYER = "layer"
         private const val KEY_KEYS = "keys"
         private const val KEY_TRACK_COLOUR = "trackColour"
-        private const val KEY_SERVER_MAP = "serverMap"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_EXPORT_NAME = "exportName"

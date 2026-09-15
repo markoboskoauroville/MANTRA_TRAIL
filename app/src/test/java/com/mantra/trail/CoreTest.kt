@@ -546,20 +546,10 @@ class CoreTest {
         // The count moves whenever a family is added; what must never move is that two maps
         // share an id, because the id is what the settings list and the memory both key on.
         assertEquals(Layers.ALL.size, Layers.ALL.map { it.id }.toSet().size)
-        assertTrue(Layers.ALL.size >= 17)
+        assertTrue(Layers.ALL.size >= 16)
     }
 
-    @Test fun theLocalServerIsAskedForTheMapThatIsChosen() {
-        Layers.serverMapName = "velebit"
-        val url = Layers.tileUrl(Layers.SERVER, 14, 100, 200)!!
-        assertTrue(url, url.startsWith("http://127.0.0.1:8088/tiles/velebit/14/100/200"))
-        Layers.serverMapName = "croatia"
-    }
 
-    @Test fun theServerLayerIsCompletelyOfflineAndNeedsNoKey() {
-        assertEquals(MapLayer.Offline.COMPLETE, Layers.SERVER.offline)
-        assertNull(Layers.SERVER.provider)
-    }
 
     @Test fun thunderforestContributesAllTenOfItsStyles() {
         val styles = Layers.of(MapLayer.Family.THUNDERFOREST)

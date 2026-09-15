@@ -361,20 +361,27 @@ check("renaming never writes over another walk",
       "already exists" in tracks_src, "a name collision refuses rather than overwrites")
 # Export became one action on 15.9.2026: Android's own save dialog asks where and what to call it,
 # and the track on the phone takes that name afterwards. Rename in the manager is gone with it.
-check("export goes through the system save dialog",
-      "ActivityResultContracts.CreateDocument" in activity, "one action, not rename then export")
-check("the manager takes the name back from the disk",
-      "DocumentFile.fromSingleUri(this@MainActivity, uri)?.name" in activity,
-      "so the two names never drift apart")
-check("the manager offers three actions and rename is not one",
-      '"rename"' not in screens.split("private fun TracksFace")[1].split("\n}")[0],
-      "show, export, delete")
+# Export went out with the server (15.9.2026): a finished walk is written straight into the folder
+# he chose, so there is nowhere left to export it TO. The menu is that folder, filtered to GPX.
+folder_src = (MAIN / "Folder.kt").read_text()
+check("the tracks menu is the chosen folder, filtered to GPX",
+      'endsWith(".gpx", ignoreCase = true)' in folder_src and "fun list" in folder_src,
+      "not a private copy nobody can find")
+check("the folder's name is on the menu",
+      'SettingRow("folder", folder, onChooseFolder)' in screens,
+      "a list of files nobody can find is a list")
+check("renaming keeps the extension and shows it separately",
+      "Tracks.safeFileName(newName)" in folder_src and 'Label(".${track.extension}"' in screens,
+      "he renames a name; the disk keeps a file")
+check("there is no export left anywhere",
+      "CreateDocument" not in activity and "onExport" not in screens,
+      "the walk is already where he will look for it")
 check("deleting a track asks twice",
       "sure? delete" in screens, "one thumb on a hillside is not a decision")
 check("the settings row names the folder rather than saying chosen",
       "store.exportFolderName" in screens, "Documents/Tracks, not the word chosen")
 check("the saved message says where it went",
-      "Saved to ${store.exportFolderName" in activity,
+      'Saved to ${Folder.label(this@MainActivity, store)}' in activity,
       "the folder is named, so the message can be checked rather than trusted")
 # Both faults of 15.9.2026: the copy ran on the main thread, and the answer went to a line that
 # is behind the manager whenever the manager is what he is looking at.
@@ -423,9 +430,12 @@ check("the map families fold, and the fold is remembered",
 check("a saved walk can be drawn on the map in a chosen colour",
       "showSavedTrack" in canvas_src and "TRACK_COLOURS" in screens,
       "five colours, and the shown line is separate from the recording line")
-check("the settings say whether the map server is answering",
-      "map server on this phone" in screens and "ServerStatus.ask" in activity,
-      "and which maps it holds")
+# The server came out of this app on 15.9.2026: the offline files work, so a second app in the
+# path was one more thing to be running. MANTRA_MAP_SERVER still exists on its own.
+check("no part of the map server is left in this app",
+      "ServerStatus" not in screens and "ServerStatus" not in activity
+      and not (MAIN / "ServerStatus.kt").exists() and "SERVER" not in layers,
+      "the layer, the family, the status row and the file are all gone")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

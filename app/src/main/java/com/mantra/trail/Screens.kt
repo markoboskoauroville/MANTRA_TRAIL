@@ -101,7 +101,6 @@ fun TrailApp(
     onWhereAmI: () -> Unit,
     onRecord: () -> Unit,
     onPause: () -> Unit,
-    onExport: () -> Unit,
     onChooseMapFile: () -> Unit,
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
@@ -109,13 +108,12 @@ fun TrailApp(
     onOpenMapLink: () -> Unit,
     onZeroLevel: () -> Unit,
     onBare: (Boolean) -> Unit,
-    tracks: () -> List<Tracks.TrackFile>,
+    tracks: () -> List<Folder.Entry>,
+    folderLabel: String,
     onRenameJustFinished: (java.io.File, String) -> Unit,
-    onDeleteTrack: (java.io.File) -> Unit,
-    onExportTrack: (java.io.File) -> Unit,
-    onShowTrack: (java.io.File) -> Unit,
-    serverStatus: String,
-    onCheckServer: () -> Unit,
+    onDeleteTrack: (Folder.Entry) -> Unit,
+    onRenameTrack: (Folder.Entry, String) -> Unit,
+    onShowTrack: (Folder.Entry) -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
@@ -288,7 +286,12 @@ fun TrailApp(
         justFinished?.let { file ->
             RenamePopup(
                 suggested = Tracks.displayName(file.name),
-                onKeep = { Trail.dealtWith() },
+                // EITHER ANSWER SAVES IT. Keeping the date is a name too, and a walk that ends
+                // with the popup closing itself must still be in the folder afterwards.
+                onKeep = {
+                    Trail.dealtWith()
+                    onRenameJustFinished(file, Tracks.displayName(file.name))
+                },
                 onRename = { name ->
                     Trail.dealtWith()
                     onRenameJustFinished(file, name)
@@ -309,28 +312,30 @@ fun TrailApp(
             // THE LIST IS LOADED, NOT COMPUTED. It used to be read from the folder inside the
             // composition, so every tap — a colour, a note, anything — listed the directory again
             // on the main thread. That is why changing the line colour was slow (15.9.2026).
-            var loaded by remember { mutableStateOf<List<Tracks.TrackFile>>(emptyList()) }
+            var loaded by remember { mutableStateOf<List<Folder.Entry>>(emptyList()) }
             var colour by remember { mutableStateOf(store.trackColour) }
             LaunchedEffect(UiTick.n, showTracks) {
                 loaded = withContext(Dispatchers.IO) { tracks() }
             }
             TracksFace(
                 tracks = loaded,
+                folder = folderLabel,
+                onChooseFolder = onChooseExportFolder,
                 colour = colour,
                 onColour = {
                     colour = it
                     store.trackColour = it
                 },
-                onShow = { file ->
+                onShow = { entry ->
                     showTracks = false
-                    onShowTrack(file)
+                    onShowTrack(entry)
                 },
+                onRename = onRenameTrack,
                 onHide = {
                     CanvasHolder.canvas?.clearSavedTrack()
                     Trail.say(null)
                 },
                 onDelete = onDeleteTrack,
-                onExport = onExportTrack,
                 onClose = { showTracks = false },
             )
         }
@@ -350,15 +355,12 @@ fun TrailApp(
                     settings = false
                     scope.launch { showLayer(store, picked) }
                 },
-                serverStatus = serverStatus,
-                onCheckServer = onCheckServer,
                 onZero = onZeroLevel,
                 onChooseMapFile = onChooseMapFile,
                 onChooseExportFolder = onChooseExportFolder,
                 onImportKeys = onImportKeys,
                 onDownloadMap = onDownloadMap,
                 onOpenMapLink = onOpenMapLink,
-                onExport = onExport,
                 onPause = onPause,
                 recordingPaused = paused,
                 onTracks = {
@@ -617,7 +619,6 @@ private fun TrackLine(stats: TrackStats) {
 /** The four families, named as somebody would say them. */
 private fun familyLabel(family: MapLayer.Family): String = when (family) {
     MapLayer.Family.THUNDERFOREST -> "Thunderforest"
-    MapLayer.Family.SERVER -> "Map server on this phone"
     MapLayer.Family.OFFLINE -> "Offline file"
     MapLayer.Family.OSM -> "OpenStreetMap"
     MapLayer.Family.GOOGLE -> "Google"
@@ -805,17 +806,21 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
  */
 @Composable
 private fun TracksFace(
-    tracks: List<Tracks.TrackFile>,
+    tracks: List<Folder.Entry>,
+    folder: String,
     colour: Long,
     onColour: (Long) -> Unit,
-    onDelete: (java.io.File) -> Unit,
-    onExport: (java.io.File) -> Unit,
-    onShow: (java.io.File) -> Unit,
+    onRename: (Folder.Entry, String) -> Unit,
+    onDelete: (Folder.Entry) -> Unit,
+    onShow: (Folder.Entry) -> Unit,
     onHide: () -> Unit,
+    onChooseFolder: () -> Unit,
     onClose: () -> Unit,
 ) {
     LaunchedEffect(Unit) { Trail.sayInManager(null) }
-    var confirming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
+    var renaming by remember { mutableStateOf<Folder.Entry?>(null) }
+    var confirming by remember { mutableStateOf<Folder.Entry?>(null) }
+    val note by Trail.managerNote.collectAsState()
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
         Column(
@@ -827,17 +832,18 @@ private fun TracksFace(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Label("tracks", Paint.Dim, size = 13)
-                Label("${tracks.size} on the phone", Paint.Dim, size = 11)
+                Label("tracks (gpx)", Paint.Dim, size = 13)
+                Label("${tracks.size}", Paint.Dim, size = 11)
                 Box(
                     Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) { Label("✕", Paint.Sand, size = 18) }
             }
 
-            // WHAT JUST HAPPENED, WHERE HE IS LOOKING. An export that worked and an export that
-            // failed both used to be silent here, because the note line is on the map behind this.
-            val note by Trail.managerNote.collectAsState()
+            // WHERE THEY ARE. This menu is the folder he chose, showing only GPX, so the folder's
+            // own name is the first thing on it: a list of files nobody can find is a list.
+            SettingRow("folder", folder, onChooseFolder)
+
             if (note != null) {
                 Box(
                     Modifier
@@ -850,12 +856,6 @@ private fun TracksFace(
                 }
             }
 
-            if (tracks.isEmpty()) {
-                Label("No tracks yet. The red circle starts one.", Paint.Dim, size = 12)
-            }
-
-            // THE COLOUR A SHOWN TRACK IS DRAWN IN. Five, because a walk drawn over a map needs to
-            // be told apart from the map, and which colour does that depends on the map.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                 Label("line", Paint.Dim, size = 11)
                 TRACK_COLOURS.forEach { option ->
@@ -872,7 +872,21 @@ private fun TracksFace(
                     }
                 }
             }
-            Label("hide the shown track", Paint.Dim, size = 11, modifier = Modifier.clickable { onHide() })
+            Label(
+                text = "hide the shown track",
+                colour = Paint.Dim,
+                size = 11,
+                modifier = Modifier.clickable { onHide() },
+            )
+
+            if (tracks.isEmpty()) {
+                Label(
+                    text = "No GPX in that folder yet. The red circle starts a walk.",
+                    colour = Paint.Dim,
+                    size = 12,
+                    align = TextAlign.Start,
+                )
+            }
 
             tracks.forEach { track ->
                 Column(
@@ -883,18 +897,33 @@ private fun TracksFace(
                         .padding(GAP),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Label(track.name, Paint.Sand, size = 13, align = TextAlign.Start)
+                    // The name he gave it, and the extension after it in the quieter ink: he
+                    // renames a name, but what is on the disk is a file (15.9.2026).
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Label(track.name, Paint.Sand, size = 13, align = TextAlign.Start)
+                        Label(".${track.extension}", Paint.Dim, size = 11)
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Label(Tracks.formatSize(track.bytes), Paint.Dim, size = 11)
-                        Label("show", Paint.Green, size = 12, modifier = Modifier.clickable { onShow(track.file) })
-                        Label("export", Paint.Amber, size = 12, modifier = Modifier.clickable { onExport(track.file) })
                         Label(
-                            text = if (confirming?.file == track.file) "sure? delete" else "delete",
+                            text = "show",
+                            colour = Paint.Green,
+                            size = 12,
+                            modifier = Modifier.clickable { onShow(track) },
+                        )
+                        Label(
+                            text = "rename",
+                            colour = Paint.Amber,
+                            size = 12,
+                            modifier = Modifier.clickable { renaming = track },
+                        )
+                        Label(
+                            text = if (confirming?.uri == track.uri) "sure? delete" else "delete",
                             colour = Paint.Red,
                             size = 12,
                             modifier = Modifier.clickable {
-                                if (confirming?.file == track.file) {
-                                    onDelete(track.file)
+                                if (confirming?.uri == track.uri) {
+                                    onDelete(track)
                                     confirming = null
                                 } else {
                                     confirming = track
@@ -906,9 +935,18 @@ private fun TracksFace(
             }
         }
 
+        renaming?.let { track ->
+            RenamePopup(
+                suggested = track.name,
+                onKeep = { renaming = null },
+                onRename = { name ->
+                    renaming = null
+                    onRename(track, name)
+                },
+            )
+        }
     }
 }
-
 
 /**
  * THE TOOLS, IN A WINDOW OF THEIR OWN, over the map.
@@ -1009,15 +1047,12 @@ private fun SettingsFace(
     current: MapLayer,
     version: String,
     onPick: (MapLayer) -> Unit,
-    serverStatus: String,
-    onCheckServer: () -> Unit,
     onZero: () -> Unit,
     onChooseMapFile: () -> Unit,
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
     onDownloadMap: () -> Unit,
     onOpenMapLink: () -> Unit,
-    onExport: () -> Unit,
     onPause: () -> Unit,
     recordingPaused: Boolean,
     onTracks: () -> Unit,
@@ -1145,15 +1180,11 @@ private fun SettingsFace(
                 }
             }
 
-            // THE SERVER IS WHERE OFFLINE MAPS LIVE NOW. What was a download row is a status row:
-            // is it answering, and what is it holding. The downloading itself belongs to that app.
-            SettingRow("map server on this phone", serverStatus, onCheckServer)
-            SettingRow("or choose a .map file for the old offline layer", "picker", onChooseMapFile)
+            SettingRow("choose a .map file for the offline layer", "picker", onChooseMapFile)
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
-            SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
-            SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)
+            SettingRow("folder the tracks live in", exportState, onChooseExportFolder)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)
             Label(

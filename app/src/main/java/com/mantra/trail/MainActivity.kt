@@ -39,8 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false
-    private var pendingExport: java.io.File? = null
-    private var serverStatus by mutableStateOf("press to check")
+    private var pendingSave: Pair<java.io.File, String>? = null
 
     private val askLocation = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -96,44 +95,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * EXPORT IS ONE ACTION NOW (15.9.2026). Android's own save dialog asks where and what to call
-     * it; when it comes back, the track on the phone takes the name he typed there. Rename and
-     * export were two ways of saying the same thing, and this is the one that already has a
-     * keyboard, a folder browser and a name field in it.
-     */
-    private val saveTrackAs = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/gpx+xml")
-    ) { uri: Uri? ->
-        val source = pendingExport
-        pendingExport = null
-        if (uri == null || source == null) {
-            report(null)
-            return@registerForActivityResult
-        }
-        report("Saving…")
-        lifecycleScope.launch {
-            val message = withContext(Dispatchers.IO) {
-                try {
-                    contentResolver.openOutputStream(uri)?.use { out ->
-                        source.inputStream().use { it.copyTo(out) }
-                    } ?: return@withContext "The file could not be written"
-                    // THE MANAGER PICKS THE NAME UP FROM THE DISK. Whatever he called it in the
-                    // dialog is what the track is called here too, so the two never drift apart.
-                    val chosen = DocumentFile.fromSingleUri(this@MainActivity, uri)?.name
-                    if (chosen != null && Tracks.displayName(chosen) != Tracks.displayName(source.name)) {
-                        val (_, problem) = Tracks.rename(source, Tracks.displayName(chosen))
-                        if (problem != null) return@withContext "Saved as ${Tracks.displayName(chosen)} ($problem)"
-                    }
-                    "Saved as ${Tracks.displayName(chosen ?: source.name)}"
-                } catch (e: Exception) {
-                    "Saving failed: ${e.javaClass.simpleName}"
-                }
-            }
-            report(message)
-            UiTick.bump()
-        }
-    }
 
     private val pickExportFolder = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -150,53 +111,58 @@ class MainActivity : ComponentActivity() {
         UiTick.bump()
         // Whatever was waiting for a folder goes now, which may be a track from the manager
         // rather than the last one recorded.
-        val waiting = pendingExport ?: LastTrack.file
-        pendingExport = null
-        exportFile(waiting)
+        val waiting = pendingSave
+        pendingSave = null
+        if (waiting != null) saveRecording(waiting.first, waiting.second)
     }
 
-    /** Rename the track that was just recorded, then put it in the chosen folder. */
-    private fun renameAndSave(file: java.io.File, newName: String) {
-        val (renamed, problem) = Tracks.rename(file, newName)
-        if (problem != null) {
-            Trail.say(problem)
+    /**
+     * THE WALK IS PUT IN THE FOLDER HE CHOSE, under whatever he called it in the popup. There is
+     * no export any more (15.9.2026): a track that is already in the folder has nowhere to go.
+     */
+    private fun saveRecording(file: java.io.File, name: String) {
+        if (store.exportTreeUri == null) {
+            pendingSave = file to name
+            report("Choose the folder your tracks live in")
+            pickExportFolder.launch(null)
             return
         }
-        LastTrack.set(renamed, LastTrack.points, newName, LastTrack.startedMs)
-        exportLastTrack()
+        report("Saving ${name}…")
+        lifecycleScope.launch {
+            val problem = withContext(Dispatchers.IO) { Folder.save(this@MainActivity, store, file, name) }
+            report(problem ?: "Saved to ${Folder.label(this@MainActivity, store)}: $name")
+            UiTick.bump()
+        }
+    }
+
+
+    private fun deleteTrack(entry: Folder.Entry) {
+        report(Folder.delete(this, entry) ?: "Deleted ${entry.name}")
+        UiTick.bump()
+    }
+
+    /** He renames a NAME; the extension is the disk's business and is kept (15.9.2026). */
+    private fun renameTrack(entry: Folder.Entry, newName: String) {
+        report(Folder.rename(this, entry, newName) ?: "Renamed to $newName")
         UiTick.bump()
     }
 
 
-    private fun deleteTrack(file: java.io.File) {
-        val name = Tracks.displayName(file.name)
-        val problem = Tracks.delete(file)
-        report(problem ?: "Deleted $name")
-        UiTick.bump()
-    }
-
-    /** Hand it to Android's save dialog, with the name it has now as the suggestion. */
-    private fun exportTrack(file: java.io.File) {
-        if (!file.exists()) {
-            report("That track is no longer there")
-            return
-        }
-        pendingExport = file
-        saveTrackAs.launch(Tracks.safeFileName(Tracks.displayName(file.name)))
-    }
-
-    /** Read a saved walk back and draw it over the map in the colour he chose. */
-    private fun showTrack(file: java.io.File) {
+    /** Read a saved walk back out of the folder and draw it over the map. */
+    private fun showTrack(entry: Folder.Entry) {
         lifecycleScope.launch {
             val points = withContext(Dispatchers.IO) {
-                runCatching { GpxRead.points(file.readText()) }.getOrDefault(emptyList())
+                Folder.read(this@MainActivity, entry)?.let { GpxRead.points(it) } ?: emptyList()
             }
             if (points.isEmpty()) {
-                Trail.say("No points could be read from ${Tracks.displayName(file.name)}")
+                report("No points could be read from ${entry.name}")
                 return@launch
             }
             canvas?.showSavedTrack(points, store.trackColour)
-            Trail.say("${Tracks.displayName(file.name)}: ${points.size} points, ${Geo.formatDistance(TrackMath.stats(points).distanceM)}")
+            Trail.say(
+                "${entry.name}: ${points.size} points, " +
+                    Geo.formatDistance(TrackMath.stats(points).distanceM)
+            )
         }
     }
 
@@ -210,7 +176,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         AndroidGraphicFactory.createInstance(application)
         store = Store(this)
-        Layers.serverMapName = store.serverMap
         locator = Locator(this)
         sensors = Sensors(this).apply { calibration = store.calibration() }
 
@@ -223,20 +188,18 @@ class MainActivity : ComponentActivity() {
                 onWhereAmI = ::whereAmI,
                 onRecord = ::toggleRecording,
                 onPause = ::togglePause,
-                onExport = ::exportLastTrack,
                 onChooseMapFile = { pickMapFile.launch(arrayOf("*/*")) },
                 onChooseExportFolder = { pickExportFolder.launch(null) },
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
                 onDownloadMap = ::downloadOfflineMap,
-                serverStatus = serverStatus,
-                onCheckServer = ::checkServer,
                 onOpenMapLink = ::openMapLink,
                 onZeroLevel = ::zeroLevel,
                 onBare = ::setFullScreen,
-                tracks = { Tracks.list(trackFolder()) },
-                onRenameJustFinished = ::renameAndSave,
+                tracks = { Folder.list(this, store) },
+                folderLabel = Folder.label(this, store),
+                onRenameJustFinished = ::saveRecording,
                 onDeleteTrack = ::deleteTrack,
-                onExportTrack = ::exportTrack,
+                onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
             )
         }
@@ -326,23 +289,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Ask the map server on this phone what it is holding, and remember the answer. */
-    private fun checkServer() {
-        serverStatus = "asking…"
-        lifecycleScope.launch {
-            val answer = ServerStatus.ask()
-            serverStatus = answer.text
-            if (answer.running && answer.maps.isNotEmpty()) {
-                // The first map it holds becomes the one this app asks for, unless one was chosen.
-                if (answer.maps.none { it == store.serverMap }) {
-                    store.serverMap = answer.maps.first()
-                }
-                Layers.serverMapName = store.serverMap
-            }
-            Trail.say(answer.text)
-            UiTick.bump()
-        }
-    }
 
     private fun whereAmI() {
         if (!locator.hasPermission()) {
@@ -391,53 +337,7 @@ class MainActivity : ComponentActivity() {
      * The finished track, copied out of the app's own folder into one the person chose — so it is
      * still there after an uninstall, and so it can be opened by anything else on the phone.
      */
-    private fun exportLastTrack() = exportFile(LastTrack.file)
 
-    /**
-     * COPY ONE TRACK INTO THE CHOSEN FOLDER, off the main thread, and say what happened where it
-     * can be seen.
-     *
-     * Two faults on 15.9.2026, both invisible from the seat: the copy ran on the main thread, and
-     * every message went to the map screen's note line — which is behind the track manager when
-     * the manager is what he is looking at. So an export that worked and an export that failed
-     * looked exactly the same: nothing.
-     */
-    private fun exportFile(source: java.io.File?) {
-        if (source == null || !source.exists()) {
-            report("There is no track to export")
-            return
-        }
-        val treeUri = store.exportTreeUri
-        if (treeUri == null) {
-            pendingExport = source
-            pickExportFolder.launch(null)
-            return
-        }
-        report("Exporting ${Tracks.displayName(source.name)}…")
-        lifecycleScope.launch {
-            val message = withContext(Dispatchers.IO) {
-                try {
-                    val tree = DocumentFile.fromTreeUri(this@MainActivity, Uri.parse(treeUri))
-                        ?: return@withContext "That folder is no longer reachable. Choose it again."
-                    val name = source.name
-                    tree.findFile(name)?.delete()
-                    // SOME PROVIDERS REFUSE A MIME TYPE THEY DO NOT KNOW, and gpx+xml is one many
-                    // have never heard of. Three tries, widest last, rather than one refusal.
-                    val target = tree.createFile("application/gpx+xml", name)
-                        ?: tree.createFile("text/xml", name)
-                        ?: tree.createFile("application/octet-stream", name)
-                        ?: return@withContext "The folder would not accept the file"
-                    contentResolver.openOutputStream(target.uri)?.use { out ->
-                        source.inputStream().use { it.copyTo(out) }
-                    } ?: return@withContext "The file could not be written"
-                    "Saved to ${store.exportFolderName ?: "the chosen folder"}: ${Tracks.displayName(name)}"
-                } catch (e: Exception) {
-                    "Export failed: ${e.javaClass.simpleName}"
-                }
-            }
-            report(message)
-        }
-    }
 
     /** Say it on the map's note line AND in the track manager, since either may be in front. */
     private fun report(message: String?) {
