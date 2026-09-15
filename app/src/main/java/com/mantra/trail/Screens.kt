@@ -2,6 +2,7 @@ package com.mantra.trail
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -707,6 +710,12 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
 @Composable
 private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Unit) {
     var text by remember(current) { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+
+    // THE CURSOR IS IN THE BOX BEFORE HE TOUCHES IT. Without this the field is focused by a tap
+    // he has to know to make, and an empty unfocused field on a dark panel is indistinguishable
+    // from a label (15.9.2026).
+    LaunchedEffect(current) { focus.requestFocus() }
 
     Box(
         Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP * 2),
@@ -720,7 +729,8 @@ private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Uni
                 .padding(GAP),
             verticalArrangement = Arrangement.spacedBy(GAP),
         ) {
-            Label(current, Paint.Dim, size = 12, align = TextAlign.Start)
+            Label("now: $current", Paint.Dim, size = 11, align = TextAlign.Start)
+            Label("new name", Paint.Amber, size = 11, align = TextAlign.Start)
             BasicTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -730,12 +740,17 @@ private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Uni
                     fontSize = 16.sp,
                     fontFamily = FontFamily.Monospace,
                 ),
-                cursorBrush = SolidColor(Paint.Amber),
+                // The cursor is the bright amber and it blinks, which is Compose's own doing once
+                // the field has focus. What was missing was the focus and the frame.
+                cursorBrush = SolidColor(Paint.AmberBright),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Paint.Veil)
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .background(Paint.Ground)
+                    // A FRAME, so the box is a box. On a dark panel a dark field is a label.
+                    .border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 14.dp)
+                    .focusRequester(focus),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                 Box(

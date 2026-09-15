@@ -402,6 +402,9 @@ check("the name box has no clock in it",
 check("the name box starts empty and says what the name is now",
       'mutableStateOf("")' in screens.split("private fun NameBox")[1][:400],
       "he is typing a new name, not correcting an old one")
+check("the entry box has a frame and the cursor is already in it",
+      "border(1.5.dp, Paint.Amber" in screens and "focus.requestFocus()" in screens,
+      "on a dark panel an unfocused dark field is a label, not a box")
 check("the name box has two answers and they are named OK and cancel",
       '"cancel"' in screens and '"OK"' in screens,
       "no third thing to read on a hillside")
