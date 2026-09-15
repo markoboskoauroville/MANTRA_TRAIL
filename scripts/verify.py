@@ -443,6 +443,9 @@ check("a group can be taken out without forgetting what was ticked inside it",
 check("the toggle is a tick, not two words",
       "private fun Tick(" in screens and '"not in toggle"' not in screens,
       "a checkbox, drawn rather than typed")
+check("a family with one map is one row, with no triangle to press for nothing",
+      "if (maps.size == 1) {" in screens and "store.setFamilyInToggle(family, it)\n                                store.setInToggle(layer.id, it)" in screens,
+      "the map and the group are the same thing there, so they are one tick")
 check("a group is told from its maps by more than position",
       "familyLabel(family).uppercase()" in screens and "padding(start = 22.dp)" in screens,
       "capitals and amber for the group, title case and sand for its maps, pushed in")

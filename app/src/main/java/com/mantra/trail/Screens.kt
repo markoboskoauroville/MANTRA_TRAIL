@@ -1126,7 +1126,57 @@ private fun SettingsFace(
             // is in the switcher; a tick on the group takes all of its maps out at once and
             // remembers which of them were ticked for when it comes back.
             MapLayer.Family.entries.forEach { family ->
+                val maps = Layers.of(family)
                 val key = family.name.lowercase()
+
+                // A GROUP OF ONE IS NOT A GROUP (15.9.2026). Offline file and OpenStreetMap have
+                // one map each, so a triangle that folds away a single child with the same name
+                // as its parent is a thing to press for nothing. They are one row: the name, and
+                // one tick that means both the map and the group, because here they are the same.
+                if (maps.size == 1) {
+                    val layer = maps.first()
+                    val chosen = layer.id == current.id
+                    val needsKey = layer.provider != null && store.key(layer.provider) == null
+                    var on by remember(key, UiTick.n) {
+                        mutableStateOf(store.familyInToggle(family) && store.inToggle(layer.id))
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (chosen) Paint.Amber else Paint.Veil),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .alpha(if (needsKey) 0.55f else 1f)
+                                .clickable { onPick(layer) }
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Label(
+                                text = familyLabel(family).uppercase() +
+                                    if (needsKey) "  · needs a key" else "",
+                                colour = if (chosen) Paint.Ground else Paint.Amber,
+                                size = 13,
+                                align = TextAlign.Start,
+                            )
+                        }
+                        Tick(
+                            checked = on,
+                            onChange = {
+                                on = it
+                                store.setFamilyInToggle(family, it)
+                                store.setInToggle(layer.id, it)
+                            },
+                        )
+                    }
+                    return@forEach
+                }
+
                 var folded by remember(key) { mutableStateOf(store.collapsed(key)) }
                 var familyOn by remember(key, UiTick.n) { mutableStateOf(store.familyInToggle(family)) }
 
@@ -1169,7 +1219,7 @@ private fun SettingsFace(
                 }
 
                 if (!folded) {
-                    Layers.of(family).forEach { layer ->
+                    maps.forEach { layer ->
                         val chosen = layer.id == current.id
                         val needsKey = layer.provider != null && store.key(layer.provider) == null
                         var included by remember(layer.id, UiTick.n) {
