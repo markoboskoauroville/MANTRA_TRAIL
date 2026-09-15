@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false
+    private var pendingExport: java.io.File? = null
     private var serverStatus by mutableStateOf("press to check")
 
     private val askLocation = registerForActivityResult(
@@ -108,7 +109,11 @@ class MainActivity : ComponentActivity() {
         // settings row that says Documents/Tracks is a row he can act on (15.9.2026).
         store.exportFolderName = DocumentFile.fromTreeUri(this, uri)?.name ?: uri.lastPathSegment
         UiTick.bump()
-        exportLastTrack()
+        // Whatever was waiting for a folder goes now, which may be a track from the manager
+        // rather than the last one recorded.
+        val waiting = pendingExport ?: LastTrack.file
+        pendingExport = null
+        exportFile(waiting)
     }
 
     /** Rename the track that was just recorded, then put it in the chosen folder. */
@@ -125,21 +130,18 @@ class MainActivity : ComponentActivity() {
 
     private fun renameTrack(file: java.io.File, newName: String) {
         val (_, problem) = Tracks.rename(file, newName)
-        Trail.say(problem ?: "Renamed to $newName")
+        report(problem ?: "Renamed to $newName")
         UiTick.bump()
     }
 
     private fun deleteTrack(file: java.io.File) {
         val name = Tracks.displayName(file.name)
         val problem = Tracks.delete(file)
-        Trail.say(problem ?: "Deleted $name")
+        report(problem ?: "Deleted $name")
         UiTick.bump()
     }
 
-    private fun exportTrack(file: java.io.File) {
-        LastTrack.set(file, LastTrack.points, Tracks.displayName(file.name), LastTrack.startedMs)
-        exportLastTrack()
-    }
+    private fun exportTrack(file: java.io.File) = exportFile(file)
 
     /** Read a saved walk back and draw it over the map in the colour he chose. */
     private fun showTrack(file: java.io.File) {
@@ -348,43 +350,58 @@ class MainActivity : ComponentActivity() {
      * The finished track, copied out of the app's own folder into one the person chose — so it is
      * still there after an uninstall, and so it can be opened by anything else on the phone.
      */
-    private fun exportLastTrack() {
-        val source = LastTrack.file
+    private fun exportLastTrack() = exportFile(LastTrack.file)
+
+    /**
+     * COPY ONE TRACK INTO THE CHOSEN FOLDER, off the main thread, and say what happened where it
+     * can be seen.
+     *
+     * Two faults on 15.9.2026, both invisible from the seat: the copy ran on the main thread, and
+     * every message went to the map screen's note line — which is behind the track manager when
+     * the manager is what he is looking at. So an export that worked and an export that failed
+     * looked exactly the same: nothing.
+     */
+    private fun exportFile(source: java.io.File?) {
         if (source == null || !source.exists()) {
-            Trail.say("There is no finished track to export yet")
+            report("There is no track to export")
             return
         }
         val treeUri = store.exportTreeUri
         if (treeUri == null) {
+            pendingExport = source
             pickExportFolder.launch(null)
             return
         }
-        try {
-            val tree = DocumentFile.fromTreeUri(this, Uri.parse(treeUri))
-                ?: run {
-                    store.exportTreeUri = null
-                    Trail.say("That folder is no longer reachable. Choose it again.")
-                    return
+        report("Exporting ${Tracks.displayName(source.name)}…")
+        lifecycleScope.launch {
+            val message = withContext(Dispatchers.IO) {
+                try {
+                    val tree = DocumentFile.fromTreeUri(this@MainActivity, Uri.parse(treeUri))
+                        ?: return@withContext "That folder is no longer reachable. Choose it again."
+                    val name = source.name
+                    tree.findFile(name)?.delete()
+                    // SOME PROVIDERS REFUSE A MIME TYPE THEY DO NOT KNOW, and gpx+xml is one many
+                    // have never heard of. Three tries, widest last, rather than one refusal.
+                    val target = tree.createFile("application/gpx+xml", name)
+                        ?: tree.createFile("text/xml", name)
+                        ?: tree.createFile("application/octet-stream", name)
+                        ?: return@withContext "The folder would not accept the file"
+                    contentResolver.openOutputStream(target.uri)?.use { out ->
+                        source.inputStream().use { it.copyTo(out) }
+                    } ?: return@withContext "The file could not be written"
+                    "Saved to ${store.exportFolderName ?: "the chosen folder"}: ${Tracks.displayName(name)}"
+                } catch (e: Exception) {
+                    "Export failed: ${e.javaClass.simpleName}"
                 }
-            val name = source.name
-            tree.findFile(name)?.delete()
-            val target = tree.createFile("application/gpx+xml", name)
-                ?: run {
-                    Trail.say("The folder would not accept the file")
-                    return
-                }
-            contentResolver.openOutputStream(target.uri)?.use { out ->
-                source.inputStream().use { it.copyTo(out) }
-            } ?: run {
-                Trail.say("The file could not be written")
-                return
             }
-            // The message says WHERE, because "exported" with no folder in it is a message that
-            // has to be trusted rather than checked.
-            Trail.say("Track saved to ${store.exportFolderName ?: "the chosen folder"}: $name")
-        } catch (e: Exception) {
-            Trail.say("Export failed: ${e.javaClass.simpleName}")
+            report(message)
         }
+    }
+
+    /** Say it on the map's note line AND in the track manager, since either may be in front. */
+    private fun report(message: String?) {
+        Trail.say(message)
+        Trail.sayInManager(message)
     }
 
     /** Zero the level on whatever the phone is lying on now. */

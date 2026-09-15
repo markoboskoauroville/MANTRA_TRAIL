@@ -122,6 +122,15 @@ object Trail {
         _justFinished.value = null
     }
 
+    private val _managerNote = MutableStateFlow<String?>(null)
+
+    /** The same kind of sentence, for whichever face is in front of the map. */
+    val managerNote: StateFlow<String?> = _managerNote.asStateFlow()
+
+    fun sayInManager(message: String?) {
+        _managerNote.value = message
+    }
+
     fun say(message: String?) {
         _note.value = message
     }

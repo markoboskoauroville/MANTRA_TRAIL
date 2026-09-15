@@ -52,7 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -118,6 +120,7 @@ fun TrailApp(
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
+    var tools by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
@@ -232,6 +235,7 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
+                    Key(glyph = "T", lit = tools, onClick = { tools = !tools })
                     // ONE TAP CENTRES, TWO IN A ROW LOCK (15.9.2026). A second tap inside a
                     // second is somebody saying "and keep it there"; a second tap later is just
                     // somebody centring again. While it is locked, one tap lets the map go.
@@ -293,11 +297,31 @@ fun TrailApp(
             )
         }
 
+        if (tools) {
+            ToolsFace(
+                sensors = sensors,
+                fix = fix,
+                onZero = onZeroLevel,
+                onClose = { tools = false },
+            )
+        }
+
         if (showTracks) {
+            // THE LIST IS LOADED, NOT COMPUTED. It used to be read from the folder inside the
+            // composition, so every tap — a colour, a note, anything — listed the directory again
+            // on the main thread. That is why changing the line colour was slow (15.9.2026).
+            var loaded by remember { mutableStateOf<List<Tracks.TrackFile>>(emptyList()) }
+            var colour by remember { mutableStateOf(store.trackColour) }
+            LaunchedEffect(UiTick.n, showTracks) {
+                loaded = withContext(Dispatchers.IO) { tracks() }
+            }
             TracksFace(
-                tracks = tracks(),
-                colour = store.trackColour,
-                onColour = { store.trackColour = it },
+                tracks = loaded,
+                colour = colour,
+                onColour = {
+                    colour = it
+                    store.trackColour = it
+                },
                 onShow = { file ->
                     showTracks = false
                     onShowTrack(file)
@@ -793,6 +817,7 @@ private fun TracksFace(
     onHide: () -> Unit,
     onClose: () -> Unit,
 ) {
+    LaunchedEffect(Unit) { Trail.sayInManager(null) }
     var renaming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
     var confirming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
 
@@ -812,6 +837,21 @@ private fun TracksFace(
                     Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) { Label("✕", Paint.Sand, size = 18) }
+            }
+
+            // WHAT JUST HAPPENED, WHERE HE IS LOOKING. An export that worked and an export that
+            // failed both used to be silent here, because the note line is on the map behind this.
+            val note by Trail.managerNote.collectAsState()
+            if (note != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Label(note ?: "", Paint.Amber, size = 12, align = TextAlign.Start)
+                }
             }
 
             if (tracks.isEmpty()) {
@@ -884,6 +924,94 @@ private fun TracksFace(
     }
 }
 
+
+/**
+ * THE TOOLS, IN A WINDOW OF THEIR OWN, over the map.
+ *
+ * Baba, 15.9.2026: the compass and the level are not settings and should not be in the settings.
+ * They are instruments somebody reaches for on a hillside, so they are one key away — T — and
+ * they cover the map while they are open, because reading a level is the whole of what you are
+ * doing while you are doing it.
+ */
+@Composable
+private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: () -> Unit) {
+    var heading by remember { mutableStateOf(0.0) }
+    var reading by remember { mutableStateOf(sensors.level) }
+
+    // Bounded by the composition: it dies with the window.
+    LaunchedEffect(Unit) {
+        while (true) {
+            heading = sensors.heading()
+            reading = sensors.level
+            delay(50)
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+        Column(
+            Modifier.fillMaxSize().safeDrawingPadding().padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(46.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("compass and level", Paint.Dim, size = 13)
+                Label(
+                    text = if (sensors.declination != null) "true north" else "magnetic north",
+                    colour = if (sensors.declination != null) Paint.Sand else Paint.Amber,
+                    size = 11,
+                )
+                Box(
+                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Label("✕", Paint.Sand, size = 18) }
+            }
+
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CompassDial(heading)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
+                Label(
+                    text = fix?.let { "${Geo.formatLat(it.lat)}  ${Geo.formatLon(it.lon)}" } ?: "no fix",
+                    colour = if (fix != null) Paint.Sand else Paint.Dim,
+                    size = 11,
+                )
+            }
+
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                BubbleVial(reading)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label(
+                    text = if (reading.trustworthy) {
+                        "${fmt(reading.pitch)}° ${fmt(reading.roll)}°  tilt ${fmt(reading.tilt)}°"
+                    } else {
+                        "hold it still"
+                    },
+                    colour = when {
+                        !reading.trustworthy -> Paint.Dim
+                        reading.level -> Paint.Green
+                        else -> Paint.Sand
+                    },
+                    size = 16,
+                )
+                Box(
+                    Modifier
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable(onClick = onZero)
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Label("zero here", Paint.Amber, size = 12) }
+            }
+        }
+    }
+}
+
 /**
  * EVERYTHING ELSE LIVES HERE: the map choice, the offline map, the folders, the keys, the compass
  * and the level. One key on the map screen opens it, and the way out is at the right-hand end of
@@ -920,14 +1048,6 @@ private fun SettingsFace(
     }
     val keyState = remember(UiTick.n) { store.keyState }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            heading = sensors.heading()
-            reading = sensors.level
-            delay(50)
-        }
-    }
-
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
         // IT SCROLLS. Baba, 15.9.2026: *"I cannot reach bottom of the settings... Everything should
         // be scrollable everywhere."* A settings face that is one screen tall today is two screens
@@ -954,24 +1074,6 @@ private fun SettingsFace(
                     contentAlignment = Alignment.Center,
                 ) { Label("✕", Paint.Sand, size = 18) }
             }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { CompassDial(heading) }
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { BubbleVial(reading) }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 15)
-                Label(
-                    text = if (reading.trustworthy) "tilt ${fmt(reading.tilt)}°" else "hold it still",
-                    colour = when {
-                        !reading.trustworthy -> Paint.Dim
-                        reading.level -> Paint.Green
-                        else -> Paint.Sand
-                    },
-                    size = 15,
-                )
-            }
-            SettingRow("zero the level on this surface", "set it down first", onZero)
 
             // THE MAPS, IN FOLDING SECTIONS (15.9.2026). Seventeen chips in one block is a wall,
             // and the fold state is remembered between sessions, because a section somebody
@@ -1064,7 +1166,7 @@ private fun SettingsFace(
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
             SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
-            SettingRow("tracks: rename, export, delete", "$trackCount on the phone", onTracks)
+            SettingRow("tracks (gpx)", "$trackCount", onTracks)
             SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)

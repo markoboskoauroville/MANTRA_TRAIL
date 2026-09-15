@@ -364,7 +364,19 @@ check("deleting a track asks twice",
 check("the settings row names the folder rather than saying chosen",
       "store.exportFolderName" in screens, "Documents/Tracks, not the word chosen")
 check("the saved message says where it went",
-      "Track saved to" in activity, "a message that can be checked rather than trusted")
+      "Saved to ${store.exportFolderName" in activity,
+      "the folder is named, so the message can be checked rather than trusted")
+# Both faults of 15.9.2026: the copy ran on the main thread, and the answer went to a line that
+# is behind the manager whenever the manager is what he is looking at.
+check("an export happens off the main thread and says so where he is looking",
+      "withContext(Dispatchers.IO)" in activity and "Trail.sayInManager" in activity,
+      "the track manager carries its own line now")
+check("the track list is loaded rather than read during composition",
+      "loaded = withContext(Dispatchers.IO) { tracks() }" in screens,
+      "this is why changing the line colour was slow")
+check("the tools are a window of their own, not a settings row",
+      "private fun ToolsFace" in screens and 'glyph = "T"' in screens,
+      "one key away, and they cover the map while they are open")
 
 
 # WHAT HE ASKED FOR ON 15.9.2026, AFTER THE MAP SERVER LANDED.
