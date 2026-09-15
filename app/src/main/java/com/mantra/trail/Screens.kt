@@ -551,6 +551,9 @@ private fun SettingsFace(
 
             SettingRow("download the offline map, ${Layers.OfflineDownload.LABEL}", mapState, onDownloadMap)
             SettingRow("or choose a .map file", "picker", onChooseMapFile)
+            SettingRow("check the offline map here", "ask it", {
+                Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
+            })
             SettingRow("open the map link in the browser", "mapsforge.org", onOpenMapLink)
             // The address itself, in full, so it can be read off the screen and typed into a
             // desktop browser if the phone is the wrong place to fetch 176 MB.

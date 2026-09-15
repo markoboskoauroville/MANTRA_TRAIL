@@ -79,6 +79,11 @@ class MapCanvas(private val context: Context, private val store: Store) {
 
     val view: MapView = MapView(context).apply {
         setClickable(true)
+        // 256 px tiles, fixed. Left to itself mapsforge scales the tile to the screen density,
+        // which on this phone is 2.75: a 704 px tile at street zoom over a country file is a very
+        // different amount of work from a 256 px one, and a tile that takes too long is a tile
+        // that is never drawn.
+        model.displayModel.setFixedTileSize(256)
         setBuiltInZoomControls(false)
         mapScaleBar.isVisible = true
         model.mapViewPosition.setCenter(LatLong(store.lastLat, store.lastLon))
@@ -303,6 +308,36 @@ class MapCanvas(private val context: Context, private val store: Store) {
         }
         view.repaint()
         failed
+    }
+
+    /**
+     * WHAT THE OFFLINE MAP ACTUALLY HAS, HERE, AT THIS ZOOM.
+     *
+     * A blank map has several possible causes and they look identical on the glass: no file, a
+     * file that does not cover this place, a file with no data at this zoom, or a renderer that
+     * is failing. This asks the file itself and reports the counts, so the next report is a fact
+     * rather than "it disappeared" (delivery-gate.md 14: print what you examined).
+     */
+    fun diagnose(): String {
+        val file = mapFile ?: return "No offline map file is open. Settings: download Croatia."
+        return try {
+            val info = file.mapFileInfo
+            val centre = view.model.mapViewPosition.center
+            val z = currentZoom()
+            val tile = Tile(
+                Geo.tileX(centre.longitude, z),
+                Geo.tileY(centre.latitude, z),
+                z.toByte(),
+                view.model.displayModel.tileSize,
+            )
+            val inside = info.boundingBox.contains(centre)
+            val read = runCatching { file.readMapData(tile) }.getOrNull()
+            "z$z · file ${info.fileSize / 1_000_000} MB, zooms ${info.zoomLevelMin}-${info.zoomLevelMax} · " +
+                "here ${if (inside) "inside" else "OUTSIDE"} the map · " +
+                "this tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points"
+        } catch (e: Exception) {
+            "The map file could not be questioned: ${e.javaClass.simpleName}"
+        }
     }
 
     fun centreOn(fix: Fix) {
