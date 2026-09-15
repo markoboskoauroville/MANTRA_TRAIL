@@ -84,6 +84,11 @@ private val MARK = 22.dp
 /** The crosshair over the map: bigger than the key's mark, and far quieter. */
 private val CROSS = 34.dp
 
+/** The compass's three states, in the order T turns through them. */
+private const val COMPASS_DARK = 0
+private const val COMPASS_NIGHT = 1
+private const val COMPASS_OFF = 2
+
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
 
@@ -119,7 +124,7 @@ fun TrailApp(
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
-    var tools by remember { mutableStateOf(false) }
+    var compass by remember { mutableIntStateOf(store.compassMode) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
@@ -234,7 +239,17 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
-                    Key(glyph = "T", lit = tools, onClick = { tools = !tools })
+                    // T CYCLES THE COMPASS: dark, night, off. Dark ink for a light map, light
+                    // ink for a dark one, and off for neither — three presses to come round
+                    // (15.9.2026). The key lights while the compass is on the map.
+                    Key(
+                        glyph = "T",
+                        lit = compass != COMPASS_OFF,
+                        onClick = {
+                            compass = (compass + 1) % 3
+                            store.compassMode = compass
+                        },
+                    )
                     // ONE TAP CENTRES, TWO IN A ROW LOCK (15.9.2026). A second tap inside a
                     // second is somebody saying "and keep it there"; a second tap later is just
                     // somebody centring again. While it is locked, one tap lets the map go.
@@ -243,15 +258,12 @@ fun TrailApp(
                         onClick = {
                             val now = System.currentTimeMillis()
                             when {
-                                follow -> {
-                                    follow = false
-                                    Trail.say("The map is free again")
-                                }
+                                // No sentence for either: the mark's own centre fills when it is
+                                // locked, and a line of text for a state that is already drawn is
+                                // a line of text over the map (15.9.2026).
+                                follow -> follow = false
 
-                                now - lastCentreTap < 1_000L -> {
-                                    follow = true
-                                    Trail.say("Locked to the middle")
-                                }
+                                now - lastCentreTap < 1_000L -> follow = true
 
                                 else -> onWhereAmI()
                             }
@@ -301,8 +313,8 @@ fun TrailApp(
             )
         }
 
-        if (tools) {
-            CompassFace(sensors = sensors, fix = fix, onClose = { tools = false })
+        if (compass != COMPASS_OFF) {
+            CompassOverlay(sensors = sensors, night = compass == COMPASS_NIGHT)
         }
 
         if (showTracks) {
@@ -984,10 +996,10 @@ private fun TracksFace(
  * dial; the heading is the one number; the way out is where it always is.
  */
 @Composable
-private fun CompassFace(sensors: Sensors, fix: Fix?, onClose: () -> Unit) {
+private fun CompassOverlay(sensors: Sensors, night: Boolean) {
     var heading by remember { mutableStateOf(0.0) }
 
-    // Bounded by the composition: it dies with the window.
+    // Bounded by the composition: it dies with the overlay.
     LaunchedEffect(Unit) {
         while (true) {
             heading = sensors.heading()
@@ -995,52 +1007,20 @@ private fun CompassFace(sensors: Sensors, fix: Fix?, onClose: () -> Unit) {
         }
     }
 
+    // TWO INKS, BECAUSE THERE ARE TWO KINDS OF MAP (15.9.2026). A dark compass disappears on a
+    // satellite photograph and a light one disappears on a street map, so the same dial is drawn
+    // in near-black for the pale maps and in sand for the dark ones, and T turns from one to the
+    // other. Both are half transparent: the map underneath is the thing being read.
+    val ink = if (night) Paint.Sand.copy(alpha = 0.75f) else Color(0xB3000000)
+
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().safeDrawingPadding(),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(
-                Modifier.fillMaxWidth().height(46.dp).padding(horizontal = GAP),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label(
-                    text = if (sensors.declination != null) "true north" else "magnetic north",
-                    colour = Paint.Dim,
-                    size = 11,
-                )
-                Box(
-                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Bar).clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) { Label("✕", Paint.Sand, size = 18) }
-            }
-
-            // Edge to edge: no padding of any kind on this one, so the dial touches both sides.
-            CompassDial(heading, full = true, faint = true)
-
-            Column(
-                Modifier.fillMaxWidth().padding(GAP),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Bar)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
-                        Label(
-                            text = fix?.let { "${Geo.formatLat(it.lat)}  ${Geo.formatLon(it.lon)}" }
-                                ?: "no fix",
-                            colour = if (fix != null) Paint.Sand else Paint.Dim,
-                            size = 11,
-                        )
-                    }
-                }
-            }
+            CompassDial(heading, full = true, ink = ink)
+            Label("${heading.toInt()}° ${Geo.cardinal(heading)}", ink, size = 16)
         }
     }
 }
@@ -1292,20 +1272,19 @@ private fun SettingRow(title: String, state: String, onPress: () -> Unit) {
 }
 
 @Composable
-private fun CompassDial(heading: Double, full: Boolean = false, faint: Boolean = false) {
+private fun CompassDial(heading: Double, full: Boolean = false, ink: Color = Paint.Sand) {
     Canvas(if (full) Modifier.fillMaxWidth().aspectRatio(1f) else Modifier.size(140.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension / 2f - 6f
-        val ring = if (faint) Paint.Dim else Paint.Dim
-        drawCircle(ring, radius = r, center = c, style = Stroke(2f))
+        drawCircle(ink.copy(alpha = 0.45f), radius = r, center = c, style = Stroke(2f))
         for (tick in 0 until 72) {
             val angle = Math.toRadians(tick * 5.0 - heading - 90.0)
             val long = tick % 6 == 0
             val inner = r * if (long) 0.84f else 0.92f
             val colour = when {
                 tick == 0 -> Paint.Red
-                long -> if (faint) Paint.Amber else Paint.Sand
-                else -> Paint.Dim
+                long -> ink
+                else -> ink.copy(alpha = 0.45f)
             }
             drawLine(
                 color = colour,
@@ -1314,8 +1293,8 @@ private fun CompassDial(heading: Double, full: Boolean = false, faint: Boolean =
                 strokeWidth = if (long) 3f else 1.5f,
             )
         }
-        drawLine(Paint.Amber, Offset(c.x, c.y - r * 0.8f), Offset(c.x, c.y + r * 0.2f), 4f)
-        drawCircle(Paint.Amber, radius = 5f, center = c)
+        drawLine(ink, Offset(c.x, c.y - r * 0.8f), Offset(c.x, c.y + r * 0.2f), 4f)
+        drawCircle(ink, radius = 5f, center = c)
     }
 }
 

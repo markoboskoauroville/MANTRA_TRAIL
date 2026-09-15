@@ -120,6 +120,14 @@ class Store(context: Context) {
     fun setCollapsed(section: String, value: Boolean) =
         prefs.edit().putBoolean("collapsed-$section", value).apply()
 
+    /**
+     * Which of the compass's three states T last left it in: 0 dark, 1 night, 2 off. A number
+     * rather than a name because it is cycled, and cycling a number is one modulo.
+     */
+    var compassMode: Int
+        get() = prefs.getInt(KEY_COMPASS, 2).coerceIn(0, 2)
+        set(v) = prefs.edit().putInt(KEY_COMPASS, v.coerceIn(0, 2)).apply()
+
     /** The colour a loaded track is drawn in, as an ARGB value. */
     var trackColour: Long
         get() = prefs.getLong(KEY_TRACK_COLOUR, 0xFF34D399)
@@ -142,6 +150,7 @@ class Store(context: Context) {
         private const val KEY_LAYER = "layer"
         private const val KEY_KEYS = "keys"
         private const val KEY_TRACK_COLOUR = "trackColour"
+        private const val KEY_COMPASS = "compassMode"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_EXPORT_NAME = "exportName"

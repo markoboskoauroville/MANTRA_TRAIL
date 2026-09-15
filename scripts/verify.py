@@ -395,16 +395,22 @@ check("the track list is loaded rather than read during composition",
 check("speed is on the top line",
       "Geo.formatSpeed(fix?.speedMs)" in screens and "fun formatSpeed" in (MAIN / "Geo.kt").read_text(),
       "kilometres an hour, a tenth at walking pace")
-check("T is a transparent compass over the map and nothing else",
-      "private fun CompassFace" in screens and "CompassDial(heading, full = true, faint = true)" in screens
-      and "BubbleVial" not in screens,
-      "edge to edge, with the map showing through, and no second mode to choose")
+check("T turns the compass through dark, night and off",
+      "compass = (compass + 1) % 3" in screens and "store.compassMode" in screens,
+      "dark ink for a pale map, light ink for a dark one, and off for neither")
+check("the compass is an overlay with no window of its own",
+      "private fun CompassOverlay" in screens and "BubbleVial" not in screens,
+      "edge to edge, half transparent, the map showing through")
+check("the lock is shown rather than announced",
+      'Trail.say("Locked to the middle")' not in screens
+      and 'Trail.say("The map is free again")' not in screens,
+      "the mark's centre fills; a line of text for a drawn state is text over the map")
 check("the bubble level is gone from the app, not merely from the screen",
       not (MAIN / "Level.kt").exists() and "Level." not in (MAIN / "Sensors.kt").read_text()
       and "calibration" not in (MAIN / "Store.kt").read_text(),
       "the file, the sensor, the calibration and the tests all left together")
-check("the compass is a window of its own, one key away",
-      "private fun CompassFace" in screens and 'glyph = "T"' in screens,
+check("the compass is one key away",
+      "private fun CompassOverlay" in screens and 'glyph = "T"' in screens,
       "over the map, not in the settings")
 
 
