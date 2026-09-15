@@ -108,6 +108,8 @@ fun TrailApp(
     onDeleteTrack: (java.io.File) -> Unit,
     onExportTrack: (java.io.File) -> Unit,
     onShowTrack: (java.io.File) -> Unit,
+    serverStatus: String,
+    onCheckServer: () -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
