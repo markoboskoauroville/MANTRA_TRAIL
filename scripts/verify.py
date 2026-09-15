@@ -201,9 +201,9 @@ check("the workflow uses no key secret",
 check("no button pre-fetches anybody's tiles",
       'glyph = "CH"' not in screens and not (MAIN / "Caching.kt").exists(),
       "the key and the arithmetic behind it are both gone")
-check("the credit is on the map wherever the licence requires it",
-      "val creditOnMap" in layers and "layer.creditOnMap" in screens,
-      "Thunderforest and Google carry theirs; the offline file's sits in settings")
+check("the credits are gathered in settings, not printed over the map",
+      "creditOnMap: Boolean get() = false" in layers and "map credits" in screens,
+      "one block at the bottom of the settings face")
 
 # WHAT THE PHONE SHOWED ON 15.9.2026, TURNED INTO CHECKS.
 # This check said "no filled surface over the map" until the phone showed that a shadow alone is
@@ -221,9 +221,8 @@ check("an empty line takes no height at all",
       "drawn only when there is something in them, rather than at zero opacity")
 # Reversed on 15.9.2026 after reading Thunderforest's terms: the attribution may not be removed
 # from an app. One dim line, on the fetched layers only, guarded by creditOnMap.
-check("the fetched layers carry their credit on the map",
-      "layer.creditOnMap" in map_screen and "layer.attribution" in map_screen,
-      "one dim line, and only where a licence demands it")
+check("no credit is printed over the map",
+      "attribution" not in map_screen, "the map screen carries none of them")
 
 # The map drew halfway because mapsforge renders a SQUARE frame buffer by default: two and a half
 # screens of tiles on a tall phone, thrown away at every zoom.
@@ -265,7 +264,7 @@ check("the tile cache holds more than one screenful",
 check("the app asks for the large heap a country file at street zoom needs",
       'android:largeHeap="true"' in mf, "present")
 check("the zoom is on the screen, so a fault can be reported with a number",
-      'Label("z${zoom}"' in screens, "present on the top line")
+      'Label("z$zoom"' in screens, "present on the top line, beside the map's name")
 
 
 # THE RACE THAT KEPT THE MAP BLANK FROM v6 TO v10. The first draw ran from an effect that fires
@@ -320,6 +319,14 @@ check("the map key skips what cannot draw",
       "fun nextUsable" in screens, "a press that does nothing is not a press")
 check("a blank offline map explains itself at the zoom it goes blank",
       "emptyHere()" in screens, "the file is asked, not the user")
+
+
+# The map's name shares the top line with the coordinates (15.9.2026), so the line must not clip.
+check("the map name is on the top line",
+      "Label(layer.name, Paint.Amber" in screens,
+      "next to the zoom, where the key beside it says which family it is")
+check("the scale bar is gone", "mapScaleBar.isVisible = false" in canvas_src,
+      "the zoom number says the same thing in five characters")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

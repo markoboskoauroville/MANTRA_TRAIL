@@ -182,7 +182,7 @@ fun TrailApp(
             Column(
                 Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding(),
             ) {
-                FixLine(fix, zoom)
+                FixLine(fix, zoom, layer)
             }
 
             Column(
@@ -192,13 +192,6 @@ fun TrailApp(
                 // A line with nothing in it takes no room at all now. It used to be drawn at zero
                 // opacity, which is invisible but still occupies its height — and with a
                 // background behind the column, that height was a shaded band over the map.
-                // THE CREDIT IS BACK ON THE MAP, and only where it has to be. Thunderforest do not
-                // permit removing their attribution or OpenStreetMap's from an app, so the layers
-                // whose tiles we fetch carry one dim line. The offline file does not: its credit
-                // sits in settings, where it is read once.
-                if (layer.creditOnMap) {
-                    Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
-                }
                 if (net != null) StatusLine(net)
                 if (note != null) NoteLine(note)
                 if (recording) TrackLine(stats)
@@ -418,19 +411,22 @@ private fun CentreMark(hasFix: Boolean) {
 
 /** One line of numbers, and only the ones that decide something. */
 @Composable
-private fun FixLine(fix: Fix?, zoom: Int) {
+private fun FixLine(fix: Fix?, zoom: Int, layer: MapLayer) {
     Panel {
         Row(
             Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = GAP, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 13)
-            Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 13)
-            Label(fix?.accuracyM?.let { "±${it.toInt()} m" } ?: "± -", accuracyInk(fix?.accuracyM), size = 13)
-            Label(fix?.ele?.let { "${it.toInt()} m" } ?: "- m", ink(fix?.ele != null), size = 13)
-            // The zoom is on screen because a map that fails at one zoom and not another cannot
-            // be reported without the number, and "it disappeared" is not a number.
-            Label("z${zoom}", Paint.Dim, size = 13)
+            // ONE LINE, AND THE MAP'S NAME IS ON IT (15.9.2026). Everything here went to 11sp to
+            // make the room rather than anything being dropped: about 55 monospace characters fit
+            // across a 390 px phone, and this is fifty. The name carries no family — the key just
+            // below says THU or GOO — so "Thunderforest Landscape" reads "Landscape" here.
+            Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 11)
+            Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 11)
+            Label(fix?.accuracyM?.let { "±${it.toInt()}m" } ?: "±-", accuracyInk(fix?.accuracyM), size = 11)
+            Label(fix?.ele?.let { "${it.toInt()}m" } ?: "-m", ink(fix?.ele != null), size = 11)
+            Label("z$zoom", Paint.Dim, size = 11)
+            Label(layer.name, Paint.Amber, size = 11)
         }
     }
 }
@@ -646,9 +642,6 @@ private fun SettingsFace(
                 size = 9,
                 align = TextAlign.Start,
             )
-            SettingRow("map credits", current.attribution, {
-                Trail.say(current.attribution)
-            })
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
@@ -668,6 +661,13 @@ private fun SettingsFace(
                 align = TextAlign.Start,
             )
             Label("Mantra Trail v$version", Paint.Dim, size = 10)
+
+            // EVERY CREDIT, IN ONE PLACE, AT THE VERY BOTTOM. Off the map, where they were in the
+            // way of the ground he is walking on, and here where they can be read once.
+            Label("map credits", Paint.Dim, size = 11, align = TextAlign.Start)
+            Layers.ALL.map { it.attribution }.distinct().forEach {
+                Label(it, Paint.Dim, size = 9, align = TextAlign.Start)
+            }
         }
     }
 }

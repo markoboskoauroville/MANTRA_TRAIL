@@ -570,14 +570,15 @@ class CoreTest {
     }
 
     @Test fun theOneButtonTurnsThroughFourFamiliesAndComesBack() {
-        var layer = Layers.OFFLINE
+        // Starts where the list starts, which is Thunderforest now, not the offline map.
+        var layer = Layers.ALL.first()
         val seen = ArrayList<MapLayer.Family>()
         repeat(4) {
             seen.add(layer.family)
             layer = Layers.firstOf(Layers.nextFamily(layer))
         }
         assertEquals(MapLayer.Family.entries.toList(), seen)
-        assertEquals(MapLayer.Family.OFFLINE, layer.family)
+        assertEquals(Layers.ALL.first().family, layer.family)
     }
 
     @Test fun everyFamilyHasAtLeastOneMap() {
@@ -601,6 +602,8 @@ class CoreTest {
         Layers.of(MapLayer.Family.THUNDERFOREST).forEach {
             assertTrue(it.label, it.label.startsWith("Thunderforest"))
             assertEquals(it.id, "THU", it.short)
+            // The name on the map line carries no family: the key beside it already says THU.
+            assertFalse(it.name, it.name.contains("Thunderforest"))
         }
     }
 
@@ -608,6 +611,7 @@ class CoreTest {
         Layers.of(MapLayer.Family.GOOGLE).forEach {
             assertTrue(it.label, it.label.startsWith("Google"))
             assertEquals(it.id, "GOO", it.short)
+            assertFalse(it.name, it.name.contains("Google"))
         }
     }
 
@@ -619,6 +623,17 @@ class CoreTest {
 
     @Test fun everyShortNameFitsTheKey() {
         Layers.ALL.forEach { assertTrue("${it.id}: ${it.short}", it.short.length <= 4) }
+    }
+
+    @Test fun everyNameFitsTheLineItSharesWithTheCoordinates() {
+        // The top line is about 55 monospace characters at 11sp on a 390 px phone, and the rest
+        // of it is 38. Fourteen is the most a name may take without something clipping.
+        Layers.ALL.forEach { assertTrue("${it.id}: ${it.name}", it.name.length <= 14) }
+    }
+
+    @Test fun thunderforestLeadsTheSettingsList() {
+        assertEquals(MapLayer.Family.THUNDERFOREST, Layers.ALL.first().family)
+        assertEquals(MapLayer.Family.THUNDERFOREST, MapLayer.Family.entries.first())
     }
 
     @Test fun noLayerCarriesAKeyOfItsOwn() {
@@ -826,13 +841,17 @@ class CoreTest {
         assertNull(Keys.providerOf("A1B2C3D4" + "E5F60718" + "293A4B5C" + "6D7E8F90"))
     }
 
-    @Test fun everyLayerThatFetchesTilesCarriesItsCreditOnTheMap() {
-        // Thunderforest do not permit removing their attribution or OpenStreetMap's from an app.
-        Layers.ALL.filter { it.kind != LayerKind.VECTOR_FILE }.forEach {
-            assertTrue(it.id, it.creditOnMap)
+    @Test fun noCreditIsPrintedOverTheMapAndEveryOneStillExists() {
+        // His decision, 15.9.2026: the credits live at the bottom of settings, not on the ground
+        // he is walking on. What must not happen is a credit disappearing altogether.
+        Layers.ALL.forEach {
+            assertFalse(it.id, it.creditOnMap)
             assertTrue(it.id, it.attribution.isNotBlank())
         }
-        assertFalse(Layers.OFFLINE.creditOnMap)
+        val credits = Layers.ALL.map { it.attribution }.distinct()
+        assertTrue(credits.any { it.contains("Thunderforest") })
+        assertTrue(credits.any { it.contains("OpenStreetMap") })
+        assertTrue(credits.any { it.contains("Google") })
     }
 
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {

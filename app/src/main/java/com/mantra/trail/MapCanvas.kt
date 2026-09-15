@@ -96,7 +96,9 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // that is never drawn.
         model.displayModel.setFixedTileSize(256)
         setBuiltInZoomControls(false)
-        mapScaleBar.isVisible = true
+        // No scale bar: he does not use it and it sits in the corner of every screenshot
+        // (15.9.2026). The zoom number on the top line says the same thing in five characters.
+        mapScaleBar.isVisible = false
         model.mapViewPosition.setCenter(LatLong(store.lastLat, store.lastLon))
         model.mapViewPosition.zoomLevel = store.lastZoom.toByte()
     }
