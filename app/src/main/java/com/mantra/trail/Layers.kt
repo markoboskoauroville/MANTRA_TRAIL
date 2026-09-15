@@ -63,7 +63,7 @@ data class MapLayer(
      * was last chosen in settings. Four presses to come full circle, and every style still one
      * press away in the list.
      */
-    enum class Family { THUNDERFOREST, OFFLINE, OSM, GOOGLE }
+    enum class Family { THUNDERFOREST, SERVER, OFFLINE, OSM, GOOGLE }
 
     enum class GoogleView(val mapType: String, val overlayRoads: Boolean) {
         NORMAL("roadmap", false),
@@ -94,6 +94,27 @@ data class MapLayer(
 }
 
 object Layers {
+
+    /**
+     * THE MAP SERVER ON THIS PHONE (MANTRA_MAP_SERVER, 15.9.2026). It renders the offline files
+     * and hands them over as ordinary tiles, so an offline map arrives here by exactly the route
+     * Thunderforest does: a URL. The map it serves is named in settings; 127.0.0.1 never leaves
+     * the phone, so this works with the radio off.
+     */
+    val SERVER = MapLayer(
+        family = MapLayer.Family.SERVER,
+        id = "server",
+        label = "Map server on this phone",
+        name = "Server",
+        short = "SRV",
+        kind = LayerKind.RASTER_XYZ,
+        offline = MapLayer.Offline.COMPLETE,
+        attribution = "© OpenStreetMap contributors, rendered by Mantra Map Server",
+        url = "http://127.0.0.1:8088/tiles/{map}/{z}/{x}/{y}.png",
+        maxZoom = 22,
+    )
+
+    const val SERVER_PORT = 8088
 
     val OFFLINE = MapLayer(
         family = MapLayer.Family.OFFLINE,
@@ -186,7 +207,7 @@ object Layers {
      * one he zooms furthest and reads best (15.9.2026); the families follow in the same order the
      * map key turns through them.
      */
-    val ALL: List<MapLayer> = THUNDERFOREST_ALL + listOf(OFFLINE, OSM) + GOOGLE_ALL
+    val ALL: List<MapLayer> = THUNDERFOREST_ALL + listOf(SERVER, OFFLINE, OSM) + GOOGLE_ALL
 
     fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
 
@@ -208,12 +229,16 @@ object Layers {
      * null when the layer needs an auth it has not been given — a URL with an empty key in it
      * would fetch four hundred refusals and look like a dead server.
      */
+    /** The name of the map the local server should be asked for, filled in at request time. */
+    var serverMapName: String = "croatia"
+
     fun tileUrl(layer: MapLayer, zoom: Int, x: Int, y: Int, auth: String? = null, key: String? = null): String? {
         val template = layer.url ?: return null
         if (layer.kind == LayerKind.VECTOR_FILE) return null
         if (layer.provider != null && (key.isNullOrEmpty())) return null
         if (layer.kind == LayerKind.GOOGLE_TILES && auth.isNullOrEmpty()) return null
         return template
+            .replace("{map}", serverMapName)
             .replace("{z}", zoom.toString())
             .replace("{x}", x.toString())
             .replace("{y}", y.toString())

@@ -106,6 +106,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
     private var baseLayer: Layer? = null
     private var tileCache: TileCache? = null
     private var trackLine: Polyline? = null
+    private var shownLine: Polyline? = null
     private var here: Circle? = null
     private var accuracyRing: Circle? = null
     private var mapFile: MapFile? = null
@@ -252,6 +253,34 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * drawn to scale, because a number in a corner is read as a score and a circle is read as
      * what it is: the ground the fix cannot tell apart.
      */
+    /**
+     * A SAVED WALK, DRAWN IN THE COLOUR HE CHOSE (15.9.2026). A separate line from the one being
+     * recorded and a separate colour, because both on screen at once is the point: yesterday's
+     * route under today's position.
+     */
+    fun showSavedTrack(points: List<Fix>, colour: Long) {
+        shownLine?.let { view.layerManager.layers.remove(it) }
+        shownLine = null
+        if (points.size < 2) {
+            view.repaint()
+            return
+        }
+        val line = Polyline(paint(colour, 6f, Style.STROKE), factory)
+        points.forEach { line.addPoint(LatLong(it.lat, it.lon)) }
+        view.layerManager.layers.add(line)
+        shownLine = line
+        // Put the map where the walk is: a track drawn in Velebit is invisible from Zagreb.
+        val middle = points[points.size / 2]
+        view.model.mapViewPosition.setCenter(LatLong(middle.lat, middle.lon))
+        view.repaint()
+    }
+
+    fun clearSavedTrack() {
+        shownLine?.let { view.layerManager.layers.remove(it) }
+        shownLine = null
+        view.repaint()
+    }
+
     fun drawPosition(fix: Fix?) {
         here?.let { view.layerManager.layers.remove(it) }
         accuracyRing?.let { view.layerManager.layers.remove(it) }
@@ -275,6 +304,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun restoreOverlays() {
+        shownLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         trackLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         here?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }

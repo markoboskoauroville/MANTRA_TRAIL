@@ -13,7 +13,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -37,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false
+    private var serverStatus by mutableStateOf("press to check")
 
     private val askLocation = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -138,6 +141,21 @@ class MainActivity : ComponentActivity() {
         exportLastTrack()
     }
 
+    /** Read a saved walk back and draw it over the map in the colour he chose. */
+    private fun showTrack(file: java.io.File) {
+        lifecycleScope.launch {
+            val points = withContext(Dispatchers.IO) {
+                runCatching { GpxRead.points(file.readText()) }.getOrDefault(emptyList())
+            }
+            if (points.isEmpty()) {
+                Trail.say("No points could be read from ${Tracks.displayName(file.name)}")
+                return@launch
+            }
+            canvas?.showSavedTrack(points, store.trackColour)
+            Trail.say("${Tracks.displayName(file.name)}: ${points.size} points, ${Geo.formatDistance(TrackMath.stats(points).distanceM)}")
+        }
+    }
+
     private fun trackFolder(): java.io.File = java.io.File(filesDir, "tracks").apply { mkdirs() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -148,6 +166,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         AndroidGraphicFactory.createInstance(application)
         store = Store(this)
+        Layers.serverMapName = store.serverMap
         locator = Locator(this)
         sensors = Sensors(this).apply { calibration = store.calibration() }
 
@@ -165,6 +184,8 @@ class MainActivity : ComponentActivity() {
                 onChooseExportFolder = { pickExportFolder.launch(null) },
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
                 onDownloadMap = ::downloadOfflineMap,
+                serverStatus = serverStatus,
+                onCheckServer = ::checkServer,
                 onOpenMapLink = ::openMapLink,
                 onZeroLevel = ::zeroLevel,
                 onBare = ::setFullScreen,
@@ -173,6 +194,7 @@ class MainActivity : ComponentActivity() {
                 onRenameTrack = ::renameTrack,
                 onDeleteTrack = ::deleteTrack,
                 onExportTrack = ::exportTrack,
+                onShowTrack = ::showTrack,
             )
         }
 
@@ -258,6 +280,24 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Layers.OfflineDownload.URL)))
         } catch (e: Exception) {
             Trail.say("No browser answered: ${Layers.OfflineDownload.URL}")
+        }
+    }
+
+    /** Ask the map server on this phone what it is holding, and remember the answer. */
+    private fun checkServer() {
+        serverStatus = "asking…"
+        lifecycleScope.launch {
+            val answer = ServerStatus.ask()
+            serverStatus = answer.text
+            if (answer.running && answer.maps.isNotEmpty()) {
+                // The first map it holds becomes the one this app asks for, unless one was chosen.
+                if (answer.maps.none { it == store.serverMap }) {
+                    store.serverMap = answer.maps.first()
+                }
+                Layers.serverMapName = store.serverMap
+            }
+            Trail.say(answer.text)
+            UiTick.bump()
         }
     }
 

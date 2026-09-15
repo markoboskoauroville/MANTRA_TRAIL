@@ -553,9 +553,23 @@ class CoreTest {
 
     // --- The layers -----------------------------------------------------------------------------
 
-    @Test fun thereAreSixteenLayersAndTheyHaveDistinctIds() {
-        assertEquals(16, Layers.ALL.size)
-        assertEquals(16, Layers.ALL.map { it.id }.toSet().size)
+    @Test fun everyLayerHasItsOwnId() {
+        // The count moves whenever a family is added; what must never move is that two maps
+        // share an id, because the id is what the settings list and the memory both key on.
+        assertEquals(Layers.ALL.size, Layers.ALL.map { it.id }.toSet().size)
+        assertTrue(Layers.ALL.size >= 17)
+    }
+
+    @Test fun theLocalServerIsAskedForTheMapThatIsChosen() {
+        Layers.serverMapName = "velebit"
+        val url = Layers.tileUrl(Layers.SERVER, 14, 100, 200)!!
+        assertTrue(url, url.startsWith("http://127.0.0.1:8088/tiles/velebit/14/100/200"))
+        Layers.serverMapName = "croatia"
+    }
+
+    @Test fun theServerLayerIsCompletelyOfflineAndNeedsNoKey() {
+        assertEquals(MapLayer.Offline.COMPLETE, Layers.SERVER.offline)
+        assertNull(Layers.SERVER.provider)
     }
 
     @Test fun thunderforestContributesAllTenOfItsStyles() {
@@ -569,11 +583,11 @@ class CoreTest {
         }
     }
 
-    @Test fun theOneButtonTurnsThroughFourFamiliesAndComesBack() {
+    @Test fun theOneButtonTurnsThroughEveryFamilyAndComesBack() {
         // Starts where the list starts, which is Thunderforest now, not the offline map.
         var layer = Layers.ALL.first()
         val seen = ArrayList<MapLayer.Family>()
-        repeat(4) {
+        repeat(MapLayer.Family.entries.size) {
             seen.add(layer.family)
             layer = Layers.firstOf(Layers.nextFamily(layer))
         }
@@ -974,6 +988,83 @@ class CoreTest {
         assertEquals("240 kB", Tracks.formatSize(240_000))
         assertEquals("1.2 MB", Tracks.formatSize(1_200_000))
         assertEquals("900 B", Tracks.formatSize(900))
+    }
+
+    // --- reading a saved walk back --------------------------------------------------------------
+
+    @Test fun ourOwnFileReadsBackToTheSamePoints() {
+        // The two halves must agree: what Gpx writes, GpxRead reads.
+        val written = listOf(
+            Fix(45.815, 15.9819, 158.4, 1_000L, 4f),
+            Fix(45.816, 15.9820, 160.0, 2_000L, 4f),
+        )
+        val text = Gpx.whole("Velebit", written, 0L)
+        val read = GpxRead.points(text)
+        assertEquals(2, read.size)
+        assertEquals(45.815, read[0].lat, 1e-6)
+        assertEquals(15.9819, read[0].lon, 1e-6)
+        assertEquals(158.4, read[0].ele!!, 0.05)
+        assertEquals("Velebit", GpxRead.name(text))
+    }
+
+    @Test fun aFileWithTheAttributesTheOtherWayRoundStillReads() {
+        val text = """<gpx><trk><trkseg>
+            <trkpt lon="15.98" lat="45.81"><ele>100</ele></trkpt>
+            </trkseg></trk></gpx>"""
+        val read = GpxRead.points(text)
+        assertEquals(1, read.size)
+        assertEquals(45.81, read[0].lat, 1e-6)
+        assertEquals(15.98, read[0].lon, 1e-6)
+    }
+
+    @Test fun aWholeFileOnOneLineReads() {
+        val text = "<gpx><trkpt lat=\"45.1\" lon=\"15.1\"/><trkpt lat=\"45.2\" lon=\"15.2\"/></gpx>"
+        assertEquals(2, GpxRead.points(text).size)
+    }
+
+    @Test fun aTrackCutOffByAFlatBatteryYieldsWhatItHas() {
+        val text = """<gpx><trk><trkseg>
+            <trkpt lat="45.1" lon="15.1"><ele>100</ele></trkpt>
+            <trkpt lat="45.2" lon="15.2"><ele>1"""
+        val read = GpxRead.points(text)
+        assertEquals(2, read.size)
+        assertEquals(45.2, read[1].lat, 1e-6)
+    }
+
+    @Test fun extensionsFromOtherProgrammesAreIgnored() {
+        val text = """<gpx><trkpt lat="45.1" lon="15.1">
+            <ele>100</ele><time>2026-09-15T10:00:00Z</time>
+            <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>141</gpxtpx:hr>
+            </gpxtpx:TrackPointExtension></extensions></trkpt></gpx>"""
+        val read = GpxRead.points(text)
+        assertEquals(1, read.size)
+        assertEquals(100.0, read[0].ele!!, 0.01)
+        assertTrue(read[0].timeMs > 0)
+    }
+
+    @Test fun aCoordinateThatIsNotOnEarthIsNotDrawn() {
+        val text = """<gpx><trkpt lat="91.0" lon="15.1"/><trkpt lat="45.1" lon="200.0"/>
+            <trkpt lat="45.1" lon="15.1"/></gpx>"""
+        assertEquals(1, GpxRead.points(text).size)
+    }
+
+    @Test fun aFileWithNoPointsIsEmptyRatherThanAnError() {
+        assertTrue(GpxRead.points("<gpx></gpx>").isEmpty())
+        assertTrue(GpxRead.points("").isEmpty())
+        assertTrue(GpxRead.points("this is not xml at all").isEmpty())
+    }
+
+    @Test fun aTimeInAFormatNobodyExpectedIsZeroRatherThanAThrow() {
+        assertEquals(0L, GpxRead.parseTime("yesterday afternoon"))
+        assertEquals(0L, GpxRead.parseTime(""))
+        assertTrue(GpxRead.parseTime("2026-09-15T10:00:00Z") > 0)
+    }
+
+    @Test fun aNameTheAppMadeIsToldFromANameHeChose() {
+        assertTrue(Tracks.isDefaultName("2026-09-15 11:30 Track"))
+        assertFalse(Tracks.isDefaultName("Velebit sjever"))
+        assertFalse(Tracks.isDefaultName("2026-09-15 11:30 Velebit"))
+        assertFalse(Tracks.isDefaultName(""))
     }
 
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {

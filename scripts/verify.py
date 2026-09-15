@@ -10,11 +10,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 130
+TEST_FLOOR = 140
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
-PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Keys.kt", "Tracks.kt"]
+PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "GpxRead.kt", "Level.kt", "Layers.kt", "Keys.kt", "Tracks.kt"]
 
 failures, checks = [], []
 
@@ -359,6 +359,29 @@ check("the settings row names the folder rather than saying chosen",
       "store.exportFolderName" in screens, "Documents/Tracks, not the word chosen")
 check("the saved message says where it went",
       "Track saved to" in activity, "a message that can be checked rather than trusted")
+
+
+# WHAT HE ASKED FOR ON 15.9.2026, AFTER THE MAP SERVER LANDED.
+check("the rename field is empty only when the app made the name",
+      "Tracks.isDefaultName(suggested)" in screens,
+      "his own name comes back for editing; a date does not have to be deleted first")
+check("touching the field stops the countdown, not just typing in it",
+      "onFocusChanged { if (it.isFocused) touched = true }" in screens, "the first tap is enough")
+check("the position can be locked to the middle of the screen",
+      "if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)" in screens,
+      "one press holds it, the next lets the map go")
+check("choosing a map closes the settings and shows it",
+      "settings = false\n                    scope.launch { showLayer(store, picked) }" in screens,
+      "one decision, not two")
+check("the map families fold, and the fold is remembered",
+      "store.collapsed(key)" in screens and "store.setCollapsed(key, folded)" in screens,
+      "between sessions, so nothing has to be folded away twice")
+check("a saved walk can be drawn on the map in a chosen colour",
+      "showSavedTrack" in canvas_src and "TRACK_COLOURS" in screens,
+      "five colours, and the shown line is separate from the recording line")
+check("the settings say whether the map server is answering",
+      "map server on this phone" in screens and "ServerStatus.ask" in activity,
+      "and which maps it holds")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

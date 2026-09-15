@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -72,6 +74,9 @@ private val KEY = 46.dp
 /** The one size for the marks: the centre of the map, the where key and the record circle. */
 private val MARK = 22.dp
 
+/** The five a line can be drawn in: green, amber, red, blue, white. */
+private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
+
 /** Bumped when a picker or a download changes something a row shows. */
 object UiTick {
     var n by mutableIntStateOf(0)
@@ -102,12 +107,15 @@ fun TrailApp(
     onRenameTrack: (java.io.File, String) -> Unit,
     onDeleteTrack: (java.io.File) -> Unit,
     onExportTrack: (java.io.File) -> Unit,
+    onShowTrack: (java.io.File) -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
+    // LOCKED TO THE MIDDLE (15.9.2026). One press centres and holds; the next lets the map go.
+    var follow by remember { mutableStateOf(false) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -158,6 +166,7 @@ fun TrailApp(
             store = store,
             fix = fix,
             line = Trail.line.collectAsState().value,
+            follow = follow,
             onCanvas = onCanvas,
             onReady = { ready = true },
         )
@@ -215,7 +224,13 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
-                    MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
+                    MarkKey(
+                        lit = follow,
+                        onClick = {
+                            follow = !follow
+                            onWhereAmI()
+                        },
+                    ) { hasFix -> CentreMark(hasFix, locked = follow) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
                     // ONE BUTTON FOR THE MAP. It says which one is on and turns to the next.
                     Key(
@@ -257,6 +272,16 @@ fun TrailApp(
         if (showTracks) {
             TracksFace(
                 tracks = tracks(),
+                colour = store.trackColour,
+                onColour = { store.trackColour = it },
+                onShow = { file ->
+                    showTracks = false
+                    onShowTrack(file)
+                },
+                onHide = {
+                    CanvasHolder.canvas?.clearSavedTrack()
+                    Trail.say(null)
+                },
                 onRename = onRenameTrack,
                 onDelete = onDeleteTrack,
                 onExport = onExportTrack,
@@ -274,8 +299,13 @@ fun TrailApp(
                     layer = picked
                     store.layerId = picked.id
                     store.rememberStyle(picked)
+                    // CHOOSING A MAP CLOSES THE SETTINGS AND SHOWS IT (15.9.2026). Picking one and
+                    // then having to find the way out is two decisions where there was one.
+                    settings = false
                     scope.launch { showLayer(store, picked) }
                 },
+                serverStatus = serverStatus,
+                onCheckServer = onCheckServer,
                 onZero = onZeroLevel,
                 onChooseMapFile = onChooseMapFile,
                 onChooseExportFolder = onChooseExportFolder,
@@ -301,6 +331,7 @@ private fun MapSurface(
     store: Store,
     fix: Fix?,
     line: List<Fix>,
+    follow: Boolean,
     onCanvas: (MapCanvas) -> Unit,
     onReady: () -> Unit,
 ) {
@@ -324,9 +355,10 @@ private fun MapSurface(
         },
     )
 
-    LaunchedEffect(line.size, fix?.timeMs) {
+    LaunchedEffect(line.size, fix?.timeMs, follow) {
         CanvasHolder.canvas?.drawTrack(line)
         CanvasHolder.canvas?.drawPosition(fix)
+        if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)
     }
 }
 
@@ -405,10 +437,19 @@ private suspend fun attempt(canvas: MapCanvas, store: Store, layer: MapLayer): S
  * centre, at the same size as the red circle beside it, on nothing.
  */
 @Composable
-private fun RowScope.MarkKey(onClick: () -> Unit, mark: @Composable (Boolean) -> Unit) {
+private fun RowScope.MarkKey(
+    lit: Boolean = false,
+    onClick: () -> Unit,
+    mark: @Composable (Boolean) -> Unit,
+) {
     val hasFix = Trail.fix.collectAsState().value != null
     Box(
-        Modifier.weight(1f).height(KEY).clickable(onClick = onClick),
+        Modifier
+            .weight(1f)
+            .height(KEY)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (lit) Paint.Amber.copy(alpha = 0.25f) else Color.Transparent)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         mark(hasFix)
@@ -436,11 +477,14 @@ object CanvasHolder {
  * fir, and no single colour does that on its own.
  */
 @Composable
-private fun CentreMark(hasFix: Boolean) {
+private fun CentreMark(hasFix: Boolean, locked: Boolean = false) {
     val ink = if (hasFix) Paint.AmberBright else Paint.Amber
     Canvas(Modifier.size(MARK)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension / 2f - 2f
+        // Locked to the middle: the ring gains a second ring, so the state is on the mark itself
+        // and not only on the key behind it.
+        if (locked) drawCircle(ink, radius = r * 0.55f, center = c, style = Stroke(1.dp.toPx()))
         drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(3.5.dp.toPx()))
         drawCircle(ink, radius = r, center = c, style = Stroke(2.dp.toPx()))
         drawCircle(Paint.Ground, radius = 2.4.dp.toPx(), center = c)
@@ -493,6 +537,15 @@ private fun TrackLine(stats: TrackStats) {
             Label("${stats.points} pts", Paint.Sand, size = 13)
         }
     }
+}
+
+/** The four families, named as somebody would say them. */
+private fun familyLabel(family: MapLayer.Family): String = when (family) {
+    MapLayer.Family.THUNDERFOREST -> "Thunderforest"
+    MapLayer.Family.SERVER -> "Map server on this phone"
+    MapLayer.Family.OFFLINE -> "Offline file"
+    MapLayer.Family.OSM -> "OpenStreetMap"
+    MapLayer.Family.GOOGLE -> "Google"
 }
 
 /** What the network is doing. Absent when nothing is moving and nothing is being waited for. */
@@ -578,7 +631,10 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
  */
 @Composable
 private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String) -> Unit) {
-    var text by remember(suggested) { mutableStateOf(suggested) }
+    // EMPTY WHEN THE APP MADE THE NAME, FULL WHEN HE DID (15.9.2026). Nobody wants to delete a
+    // date before they can type, and nobody wants to retype a name they already chose.
+    val appNamed = Tracks.isDefaultName(suggested)
+    var text by remember(suggested) { mutableStateOf(if (appNamed) "" else suggested) }
     var touched by remember(suggested) { mutableStateOf(false) }
     var secondsLeft by remember(suggested) { mutableIntStateOf(3) }
 
@@ -618,6 +674,14 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
                     touched = true
                     text = it
                 },
+                decorationBox = { field ->
+                    Box {
+                        if (text.isEmpty()) {
+                            Label(suggested, Paint.Dim, size = 15, align = TextAlign.Start)
+                        }
+                        field()
+                    }
+                },
                 singleLine = true,
                 textStyle = androidx.compose.ui.text.TextStyle(
                     color = Paint.Sand,
@@ -629,6 +693,10 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(Paint.Veil)
+                    // THE CLOCK STOPS AT THE FIRST TOUCH, not at the first character. Tapping the
+                    // field is somebody saying they intend to type, and three seconds is not
+                    // enough to type a name in.
+                    .onFocusChanged { if (it.isFocused) touched = true }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
@@ -640,14 +708,14 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
                         .background(Paint.Veil)
                         .clickable(onClick = onKeep),
                     contentAlignment = Alignment.Center,
-                ) { Label("keep the date", Paint.Sand, size = 12) }
+                ) { Label(if (appNamed) "keep the date" else "leave it", Paint.Sand, size = 12) }
                 Box(
                     Modifier
                         .weight(1f)
                         .height(44.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Paint.Amber)
-                        .clickable { onRename(text) },
+                        .clickable { if (text.isNotBlank()) onRename(text) else onKeep() },
                     contentAlignment = Alignment.Center,
                 ) { Label("save this name", Paint.Ground, size = 12) }
             }
@@ -663,9 +731,13 @@ private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String
 @Composable
 private fun TracksFace(
     tracks: List<Tracks.TrackFile>,
+    colour: Long,
+    onColour: (Long) -> Unit,
     onRename: (java.io.File, String) -> Unit,
     onDelete: (java.io.File) -> Unit,
     onExport: (java.io.File) -> Unit,
+    onShow: (java.io.File) -> Unit,
+    onHide: () -> Unit,
     onClose: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
@@ -693,6 +765,26 @@ private fun TracksFace(
                 Label("No tracks yet. The red circle starts one.", Paint.Dim, size = 12)
             }
 
+            // THE COLOUR A SHOWN TRACK IS DRAWN IN. Five, because a walk drawn over a map needs to
+            // be told apart from the map, and which colour does that depends on the map.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                Label("line", Paint.Dim, size = 11)
+                TRACK_COLOURS.forEach { option ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(option))
+                            .clickable { onColour(option) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (option == colour) Label("✓", Paint.Ground, size = 12)
+                    }
+                }
+            }
+            Label("hide the shown track", Paint.Dim, size = 11, modifier = Modifier.clickable { onHide() })
+
             tracks.forEach { track ->
                 Column(
                     Modifier
@@ -706,6 +798,7 @@ private fun TracksFace(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Label(Tracks.formatSize(track.bytes), Paint.Dim, size = 11)
                         Label("rename", Paint.Amber, size = 12, modifier = Modifier.clickable { renaming = track })
+                        Label("show", Paint.Green, size = 12, modifier = Modifier.clickable { onShow(track.file) })
                         Label("export", Paint.Amber, size = 12, modifier = Modifier.clickable { onExport(track.file) })
                         Label(
                             text = if (confirming?.file == track.file) "sure? delete" else "delete",
@@ -750,6 +843,8 @@ private fun SettingsFace(
     current: MapLayer,
     version: String,
     onPick: (MapLayer) -> Unit,
+    serverStatus: String,
+    onCheckServer: () -> Unit,
     onZero: () -> Unit,
     onChooseMapFile: () -> Unit,
     onChooseExportFolder: () -> Unit,
@@ -825,48 +920,61 @@ private fun SettingsFace(
             }
             SettingRow("zero the level on this surface", "set it down first", onZero)
 
-            // The map, chosen the way one-of-many is always chosen (design-language.md 6), and
-            // grouped by family because sixteen chips in one block is a wall. Three to a row:
-            // more than that across a phone clips the words, so it stacks instead.
-            Layers.ALL.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-                    row.forEach { layer ->
-                        val chosen = layer.id == current.id
-                        val needsKey = layer.provider != null && store.key(layer.provider) == null
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (chosen) Paint.Amber else Paint.Veil)
-                                .alpha(if (needsKey) 0.55f else 1f)
-                                .clickable { onPick(layer) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Label(layer.label, if (chosen) Paint.Ground else Paint.Sand, size = 11)
+            // THE MAPS, IN FOLDING SECTIONS (15.9.2026). Seventeen chips in one block is a wall,
+            // and the fold state is remembered between sessions, because a section somebody
+            // closed yesterday is a section they do not want to close again every morning.
+            MapLayer.Family.entries.forEach { family ->
+                val key = family.name.lowercase()
+                var folded by remember(key) { mutableStateOf(store.collapsed(key)) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable {
+                            folded = !folded
+                            store.setCollapsed(key, folded)
+                        }
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Label(familyLabel(family), Paint.Sand, size = 12, align = TextAlign.Start)
+                    Label(if (folded) "▸ ${Layers.of(family).size}" else "▾", Paint.Amber, size = 12)
+                }
+                if (!folded) {
+                    Layers.of(family).chunked(3).forEach { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                            row.forEach { layer ->
+                                val chosen = layer.id == current.id
+                                val needsKey = layer.provider != null && store.key(layer.provider) == null
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (chosen) Paint.Amber else Paint.Veil)
+                                        .alpha(if (needsKey) 0.55f else 1f)
+                                        .clickable { onPick(layer) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Label(layer.name, if (chosen) Paint.Ground else Paint.Sand, size = 11)
+                                }
+                            }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
             }
 
-            SettingRow("download the offline map, ${Layers.OfflineDownload.LABEL}", mapState, onDownloadMap)
-            SettingRow("or choose a .map file", "picker", onChooseMapFile)
-            // The credits live here, not over the map. Baba, 15.9.2026: *"I don't want to see
-            // copyright OpenStreetMap in my first screen."* Both services require attribution to
-            // be shown; neither requires it to be shown on top of the map.
-            Label(
-                text = Layers.ALL.map { it.attribution }.distinct().joinToString(" · "),
-                colour = Paint.Dim,
-                size = 9,
-                align = TextAlign.Start,
-            )
+            // THE SERVER IS WHERE OFFLINE MAPS LIVE NOW. What was a download row is a status row:
+            // is it answering, and what is it holding. The downloading itself belongs to that app.
+            SettingRow("map server on this phone", serverStatus, onCheckServer)
+            SettingRow("or choose a .map file for the old offline layer", "picker", onChooseMapFile)
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })
-            SettingRow("open the map link in the browser", "mapsforge.org", onOpenMapLink)
-            // The address itself, in full, so it can be read off the screen and typed into a
-            // desktop browser if the phone is the wrong place to fetch 176 MB.
-            Label(Layers.OfflineDownload.URL, Paint.Dim, size = 9, align = TextAlign.Start)
             SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
             SettingRow("tracks: rename, export, delete", "$trackCount on the phone", onTracks)
             SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)

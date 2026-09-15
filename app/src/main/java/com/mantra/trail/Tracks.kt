@@ -48,6 +48,14 @@ object Tracks {
     /** The name shown in the manager: the file name without the extension. */
     fun displayName(fileName: String): String = fileName.removeSuffix(".gpx").removeSuffix(".GPX")
 
+    /**
+     * Whether a name is still the one the app made. It decides whether the rename field opens
+     * empty or opens with the name in it (15.9.2026): nobody wants to delete a date before they
+     * can type, and nobody wants to retype a name they already chose.
+     */
+    fun isDefaultName(name: String): Boolean =
+        Regex("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} Track$").matches(name.trim())
+
     data class TrackFile(val file: File, val name: String, val bytes: Long, val modifiedMs: Long)
 
     /** Everything in the folder that is a track, newest first. */
