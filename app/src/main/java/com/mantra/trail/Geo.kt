@@ -147,6 +147,27 @@ object Geo {
         else -> "$bytesPerSecond B/s"
     }
 
+    /**
+     * Speed in kilometres an hour, from the metres a second the fix carries.
+     *
+     * One decimal below ten, none above: walking pace is the difference between 4.3 and 5.1, and
+     * at thirty nobody cares about the tenth. A fix with no speed in it shows a dash rather than
+     * a zero, because standing still and not knowing are different things.
+     */
+    fun formatSpeed(metresPerSecond: Float?): String {
+        if (metresPerSecond == null || metresPerSecond.isNaN() || metresPerSecond < 0f) return "- km/h"
+        val kmh = metresPerSecond * 3.6
+        // Under half a kilometre an hour is a fix wandering while the phone stands still, not
+        // somebody walking, and 0.4 km/h on the screen would be a claim about the ground.
+        if (kmh < 0.5) return "0 km/h"
+        return if (kmh < 10.0) {
+            "${(kmh * 10).roundToInt() / 10.0} km/h"
+        } else {
+            "${kmh.roundToInt()} km/h"
+        }
+    }
+
+
     /** A duration as h:mm:ss, or mm:ss under an hour. */
     fun formatDuration(millis: Long): String {
         if (millis < 0) return "-"

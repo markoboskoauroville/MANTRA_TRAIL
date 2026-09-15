@@ -389,6 +389,15 @@ check("an export happens off the main thread and says so where he is looking",
 check("the track list is loaded rather than read during composition",
       "loaded = withContext(Dispatchers.IO) { tracks() }" in screens,
       "this is why changing the line colour was slow")
+check("speed is on the top line",
+      "Geo.formatSpeed(fix?.speedMs)" in screens and "fun formatSpeed" in (MAIN / "Geo.kt").read_text(),
+      "kilometres an hour, a tenth at walking pace")
+check("the tools can sit over the map, and the bubble leaves when they do",
+      "store.toolsOverMap" in screens and "if (!overMap) {" in screens,
+      "a level is read with the phone flat, which is not when anybody is navigating")
+check("the compass fills the width when it is over the map",
+      "CompassDial(heading, full = overMap" in screens and "fillMaxWidth().aspectRatio(1f)" in screens,
+      "edge to edge, with the map showing through")
 check("the tools are a window of their own, not a settings row",
       "private fun ToolsFace" in screens and 'glyph = "T"' in screens,
       "one key away, and they cover the map while they are open")

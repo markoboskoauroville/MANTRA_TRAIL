@@ -128,6 +128,11 @@ class Store(context: Context) {
     fun setCollapsed(section: String, value: Boolean) =
         prefs.edit().putBoolean("collapsed-$section", value).apply()
 
+    /** Whether the tools sit over the map rather than on their own ground. */
+    var toolsOverMap: Boolean
+        get() = prefs.getBoolean(KEY_TOOLS_OVER_MAP, false)
+        set(v) = prefs.edit().putBoolean(KEY_TOOLS_OVER_MAP, v).apply()
+
     /** The colour a loaded track is drawn in, as an ARGB value. */
     var trackColour: Long
         get() = prefs.getLong(KEY_TRACK_COLOUR, 0xFF34D399)
@@ -152,6 +157,7 @@ class Store(context: Context) {
         private const val KEY_LAYER = "layer"
         private const val KEY_KEYS = "keys"
         private const val KEY_TRACK_COLOUR = "trackColour"
+        private const val KEY_TOOLS_OVER_MAP = "toolsOverMap"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_EXPORT_NAME = "exportName"

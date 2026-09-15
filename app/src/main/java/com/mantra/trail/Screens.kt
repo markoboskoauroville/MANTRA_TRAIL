@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -305,6 +306,7 @@ fun TrailApp(
             ToolsFace(
                 sensors = sensors,
                 fix = fix,
+                store = store,
                 onZero = onZeroLevel,
                 onClose = { tools = false },
             )
@@ -593,6 +595,9 @@ private fun FixLine(fix: Fix?, zoom: Int, layer: MapLayer) {
             Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 11)
             Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 11)
             Label(fix?.accuracyM?.let { "±${it.toInt()}m" } ?: "±-", accuracyInk(fix?.accuracyM), size = 11)
+            // Speed, because a walking pace is the one number that says whether the fix is
+            // moving with him or wandering on its own (15.9.2026).
+            Label(Geo.formatSpeed(fix?.speedMs), ink(fix?.speedMs != null), size = 11)
             Label(fix?.ele?.let { "${it.toInt()}m" } ?: "-m", ink(fix?.ele != null), size = 11)
             Label("z$zoom", Paint.Dim, size = 11)
             Label(layer.name, Paint.Amber, size = 11)
@@ -980,9 +985,16 @@ private fun TracksFace(
  * doing while you are doing it.
  */
 @Composable
-private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: () -> Unit) {
+private fun ToolsFace(
+    sensors: Sensors,
+    fix: Fix?,
+    store: Store,
+    onZero: () -> Unit,
+    onClose: () -> Unit,
+) {
     var heading by remember { mutableStateOf(0.0) }
     var reading by remember { mutableStateOf(sensors.level) }
+    var overMap by remember { mutableStateOf(store.toolsOverMap) }
 
     // Bounded by the composition: it dies with the window.
     LaunchedEffect(Unit) {
@@ -993,7 +1005,15 @@ private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: 
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // OVER THE MAP, OR ON ITS OWN (15.9.2026). Over the map there is no ground drawn at
+            // all: the compass is the width of the screen, the map shows through it, and the
+            // bubble goes away — a level is read with the phone flat, and a phone flat on a
+            // tripod plate is not a phone anybody is navigating with at the same time.
+            .then(if (overMap) Modifier else Modifier.background(Paint.Ground)),
+    ) {
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().padding(GAP),
             verticalArrangement = Arrangement.spacedBy(GAP),
@@ -1003,21 +1023,36 @@ private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: 
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Label("compass and level", Paint.Dim, size = 13)
+                Box(
+                    Modifier
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Bar)
+                        .clickable {
+                            overMap = !overMap
+                            store.toolsOverMap = overMap
+                        }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Label(if (overMap) "over the map" else "on its own", Paint.Amber, size = 12)
+                }
                 Label(
                     text = if (sensors.declination != null) "true north" else "magnetic north",
-                    colour = if (sensors.declination != null) Paint.Sand else Paint.Amber,
+                    colour = Paint.Dim,
                     size = 11,
                 )
                 Box(
-                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
+                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Bar).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) { Label("✕", Paint.Sand, size = 18) }
             }
 
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                CompassDial(heading)
+                // The dial fills the width when it is over the map, so it touches both edges.
+                CompassDial(heading, full = overMap, faint = overMap)
             }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
                 Label(
@@ -1027,32 +1062,34 @@ private fun ToolsFace(sensors: Sensors, fix: Fix?, onZero: () -> Unit, onClose: 
                 )
             }
 
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                BubbleVial(reading)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Label(
-                    text = if (reading.trustworthy) {
-                        "${fmt(reading.pitch)}° ${fmt(reading.roll)}°  tilt ${fmt(reading.tilt)}°"
-                    } else {
-                        "hold it still"
-                    },
-                    colour = when {
-                        !reading.trustworthy -> Paint.Dim
-                        reading.level -> Paint.Green
-                        else -> Paint.Sand
-                    },
-                    size = 16,
-                )
-                Box(
-                    Modifier
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
-                        .clickable(onClick = onZero)
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Label("zero here", Paint.Amber, size = 12) }
+            if (!overMap) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    BubbleVial(reading)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Label(
+                        text = if (reading.trustworthy) {
+                            "${fmt(reading.pitch)}° ${fmt(reading.roll)}°  tilt ${fmt(reading.tilt)}°"
+                        } else {
+                            "hold it still"
+                        },
+                        colour = when {
+                            !reading.trustworthy -> Paint.Dim
+                            reading.level -> Paint.Green
+                            else -> Paint.Sand
+                        },
+                        size = 16,
+                    )
+                    Box(
+                        Modifier
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Paint.Veil)
+                            .clickable(onClick = onZero)
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Label("zero here", Paint.Amber, size = 12) }
+                }
             }
         }
     }
@@ -1310,16 +1347,21 @@ private fun SettingRow(title: String, state: String, onPress: () -> Unit) {
 private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%+.1f", v)
 
 @Composable
-private fun CompassDial(heading: Double) {
-    Canvas(Modifier.size(140.dp)) {
+private fun CompassDial(heading: Double, full: Boolean = false, faint: Boolean = false) {
+    Canvas(if (full) Modifier.fillMaxWidth().aspectRatio(1f) else Modifier.size(140.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension / 2f - 6f
-        drawCircle(Paint.Dim, radius = r, center = c, style = Stroke(2f))
+        val ring = if (faint) Paint.Dim else Paint.Dim
+        drawCircle(ring, radius = r, center = c, style = Stroke(2f))
         for (tick in 0 until 72) {
             val angle = Math.toRadians(tick * 5.0 - heading - 90.0)
             val long = tick % 6 == 0
             val inner = r * if (long) 0.84f else 0.92f
-            val colour = if (tick == 0) Paint.Red else if (long) Paint.Sand else Paint.Dim
+            val colour = when {
+                tick == 0 -> Paint.Red
+                long -> if (faint) Paint.Amber else Paint.Sand
+                else -> Paint.Dim
+            }
             drawLine(
                 color = colour,
                 start = Offset(c.x + (inner * Math.cos(angle)).toFloat(), c.y + (inner * Math.sin(angle)).toFloat()),

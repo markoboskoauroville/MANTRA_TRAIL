@@ -166,6 +166,25 @@ class CoreTest {
         assertEquals("12.35 km", Geo.formatDistance(12_345.0))
     }
 
+
+
+    @Test fun speedIsKilometresAnHour() {
+        assertEquals("- km/h", Geo.formatSpeed(null))
+        assertEquals("0 km/h", Geo.formatSpeed(0f))
+        assertEquals("4.7 km/h", Geo.formatSpeed(1.3f))
+        assertEquals("36 km/h", Geo.formatSpeed(10f))
+    }
+
+    @Test fun aPhoneStandingStillDoesNotReportAWalk() {
+        // A fix wandering by a metre every few seconds is not somebody walking.
+        assertEquals("0 km/h", Geo.formatSpeed(0.1f))
+    }
+
+    @Test fun aNonsenseSpeedIsADashRatherThanANumber() {
+        assertEquals("- km/h", Geo.formatSpeed(-1f))
+        assertEquals("- km/h", Geo.formatSpeed(Float.NaN))
+    }
+
     @Test fun durationIsMinutesThenHours() {
         assertEquals("00:00", Geo.formatDuration(0))
         assertEquals("01:05", Geo.formatDuration(65_000))
