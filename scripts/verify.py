@@ -10,11 +10,14 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 140
+# Lowered once, on 15.9.2026, and only because a FEATURE left: the bubble level and its twelve
+# cases went with it when he asked for the compass alone. A floor drops when the thing it counted
+# is gone, never because tests were dropped (never-back-to-zero.md).
+TEST_FLOOR = 130
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
-PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "GpxRead.kt", "Level.kt", "Layers.kt", "Keys.kt", "Tracks.kt"]
+PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "GpxRead.kt", "Layers.kt", "Keys.kt", "Tracks.kt"]
 
 failures, checks = [], []
 
@@ -392,15 +395,17 @@ check("the track list is loaded rather than read during composition",
 check("speed is on the top line",
       "Geo.formatSpeed(fix?.speedMs)" in screens and "fun formatSpeed" in (MAIN / "Geo.kt").read_text(),
       "kilometres an hour, a tenth at walking pace")
-check("the tools can sit over the map, and the bubble leaves when they do",
-      "store.toolsOverMap" in screens and "if (!overMap) {" in screens,
-      "a level is read with the phone flat, which is not when anybody is navigating")
-check("the compass fills the width when it is over the map",
-      "CompassDial(heading, full = overMap" in screens and "fillMaxWidth().aspectRatio(1f)" in screens,
-      "edge to edge, with the map showing through")
-check("the tools are a window of their own, not a settings row",
-      "private fun ToolsFace" in screens and 'glyph = "T"' in screens,
-      "one key away, and they cover the map while they are open")
+check("T is a transparent compass over the map and nothing else",
+      "private fun CompassFace" in screens and "CompassDial(heading, full = true, faint = true)" in screens
+      and "BubbleVial" not in screens,
+      "edge to edge, with the map showing through, and no second mode to choose")
+check("the bubble level is gone from the app, not merely from the screen",
+      not (MAIN / "Level.kt").exists() and "Level." not in (MAIN / "Sensors.kt").read_text()
+      and "calibration" not in (MAIN / "Store.kt").read_text(),
+      "the file, the sensor, the calibration and the tests all left together")
+check("the compass is a window of its own, one key away",
+      "private fun CompassFace" in screens and 'glyph = "T"' in screens,
+      "over the map, not in the settings")
 
 
 # WHAT HE ASKED FOR ON 15.9.2026, AFTER THE MAP SERVER LANDED.

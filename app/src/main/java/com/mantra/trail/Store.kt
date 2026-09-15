@@ -38,14 +38,6 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_EXPORT_TREE, null)
         set(v) = prefs.edit().putString(KEY_EXPORT_TREE, v).apply()
 
-    var levelPitchZero: Double
-        get() = java.lang.Double.longBitsToDouble(prefs.getLong(KEY_PITCH_ZERO, 0L))
-        set(v) = prefs.edit().putLong(KEY_PITCH_ZERO, java.lang.Double.doubleToRawLongBits(v)).apply()
-
-    var levelRollZero: Double
-        get() = java.lang.Double.longBitsToDouble(prefs.getLong(KEY_ROLL_ZERO, 0L))
-        set(v) = prefs.edit().putLong(KEY_ROLL_ZERO, java.lang.Double.doubleToRawLongBits(v)).apply()
-
     /**
      * The keys imported from a file. They live in the app's own private storage and nowhere else:
      * not in the repository, not in a log line, not on the screen. What the screen may show is
@@ -128,17 +120,10 @@ class Store(context: Context) {
     fun setCollapsed(section: String, value: Boolean) =
         prefs.edit().putBoolean("collapsed-$section", value).apply()
 
-    /** Whether the tools sit over the map rather than on their own ground. */
-    var toolsOverMap: Boolean
-        get() = prefs.getBoolean(KEY_TOOLS_OVER_MAP, false)
-        set(v) = prefs.edit().putBoolean(KEY_TOOLS_OVER_MAP, v).apply()
-
     /** The colour a loaded track is drawn in, as an ARGB value. */
     var trackColour: Long
         get() = prefs.getLong(KEY_TRACK_COLOUR, 0xFF34D399)
         set(v) = prefs.edit().putLong(KEY_TRACK_COLOUR, v).apply()
-
-    fun calibration(): Level.Calibration = Level.Calibration(levelPitchZero, levelRollZero)
 
     /** The last place the map was looking, so opening the app does not start in the Atlantic. */
     var lastLat: Double
@@ -157,12 +142,9 @@ class Store(context: Context) {
         private const val KEY_LAYER = "layer"
         private const val KEY_KEYS = "keys"
         private const val KEY_TRACK_COLOUR = "trackColour"
-        private const val KEY_TOOLS_OVER_MAP = "toolsOverMap"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_EXPORT_NAME = "exportName"
-        private const val KEY_PITCH_ZERO = "pitchZero"
-        private const val KEY_ROLL_ZERO = "rollZero"
         private const val KEY_LAST_LAT = "lastLat"
         private const val KEY_LAST_LON = "lastLon"
         private const val KEY_LAST_ZOOM = "lastZoom"

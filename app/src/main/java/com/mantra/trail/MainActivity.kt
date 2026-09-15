@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
         AndroidGraphicFactory.createInstance(application)
         store = Store(this)
         locator = Locator(this)
-        sensors = Sensors(this).apply { calibration = store.calibration() }
+        sensors = Sensors(this)
 
         setContent {
             TrailApp(
@@ -193,7 +193,6 @@ class MainActivity : ComponentActivity() {
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
                 onDownloadMap = ::downloadOfflineMap,
                 onOpenMapLink = ::openMapLink,
-                onZeroLevel = ::zeroLevel,
                 onBare = ::setFullScreen,
                 tracks = { Folder.list(this, store) },
                 folderLabel = Folder.label(this, store),
@@ -345,18 +344,6 @@ class MainActivity : ComponentActivity() {
         Trail.sayInManager(message)
     }
 
-    /** Zero the level on whatever the phone is lying on now. */
-    private fun zeroLevel() {
-        val raw = sensors.rawReading()
-        if (!raw.trustworthy) {
-            Trail.say("Put the phone down before zeroing it")
-            return
-        }
-        store.levelPitchZero = raw.pitch
-        store.levelRollZero = raw.roll
-        sensors.calibration = store.calibration()
-        Trail.say("Level zeroed on this surface")
-    }
 
     private fun askForNotificationPermission() {
         // POST_NOTIFICATIONS exists from 33. Guarded with >=, never with a negated <, because

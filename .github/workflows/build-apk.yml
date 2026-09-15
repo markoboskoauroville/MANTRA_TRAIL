@@ -100,7 +100,7 @@ jobs:
               total += int(r.get("tests", 0)); fails += int(r.get("failures", 0)); errors += int(r.get("errors", 0))
           print(f"result files: {len(files)}   tests run: {total}   failures: {fails}   errors: {errors}")
           if len(files) == 0: sys.exit("no test results at all: the suite did not run")
-          if total < 80: sys.exit(f"expected at least 80 cases, found {total}")
+          if total < 130: sys.exit(f"expected at least 130 cases, found {total}")
           sys.exit(1 if (fails or errors) else 0)
           EOF
 

@@ -109,7 +109,6 @@ fun TrailApp(
     onImportKeys: () -> Unit,
     onDownloadMap: () -> Unit,
     onOpenMapLink: () -> Unit,
-    onZeroLevel: () -> Unit,
     onBare: (Boolean) -> Unit,
     tracks: () -> List<Folder.Entry>,
     folderLabel: String,
@@ -303,13 +302,7 @@ fun TrailApp(
         }
 
         if (tools) {
-            ToolsFace(
-                sensors = sensors,
-                fix = fix,
-                store = store,
-                onZero = onZeroLevel,
-                onClose = { tools = false },
-            )
+            CompassFace(sensors = sensors, fix = fix, onClose = { tools = false })
         }
 
         if (showTracks) {
@@ -359,7 +352,6 @@ fun TrailApp(
                     settings = false
                     scope.launch { showLayer(store, picked) }
                 },
-                onZero = onZeroLevel,
                 onChooseMapFile = onChooseMapFile,
                 onChooseExportFolder = onChooseExportFolder,
                 onImportKeys = onImportKeys,
@@ -984,59 +976,36 @@ private fun TracksFace(
  * they cover the map while they are open, because reading a level is the whole of what you are
  * doing while you are doing it.
  */
+/**
+ * THE COMPASS, OVER THE MAP, EDGE TO EDGE. That is the whole window.
+ *
+ * Baba, 15.9.2026, twice: *"overlay the compass over the map from edge to the edge... and this
+ * bubble thing is going away, please. I'm persistent."* So there is no ground drawn behind it, no
+ * second mode to choose between, and no bubble anywhere in the app. The map shows through the
+ * dial; the heading is the one number; the way out is where it always is.
+ */
 @Composable
-private fun ToolsFace(
-    sensors: Sensors,
-    fix: Fix?,
-    store: Store,
-    onZero: () -> Unit,
-    onClose: () -> Unit,
-) {
+private fun CompassFace(sensors: Sensors, fix: Fix?, onClose: () -> Unit) {
     var heading by remember { mutableStateOf(0.0) }
-    var reading by remember { mutableStateOf(sensors.level) }
-    var overMap by remember { mutableStateOf(store.toolsOverMap) }
 
     // Bounded by the composition: it dies with the window.
     LaunchedEffect(Unit) {
         while (true) {
             heading = sensors.heading()
-            reading = sensors.level
             delay(50)
         }
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            // OVER THE MAP, OR ON ITS OWN (15.9.2026). Over the map there is no ground drawn at
-            // all: the compass is the width of the screen, the map shows through it, and the
-            // bubble goes away — a level is read with the phone flat, and a phone flat on a
-            // tripod plate is not a phone anybody is navigating with at the same time.
-            .then(if (overMap) Modifier else Modifier.background(Paint.Ground)),
-    ) {
+    Box(Modifier.fillMaxSize()) {
         Column(
-            Modifier.fillMaxSize().safeDrawingPadding().padding(GAP),
-            verticalArrangement = Arrangement.spacedBy(GAP),
+            Modifier.fillMaxSize().safeDrawingPadding(),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
-                Modifier.fillMaxWidth().height(46.dp),
+                Modifier.fillMaxWidth().height(46.dp).padding(horizontal = GAP),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Bar)
-                        .clickable {
-                            overMap = !overMap
-                            store.toolsOverMap = overMap
-                        }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Label(if (overMap) "over the map" else "on its own", Paint.Amber, size = 12)
-                }
                 Label(
                     text = if (sensors.declination != null) "true north" else "magnetic north",
                     colour = Paint.Dim,
@@ -1048,47 +1017,29 @@ private fun ToolsFace(
                 ) { Label("✕", Paint.Sand, size = 18) }
             }
 
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                // The dial fills the width when it is over the map, so it touches both edges.
-                CompassDial(heading, full = overMap, faint = overMap)
-            }
+            // Edge to edge: no padding of any kind on this one, so the dial touches both sides.
+            CompassDial(heading, full = true, faint = true)
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
-                Label(
-                    text = fix?.let { "${Geo.formatLat(it.lat)}  ${Geo.formatLon(it.lon)}" } ?: "no fix",
-                    colour = if (fix != null) Paint.Sand else Paint.Dim,
-                    size = 11,
-                )
-            }
-
-            if (!overMap) {
-                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    BubbleVial(reading)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Label(
-                        text = if (reading.trustworthy) {
-                            "${fmt(reading.pitch)}° ${fmt(reading.roll)}°  tilt ${fmt(reading.tilt)}°"
-                        } else {
-                            "hold it still"
-                        },
-                        colour = when {
-                            !reading.trustworthy -> Paint.Dim
-                            reading.level -> Paint.Green
-                            else -> Paint.Sand
-                        },
-                        size = 16,
-                    )
-                    Box(
-                        Modifier
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Paint.Veil)
-                            .clickable(onClick = onZero)
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center,
-                    ) { Label("zero here", Paint.Amber, size = 12) }
+            Column(
+                Modifier.fillMaxWidth().padding(GAP),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Bar)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Label("${heading.toInt()}° ${Geo.cardinal(heading)}", Paint.Sand, size = 18)
+                        Label(
+                            text = fix?.let { "${Geo.formatLat(it.lat)}  ${Geo.formatLon(it.lon)}" }
+                                ?: "no fix",
+                            colour = if (fix != null) Paint.Sand else Paint.Dim,
+                            size = 11,
+                        )
+                    }
                 }
             }
         }
@@ -1344,8 +1295,6 @@ private fun SettingRow(title: String, state: String, onPress: () -> Unit) {
     }
 }
 
-private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%+.1f", v)
-
 @Composable
 private fun CompassDial(heading: Double, full: Boolean = false, faint: Boolean = false) {
     Canvas(if (full) Modifier.fillMaxWidth().aspectRatio(1f) else Modifier.size(140.dp)) {
@@ -1374,28 +1323,6 @@ private fun CompassDial(heading: Double, full: Boolean = false, faint: Boolean =
     }
 }
 
-@Composable
-private fun BubbleVial(reading: Level.Reading) {
-    val (bx, by) = Level.bubble(reading)
-    Canvas(Modifier.size(140.dp)) {
-        val c = Offset(size.width / 2f, size.height / 2f)
-        val r = size.minDimension / 2f - 6f
-        drawCircle(Paint.Dim, radius = r, center = c, style = Stroke(2f))
-        drawCircle(Paint.Dim, radius = r * 0.18f, center = c, style = Stroke(1.5f))
-        drawLine(Paint.Dim, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1f)
-        drawLine(Paint.Dim, Offset(c.x, c.y - r), Offset(c.x, c.y + r), 1f)
-        val colour = when {
-            !reading.trustworthy -> Paint.Dim
-            reading.level -> Paint.Green
-            else -> Paint.Sand
-        }
-        drawCircle(
-            color = colour,
-            radius = r * 0.16f,
-            center = Offset(c.x + (bx * r * 0.8f).toFloat(), c.y - (by * r * 0.8f).toFloat()),
-        )
-    }
-}
 
 /**
  * A BAR THE HEIGHT OF ITS OWN TEXT. Baba, 15.9.2026: *"only height of this bar is height of the
