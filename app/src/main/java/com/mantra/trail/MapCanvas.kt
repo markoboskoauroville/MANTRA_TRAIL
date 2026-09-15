@@ -134,24 +134,27 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // TWO SCREENFULS, NOT ONE. A cache sized to exactly what is on screen has nothing left
         // for the zoom level being rendered into, and the symptom of that is a map that goes
         // blank on the way in and comes back on the way out.
+        // THE CACHE IS SIZED FROM THE REAL SCREEN, NOT FROM A RATIO.
+        //
+        // Proved on a desk on 15.9.2026: mapsforge renders this very file at z19, z20 and z21
+        // without complaint — 49 ways and a thousand distinct colours in the tile over Zagreb.
+        // So the blank above z18 was never the library, the data, or the zoom: it was this cache.
+        //
+        // mapsforge draws a frame by asking the cache for every tile of it, and it warns that the
+        // screenRatio overload is an approximation made before the view has a size. Guess too low
+        // and the tiles of ONE frame evict each other as they arrive: each is rendered, put, and
+        // thrown out before it can be drawn, and the screen stays white while the phone works
+        // hard. The other overload takes real pixels, and the real pixels are known here.
+        val metrics = context.resources.displayMetrics
         val cache = AndroidUtil.createTileCache(
             context,
             "tiles-${layer.id}",
             view.model.displayModel.tileSize,
-            // THIS NUMBER IS WHY z19 WAS WHITE, and it took reading mapsforge's own source to see
-            // it. While a tile renders, mapsforge draws the PARENT tile scaled up — but it looks
-            // for that parent with getImmediately(), which only ever consults the first level of
-            // the cache, the one in memory. This ratio sizes exactly that level. Too small, the
-            // parents are evicted to disk, getImmediately finds nothing, and the screen is white
-            // until the new tiles finish — which at street zoom over a country file is long
-            // enough to look like a broken app. Three screenfuls of tiles stay in memory now.
-            3f,
-            view.model.frameBufferModel.overdrawFactor,
-            // KEPT ON DISK FOR EVERYTHING EXCEPT GOOGLE. Fetched tiles are the map in the
-            // mountains, and tiles WE rendered from a file on the phone are ours twice over —
-            // caching them means a zoom that was visited once comes back instantly instead of
-            // being rendered from the country file again. Google's terms forbid it, and Google
-            // is the only layer this is false for.
+            metrics.widthPixels,
+            metrics.heightPixels,
+            // Twice the frame, so a zoom has room for the level it is going to as well as the one
+            // it is leaving — which is what mapsforge scales up while the new tiles render.
+            view.model.frameBufferModel.overdrawFactor * 2.0,
             layer.kind != LayerKind.GOOGLE_TILES,
         )
         tileCache = cache
@@ -304,9 +307,13 @@ class MapCanvas(private val context: Context, private val store: Store) {
             )
             val inside = info.boundingBox.contains(centre)
             val read = runCatching { file.readMapData(tile) }.getOrNull()
-            "z$z · file ${info.fileSize / 1_000_000} MB, zooms ${info.zoomLevelMin}-${info.zoomLevelMax} · " +
-                "here ${if (inside) "inside" else "OUTSIDE"} the map · " +
-                "this tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points"
+            val metrics = context.resources.displayMetrics
+            val size = view.model.displayModel.tileSize
+            val perFrame = (metrics.widthPixels / size + 2) * (metrics.heightPixels / size + 2)
+            "z$z · here ${if (inside) "inside" else "OUTSIDE"} the map · " +
+                "tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points · " +
+                "cache ${tileCache?.capacityFirstLevel ?: -1} in memory of ${tileCache?.capacity ?: -1}, " +
+                "frame needs $perFrame"
         } catch (e: Exception) {
             "The map file could not be questioned: ${e.javaClass.simpleName}"
         }

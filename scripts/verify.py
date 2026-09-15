@@ -294,8 +294,14 @@ check("tiles rendered from the offline file are kept",
 # z19 WAS WHITE (15.9.2026). mapsforge draws the PARENT tile scaled while a tile renders, but it
 # looks for that parent with getImmediately(), which only reads the in-memory half of the cache.
 # Two settings decide whether the parent is still there.
-check("the in-memory half of the cache holds several screenfuls",
-      "\n            3f," in canvas_src, "three, so parents survive long enough to be scaled")
+# Replaced on 15.9.2026 after the desk reproduction: mapsforge renders this file at z19 to z21
+# perfectly, so the blank above 18 was the cache, and a guessed ratio is what made it too small.
+# mapsforge's own docs call the ratio an approximation made before the view has a size.
+check("the tile cache is sized from real pixels, not from a guessed ratio",
+      "metrics.widthPixels" in canvas_src and "metrics.heightPixels" in canvas_src,
+      "the screen's own dimensions decide how many tiles a frame needs")
+check("the cache has room for the zoom being entered as well as the one being left",
+      "overdrawFactor * 2.0" in canvas_src, "twice the frame")
 check("the frame buffer is not square, because this map does not rotate",
       "Parameters.SQUARE_FRAME_BUFFER = false" in canvas_src,
       "a square buffer renders two and a half screens for every one you look at")
@@ -327,6 +333,14 @@ check("the map name is on the top line",
       "next to the zoom, where the key beside it says which family it is")
 check("the scale bar is gone", "mapScaleBar.isVisible = false" in canvas_src,
       "the zoom number says the same thing in five characters")
+
+
+# The reproduction that ended five versions of guessing is kept in the repository, because the
+# next person to see a blank map should run it before touching the app (four-tests.md, Test 1:
+# attack the mechanism where it is cheap to attack).
+probe = ROOT / "tools/RenderProbe.java"
+check("the desk reproduction is kept", probe.exists() and "executeJob" in probe.read_text(),
+      "renders the real file at every zoom and counts ways, points and colours")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
