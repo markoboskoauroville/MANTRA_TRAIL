@@ -339,7 +339,6 @@ fun TrailApp(
 
         if (settings) {
             SettingsFace(
-                sensors = sensors,
                 store = store,
                 current = layer,
                 version = version,
@@ -1047,18 +1046,17 @@ private fun CompassFace(sensors: Sensors, fix: Fix?, onClose: () -> Unit) {
 }
 
 /**
- * EVERYTHING ELSE LIVES HERE: the map choice, the offline map, the folders, the keys, the compass
- * and the level. One key on the map screen opens it, and the way out is at the right-hand end of
- * its top row, where it is on every face of every app here.
+ * EVERYTHING ELSE LIVES HERE: the tracks, the map choice, the offline map, the folders and the
+ * keys. The compass has its own key now and the level is gone. One key on the map screen opens
+ * this, and the way out is at the right-hand end of its top row, as on every face of every app
+ * here.
  */
 @Composable
 private fun SettingsFace(
-    sensors: Sensors,
     store: Store,
     current: MapLayer,
     version: String,
     onPick: (MapLayer) -> Unit,
-    onZero: () -> Unit,
     onChooseMapFile: () -> Unit,
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
@@ -1070,8 +1068,6 @@ private fun SettingsFace(
     trackCount: Int,
     onClose: () -> Unit,
 ) {
-    var heading by remember { mutableStateOf(0.0) }
-    var reading by remember { mutableStateOf(sensors.level) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
