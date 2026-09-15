@@ -281,6 +281,22 @@ check("tiles rendered from the offline file are kept",
       "layer.kind != LayerKind.GOOGLE_TILES," in canvas_src,
       "the persistent cache covers our own rendering too; Google is the only exception")
 
+
+# z19 WAS WHITE (15.9.2026). mapsforge draws the PARENT tile scaled while a tile renders, but it
+# looks for that parent with getImmediately(), which only reads the in-memory half of the cache.
+# Two settings decide whether the parent is still there.
+check("the in-memory half of the cache holds several screenfuls",
+      "\n            3f," in canvas_src, "three, so parents survive long enough to be scaled")
+check("the frame buffer is not square, because this map does not rotate",
+      "Parameters.SQUARE_FRAME_BUFFER = false" in canvas_src,
+      "a square buffer renders two and a half screens for every one you look at")
+check("an empty map says so by asking the file, not by waiting to be photographed",
+      "fun emptyHere" in canvas_src and "emptyHere()" in screens,
+      "the read the renderer is about to do anyway")
+check("CH is absent where it would do nothing, and its slot stays",
+      "Caching.refusal(layer) == null" in control_row and "Spacer(Modifier.weight(1f)" in screens,
+      "the red circle keeps its place above the home button")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))

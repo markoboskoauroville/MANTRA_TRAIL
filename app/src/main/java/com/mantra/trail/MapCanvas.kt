@@ -4,9 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import org.mapsforge.core.graphics.Style
-import org.mapsforge.core.util.Parameters
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.core.model.Tile
+import org.mapsforge.core.util.Parameters
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
@@ -140,7 +140,14 @@ class MapCanvas(private val context: Context, private val store: Store) {
             context,
             "tiles-${layer.id}",
             view.model.displayModel.tileSize,
-            2f,
+            // THIS NUMBER IS WHY z19 WAS WHITE, and it took reading mapsforge's own source to see
+            // it. While a tile renders, mapsforge draws the PARENT tile scaled up — but it looks
+            // for that parent with getImmediately(), which only ever consults the first level of
+            // the cache, the one in memory. This ratio sizes exactly that level. Too small, the
+            // parents are evicted to disk, getImmediately finds nothing, and the screen is white
+            // until the new tiles finish — which at street zoom over a country file is long
+            // enough to look like a broken app. Three screenfuls of tiles stay in memory now.
+            3f,
             view.model.frameBufferModel.overdrawFactor,
             // KEPT ON DISK FOR EVERYTHING EXCEPT GOOGLE. Fetched tiles are the map in the
             // mountains, and tiles WE rendered from a file on the phone are ours twice over —
@@ -355,6 +362,35 @@ class MapCanvas(private val context: Context, private val store: Store) {
                 "this tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points"
         } catch (e: Exception) {
             "The map file could not be questioned: ${e.javaClass.simpleName}"
+        }
+    }
+
+    /**
+     * Null when the file has something to draw under the crosshair, or a sentence when it has
+     * nothing. Cheap: one tile's worth of a read that the renderer is about to do anyway.
+     */
+    fun emptyHere(): String? {
+        val file = mapFile ?: return null
+        return try {
+            val centre = view.model.mapViewPosition.center
+            val z = currentZoom()
+            val tile = Tile(
+                Geo.tileX(centre.longitude, z),
+                Geo.tileY(centre.latitude, z),
+                z.toByte(),
+                view.model.displayModel.tileSize,
+            )
+            if (!file.mapFileInfo.boundingBox.contains(centre)) {
+                return "This place is outside the offline map"
+            }
+            val read = file.readMapData(tile) ?: return "The offline map returned nothing at z$z"
+            if (read.ways.isEmpty() && read.pois.isEmpty()) {
+                "The offline map has nothing here at z$z"
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            "The offline map could not be read here: ${e.javaClass.simpleName}"
         }
     }
 

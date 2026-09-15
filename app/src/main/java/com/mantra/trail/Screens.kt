@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -225,7 +226,15 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
-                    Key(glyph = "CH", lit = caching, onClick = onCache)
+                    // CH ONLY EXISTS WHERE IT DOES SOMETHING. Baba, 15.9.2026: on the offline map
+                    // it cached nothing, because the map is already a file on the phone. The slot
+                    // stays so the red circle keeps its place above the home button; the key in
+                    // it does not, because a key that does nothing is worse than no key.
+                    if (Caching.refusal(layer) == null) {
+                        Key(glyph = "CH", lit = caching, onClick = onCache)
+                    } else {
+                        Spacer(Modifier.weight(1f).height(KEY))
+                    }
                     MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
                     // ONE BUTTON FOR THE MAP. It says which one is on and turns to the next.
@@ -322,7 +331,11 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
     }
     val problem = attempt(canvas, store, layer)
     if (problem == null) {
-        Trail.say(null)
+        // A layer that reports success and still shows nothing is the failure that cost five
+        // versions of guessing. For the offline map the file can be asked directly, so it is:
+        // if there is no data under the crosshair at this zoom, that is said now rather than
+        // waiting for somebody to photograph a white screen.
+        Trail.say(if (layer.kind == LayerKind.VECTOR_FILE) canvas.emptyHere() else null)
         return
     }
     // A MAP THAT CANNOT DRAW LEAVES THE SCREEN EMPTY, and an empty screen teaches nothing. So the
