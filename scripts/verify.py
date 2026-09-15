@@ -152,7 +152,7 @@ check("no key carries a word under its glyph any more",
       f"{key_body.count('Label(')} Label call in the key body: the glyph, and nothing under it")
 # Seven bare glyphs at a 4 dp gap is 48 px each on a 390 px phone, which is still a thumb. The
 # ceiling rose because the keys lost their words, not because the phone got wider.
-control_row = screens.split("Arrangement.spacedBy(4.dp)) {")[1].split("\n                }")[0]
+control_row = screens.split("horizontalArrangement = Arrangement.spacedBy(4.dp),")[1].split("\n                }")[0]
 row_keys = len(re.findall(r"\b(?:Record|Mark)?Key\(", control_row))
 check("the control row holds at most seven keys", row_keys <= 7,
       f"{row_keys} keys: seven bare glyphs across a 390 px phone is 48 px each")
