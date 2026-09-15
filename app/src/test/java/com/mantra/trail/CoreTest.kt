@@ -856,6 +856,13 @@ class CoreTest {
 
     // --- Tracks: what they are called and what the manager does to them ----------------------
 
+    /**
+     * kotlin.io.createTempDir is deprecated for putting a world-readable directory in the shared
+     * temp space, and allWarningsAsErrors is right to refuse it. One folder per test, ours alone.
+     */
+    private fun tempFolder(): java.io.File =
+        java.nio.file.Files.createTempDirectory("mantra-trail-test").toFile()
+
     @Test fun aTrackIsCalledByItsDayItsTimeAndTheWordTrack() {
         val name = Tracks.defaultName(1_789_387_200_000L, java.time.ZoneOffset.UTC)
         assertEquals("2026-09-14 12:00 Track", name)
@@ -895,7 +902,7 @@ class CoreTest {
     }
 
     @Test fun theFolderIsTheList() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         assertTrue(Tracks.list(dir).isEmpty())
         java.io.File(dir, "one.gpx").writeText("<gpx/>")
         java.io.File(dir, "notes.txt").writeText("not a track")
@@ -906,7 +913,7 @@ class CoreTest {
     }
 
     @Test fun theNewestTrackIsFirst() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         val old = java.io.File(dir, "old.gpx").apply { writeText("<gpx/>"); setLastModified(1_000_000) }
         val new = java.io.File(dir, "new.gpx").apply { writeText("<gpx/>"); setLastModified(9_000_000) }
         assertEquals(listOf("new", "old"), Tracks.list(dir).map { it.name })
@@ -914,7 +921,7 @@ class CoreTest {
     }
 
     @Test fun renamingMovesTheFile() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         val file = java.io.File(dir, "one.gpx").apply { writeText("<gpx/>") }
         val (renamed, problem) = Tracks.rename(file, "Velebit north")
         assertNull(problem)
@@ -925,7 +932,7 @@ class CoreTest {
     }
 
     @Test fun renamingNeverWritesOverAnotherWalk() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         java.io.File(dir, "Velebit.gpx").writeText("the first walk")
         val second = java.io.File(dir, "other.gpx").apply { writeText("the second walk") }
         val (renamed, problem) = Tracks.rename(second, "Velebit")
@@ -937,7 +944,7 @@ class CoreTest {
     }
 
     @Test fun renamingToItsOwnNameIsNotACollision() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         val file = java.io.File(dir, "Velebit.gpx").apply { writeText("<gpx/>") }
         val (renamed, problem) = Tracks.rename(file, "Velebit")
         assertNull(problem)
@@ -946,7 +953,7 @@ class CoreTest {
     }
 
     @Test fun renamingSomethingAlreadyGoneSaysSo() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         val file = java.io.File(dir, "gone.gpx")
         val (renamed, problem) = Tracks.rename(file, "anything")
         assertNull(renamed)
@@ -955,7 +962,7 @@ class CoreTest {
     }
 
     @Test fun deletingRemovesIt() {
-        val dir = createTempDir()
+        val dir = tempFolder()
         val file = java.io.File(dir, "one.gpx").apply { writeText("<gpx/>") }
         assertNull(Tracks.delete(file))
         assertFalse(file.exists())
