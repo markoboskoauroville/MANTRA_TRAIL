@@ -73,17 +73,17 @@ jobs:
           LOOPS=$( nocount grep -rnE '(while|for|repeat)[[:space:]]*[({]' --include='*.kt' "$SRC" | wc -l)
           UNBOUNDED=$( nocount grep -rnF 'while (true)' --include='*.kt' "$SRC" | notcomment | wc -l)
           echo "loops examined:         $LOOPS"
-          # TWO, AND BOTH BOUNDS ARE NAMED. Raising this number is a decision, never a reflex:
-          #   1  the settings face's LaunchedEffect — bounded by the composition; it dies with the face
-          #   2  MapDownload's read loop — bounded by the end of the stream and by the socket's
-          #      own read timeout, which is what stops a server that accepts and then goes quiet
-          #      (four-tests.md Test 3, "never answers")
-          #   3  the map screen's zoom reader — a LaunchedEffect bounded by the composition; it
-          #      dies with the screen, same bound as the settings face's instruments
-          #   4  the network sampler — the same bound again: a LaunchedEffect on the map screen,
-          #      one TrafficStats read a second, gone when the screen is
-          echo "written as while(true): $UNBOUNDED   (both bounds are named in the workflow)"
-          [ "$UNBOUNDED" -le 4 ] || { echo "an unbounded loop appeared that nobody has justified"; exit 1; }
+          # FIVE, AND EVERY BOUND IS NAMED. Raising this number is a decision, never a reflex,
+          # and the name is the decision:
+          #   1  the settings face's instruments — a LaunchedEffect; dies with the composition
+          #   2  the map screen's zoom reader — the same bound
+          #   3  the network sampler — the same bound
+          #   4  MapDownload's read loop — the end of the stream, and the socket's read timeout,
+          #      which is what stops a server that accepts and then goes quiet
+          #   5  GpxRead's scan — bounded by the text: every turn moves searchFrom past the match
+          #      it just made, and the loop leaves when there is no next match
+          echo "written as while(true): $UNBOUNDED   (every bound is named in the workflow)"
+          [ "$UNBOUNDED" -le 5 ] || { echo "an unbounded loop appeared that nobody has justified"; exit 1; }
           grep -q "readTimeout" app/src/main/java/com/mantra/trail/MapDownload.kt || { echo "the download loop lost its deadline"; exit 1; }
           [ "$LOOPS" -ge 3 ] || { echo "found fewer loops than exist: this check is broken, not the code"; exit 1; }
 
