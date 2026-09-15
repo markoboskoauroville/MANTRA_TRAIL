@@ -195,6 +195,25 @@ check("the workflow uses no key secret",
       "GOOGLE_MAPS_API_KEY" not in workflow,
       "the only secrets are the signing keystore and its password")
 
+
+# WHAT THE PHONE SHOWED ON 15.9.2026, TURNED INTO CHECKS.
+check("nothing over the map sits on a box of its own",
+      "Paint.Veil" not in screens.split("private fun SettingsFace")[0],
+      "the map screen uses no filled surface; only the settings face does")
+check("every word over the map carries a shadow instead",
+      "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
+check("the centre mark is the colour of the position, not the ink colour",
+      "Paint.AmberBright" in screens.split("private fun CentreMark")[1][:400],
+      "amber, ringed in black so it reads on a white street and under fir")
+check("the settings face scrolls",
+      "verticalScroll(rememberScrollState())" in screens,
+      "so the last row is reachable however many rows there are")
+row = screens.split("horizontalArrangement = Arrangement.spacedBy(GAP)) {")[1].split("\n                }")[0]
+order = [k for k in ["CH", "MarkKey", "RecordKey", "layer.short", "\u2699"] if k in row]
+check("the record circle is the middle key of five",
+      order.index("RecordKey") == 2 and len(order) == 5,
+      "CH, centre, record, map, settings: the red one lands above the phone's home button")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))

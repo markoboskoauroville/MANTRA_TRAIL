@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,6 +115,44 @@ fun TrailApp(
         showLayer(store, layer)
     }
 
+    // CH, lifted out of the row so that the row of keys reads as a row of keys.
+    val onCache: () -> Unit = onCache@{
+
+                    val refusal = Caching.refusal(layer)
+                    if (refusal != null) {
+                        Trail.say(refusal)
+                        return@onCache
+                    }
+                    val canvas = CanvasHolder.canvas
+                    val box = canvas?.visibleBox()
+                    if (canvas == null || box == null) {
+                        Trail.say("The map has not settled yet")
+                        return@onCache
+                    }
+                    val plan = Caching.plan(box[0], box[1], box[2], box[3], canvas.currentZoom(), layer)
+                    if (plan.tiles.isEmpty()) {
+                        Trail.say("Nothing to fetch at this zoom")
+                        return@onCache
+                    }
+                    caching = true
+                    Trail.say(
+                        "Caching ${plan.tiles.size} tiles, about " +
+                            Caching.formatBytes(Caching.estimateBytes(plan.tiles.size)) +
+                            if (plan.truncated) ", of ${plan.wanted}: zoom in for the rest" else ""
+                    )
+                    scope.launch {
+                        val failed = canvas.cacheVisible(layer, plan, layer.provider?.let { store.key(it) }) { done, total, bad ->
+                            Trail.say("Caching $done of $total" + if (bad > 0) ", $bad did not come" else "")
+                        }
+                        caching = false
+                        Trail.say(
+                            if (failed == 0) "Cached ${plan.tiles.size} tiles: this view works offline now"
+                            else "Cached ${plan.tiles.size - failed} of ${plan.tiles.size}, press CH again for the rest"
+                        )
+                    }
+                
+    }
+
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
 
         MapSurface(store = store, fix = fix, line = Trail.line.collectAsState().value, onCanvas = onCanvas)
@@ -147,47 +190,13 @@ fun TrailApp(
                 NoteLine(note)
                 Label(layer.attribution, Paint.Dim, size = 9, align = TextAlign.Start)
                 TrackLine(stats, recording)
+                // THE ORDER IS THE THUMB'S, NOT THE LIST'S. Baba, 15.9.2026: the record circle sits
+                // in the middle, straight above the phone's own home button, with the centre key
+                // beside it; the three that are pressed rarely spread out from there.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                    Key(glyph = "CH", lit = caching, onClick = onCache)
                     MarkKey(onClick = onWhereAmI) { hasFix -> CentreMark(hasFix) }
                     RecordKey(recording = recording, paused = paused, onPress = onRecord)
-                    Key(
-                        glyph = "CH",
-                        lit = caching,
-                        onClick = {
-                            val refusal = Caching.refusal(layer)
-                            if (refusal != null) {
-                                Trail.say(refusal)
-                                return@Key
-                            }
-                            val canvas = CanvasHolder.canvas
-                            val box = canvas?.visibleBox()
-                            if (canvas == null || box == null) {
-                                Trail.say("The map has not settled yet")
-                                return@Key
-                            }
-                            val plan = Caching.plan(box[0], box[1], box[2], box[3], canvas.currentZoom(), layer)
-                            if (plan.tiles.isEmpty()) {
-                                Trail.say("Nothing to fetch at this zoom")
-                                return@Key
-                            }
-                            caching = true
-                            Trail.say(
-                                "Caching ${plan.tiles.size} tiles, about " +
-                                    Caching.formatBytes(Caching.estimateBytes(plan.tiles.size)) +
-                                    if (plan.truncated) ", of ${plan.wanted}: zoom in for the rest" else ""
-                            )
-                            scope.launch {
-                                val failed = canvas.cacheVisible(layer, plan, layer.provider?.let { store.key(it) }) { done, total, bad ->
-                                    Trail.say("Caching $done of $total" + if (bad > 0) ", $bad did not come" else "")
-                                }
-                                caching = false
-                                Trail.say(
-                                    if (failed == 0) "Cached ${plan.tiles.size} tiles: this view works offline now"
-                                    else "Cached ${plan.tiles.size - failed} of ${plan.tiles.size}, press CH again for the rest"
-                                )
-                            }
-                        },
-                    )
                     // ONE BUTTON FOR THE MAP. It says which one is on and turns to the next.
                     Key(
                         glyph = layer.short,
@@ -308,13 +317,25 @@ object CanvasHolder {
  * away. It is not a sight and it is not the person's position: the position is the amber dot on
  * the map, drawn where the phone actually is.
  */
+/**
+ * THE MARK IN THE MIDDLE, IN THE COLOUR OF THE POSITION ON THE MAP.
+ *
+ * Baba, 15.9.2026: *"the middle center I don't see at all. It needs to have different color, same
+ * as for the center current position on the map."* It was sand on a street map, which is sand on
+ * sand. It is amber now, and every stroke is laid down twice: near-black underneath, a little
+ * wider, then the amber on top. That black edge is what makes it readable on snow and under
+ * fir, and no single colour does that on its own.
+ */
 @Composable
 private fun CentreMark(hasFix: Boolean) {
-    val ink = if (hasFix) Paint.Sand else Paint.Dim
+    val ink = if (hasFix) Paint.AmberBright else Paint.Amber
     Canvas(Modifier.size(MARK)) {
         val c = Offset(size.width / 2f, size.height / 2f)
-        drawCircle(ink, radius = size.minDimension / 2f - 1f, center = c, style = Stroke(1.5.dp.toPx()))
-        drawCircle(ink, radius = 1.5.dp.toPx(), center = c)
+        val r = size.minDimension / 2f - 2f
+        drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(3.5.dp.toPx()))
+        drawCircle(ink, radius = r, center = c, style = Stroke(2.dp.toPx()))
+        drawCircle(Paint.Ground, radius = 2.4.dp.toPx(), center = c)
+        drawCircle(ink, radius = 1.6.dp.toPx(), center = c)
     }
 }
 
@@ -371,15 +392,10 @@ private fun RowScope.Key(
     onClick: () -> Unit,
 ) {
     Box(
-        Modifier
-            .weight(1f)
-            .height(KEY)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (lit) Paint.Amber.copy(alpha = 0.85f) else Paint.Veil)
-            .clickable(onClick = onClick),
+        Modifier.weight(1f).height(KEY).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Label(glyph, if (lit) Paint.Ground else Paint.Sand, size = 17)
+        Label(glyph, if (lit) Paint.AmberBright else Paint.Sand, size = 17)
     }
 }
 
@@ -400,6 +416,8 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
         Canvas(Modifier.size(MARK)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f - 2f
+            // The black edge first, then the red, for the same reason as the centre mark.
+            drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(4.5.dp.toPx()))
             when {
                 paused -> {
                     drawCircle(Paint.Red, radius = r, center = c, style = Stroke(3.dp.toPx()))
@@ -451,8 +469,17 @@ private fun SettingsFace(
     }
 
     Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+        // IT SCROLLS. Baba, 15.9.2026: *"I cannot reach bottom of the settings... Everything should
+        // be scrollable everywhere."* A settings face that is one screen tall today is two screens
+        // tall the moment a row is added, and the rows at the bottom are the ones nobody can reach
+        // — so it scrolls whether or not it currently needs to, and the safe area keeps the last
+        // row clear of the gesture bar.
         Column(
-            Modifier.fillMaxSize().safeDrawingPadding().padding(GAP),
+            Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(GAP),
             verticalArrangement = Arrangement.spacedBy(GAP),
         ) {
             Row(
@@ -600,16 +627,22 @@ private fun BubbleVial(reading: Level.Reading) {
 @Composable
 private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Paint.Veil)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+        modifier.fillMaxWidth().padding(horizontal = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         content = content,
     )
 }
 
+/**
+ * EVERY WORD OVER THE MAP CARRIES ITS OWN SHADOW, AND NOTHING CARRIES A BOX.
+ *
+ * Baba, 15.9.2026: *"don't put there these squares under the buttons... make a shadow, hard
+ * shadow behind, so it's seen from the background but it doesn't take much of real estate."*
+ *
+ * A panel steals map. A shadow steals nothing and works on both a white street and a dark forest,
+ * which is the whole difficulty: the background under this text is not one colour, it is every
+ * colour, and no single ink is readable on all of them without something behind the letter itself.
+ */
 @Composable
 private fun Label(
     text: String,
@@ -625,5 +658,8 @@ private fun Label(
         textAlign = align,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
+        style = TextStyle(
+            shadow = Shadow(color = Paint.Ground, offset = Offset(0f, 1.5f), blurRadius = 5f),
+        ),
     )
 }

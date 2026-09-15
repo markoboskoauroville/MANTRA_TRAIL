@@ -17,6 +17,9 @@ object Paint {
     val Ground = Color(0xFF0B0D10)
     val Sand = Color(0xFFF2DDB4)
     val Amber = Color(0xFFE8A64B)
+
+    /** The position colour, and now the centre mark and the lit keys with it. */
+    val AmberBright = Color(0xFFFBBF24)
     val Red = Color(0xFFEF4444)
     val Green = Color(0xFF34D399)
 
