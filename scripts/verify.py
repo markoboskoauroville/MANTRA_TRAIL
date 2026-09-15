@@ -219,7 +219,7 @@ check("the record circle is the middle key of five",
 # are now closed; the checks keep them closed.
 canvas_src = (MAIN / "MapCanvas.kt").read_text()
 check("the vector map is not clamped to a tile service's zoom",
-      "LayerKind.VECTOR_FILE) 22" in canvas_src,
+      "LayerKind.VECTOR_FILE) 22.toByte()" in canvas_src,
       "vector data enlarges past 18; only tile layers stop where their tiles stop")
 check("the tile cache holds more than one screenful",
       '"tiles-${layer.id}",' in canvas_src and "2f," in canvas_src,

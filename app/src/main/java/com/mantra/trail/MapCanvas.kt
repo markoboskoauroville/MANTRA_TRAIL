@@ -157,7 +157,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // tile service stops at: the detail thins out but the map does not end. Clamping it at
         // 18, as this did, is one of the two things that could have made it vanish on the way in.
         view.setZoomLevelMax(
-            if (layer.kind == LayerKind.VECTOR_FILE) 22 else layer.maxZoom.toByte().toInt()
+            if (layer.kind == LayerKind.VECTOR_FILE) 22.toByte() else layer.maxZoom.toByte()
         )
         restoreOverlays()
         view.repaint()
