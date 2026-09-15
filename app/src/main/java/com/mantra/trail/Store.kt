@@ -61,6 +61,20 @@ class Store(context: Context) {
 
     fun key(provider: Keys.Provider): String? = keys[provider]
 
+    /**
+     * Which style of a family was last chosen. The map key turns through families, so this is
+     * what decides whether "Thunderforest" means Outdoors or Landscape when it comes round.
+     */
+    fun styleOf(family: MapLayer.Family): MapLayer {
+        val id = prefs.getString("style-${family.name}", null)
+        val remembered = id?.let { saved -> Layers.of(family).firstOrNull { it.id == saved } }
+        return remembered ?: Layers.firstOf(family)
+    }
+
+    fun rememberStyle(layer: MapLayer) {
+        prefs.edit().putString("style-${layer.family.name}", layer.id).apply()
+    }
+
     val keyCount: Int get() = keys.size
 
     /** Which services have a key, by name, for the settings row. Never a key, never a piece of one. */

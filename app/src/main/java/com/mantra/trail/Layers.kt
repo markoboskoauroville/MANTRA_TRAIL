@@ -40,10 +40,23 @@ data class MapLayer(
     val minZoom: Int = 2,
     /** The service whose key this layer needs, or null when it needs none. */
     val provider: Keys.Provider? = null,
+    /** Which of the four families this belongs to. The one map key turns through families. */
+    val family: Family = Family.OFFLINE,
     /** Which of Google's four views this is. */
     val googleView: GoogleView? = null,
 ) {
     enum class Offline { COMPLETE, CACHED_ONLY, NONE }
+
+    /**
+     * SIXTEEN MAPS, FOUR FAMILIES, ONE BUTTON.
+     *
+     * Thunderforest draw ten styles and Google four views, and a toggle that turned through all
+     * sixteen would be sixteen presses to get back where you started. So the key on the map turns
+     * through the FAMILIES, and which style of a family it shows is whichever one of that family
+     * was last chosen in settings. Four presses to come full circle, and every style still one
+     * press away in the list.
+     */
+    enum class Family { OFFLINE, OSM, THUNDERFOREST, GOOGLE }
 
     enum class GoogleView(val mapType: String, val overlayRoads: Boolean) {
         NORMAL("roadmap", false),
@@ -64,6 +77,7 @@ data class MapLayer(
 object Layers {
 
     val OFFLINE = MapLayer(
+        family = MapLayer.Family.OFFLINE,
         id = "offline",
         label = "Offline map",
         short = "OFF",
@@ -73,6 +87,7 @@ object Layers {
     )
 
     val OSM = MapLayer(
+        family = MapLayer.Family.OSM,
         id = "osm",
         label = "OpenStreetMap",
         short = "OSM",
@@ -84,23 +99,45 @@ object Layers {
     )
 
     /**
-     * The walking map: contour lines, marked paths, the shape of a hill. It takes a key in the
-     * URL, which is exactly the kind of key the picker can feed, and its tiles may be cached — so
-     * CH on this one is what fills a valley before you walk into it.
+     * THUNDERFOREST'S TEN STYLES, all of them, from his own dashboard. One account, one key, and
+     * the key goes in the address of every one of them.
+     *
+     * They are online maps. Tiles he actually looks at are cached and are then there without a
+     * signal; fetching a region he has not looked at is what their terms call bulk downloading,
+     * and that needs their Small Business plan, so this app has no button for it.
      */
-    val THUNDERFOREST = MapLayer(
-        id = "outdoors",
-        label = "Thunderforest",
-        short = "TF",
+    private fun thunderforest(style: String, label: String, short: String) = MapLayer(
+        family = MapLayer.Family.THUNDERFOREST,
+        id = "tf-$style",
+        label = label,
+        short = short,
         kind = LayerKind.RASTER_XYZ,
         offline = MapLayer.Offline.CACHED_ONLY,
         attribution = "Maps © Thunderforest, Data © OpenStreetMap contributors",
-        url = "https://tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey={key}",
-        maxZoom = 18,
+        url = "https://api.thunderforest.com/$style/{z}/{x}/{y}.png?apikey={key}",
+        maxZoom = 22,
         provider = Keys.Provider.THUNDERFOREST,
     )
 
+    /** The walking one: contour lines, marked trails, the shape of a hill. */
+    val THUNDERFOREST = thunderforest("outdoors", "Outdoors", "OUT")
+    val TF_CYCLE = thunderforest("cycle", "OpenCycleMap", "CYC")
+    val TF_TRANSPORT = thunderforest("transport", "Transport", "TRN")
+    val TF_LANDSCAPE = thunderforest("landscape", "Landscape", "LND")
+    val TF_TRANSPORT_DARK = thunderforest("transport-dark", "Transport dark", "TDK")
+    val TF_SPINAL = thunderforest("spinal-map", "Spinal map", "SPN")
+    val TF_PIONEER = thunderforest("pioneer", "Pioneer", "PIO")
+    val TF_MOBILE_ATLAS = thunderforest("mobile-atlas", "Mobile atlas", "MATL")
+    val TF_NEIGHBOURHOOD = thunderforest("neighbourhood", "Neighbourhood", "NBH")
+    val TF_ATLAS = thunderforest("atlas", "Atlas", "ATL")
+
+    val THUNDERFOREST_ALL: List<MapLayer> = listOf(
+        THUNDERFOREST, TF_LANDSCAPE, TF_CYCLE, TF_TRANSPORT, TF_TRANSPORT_DARK,
+        TF_ATLAS, TF_PIONEER, TF_NEIGHBOURHOOD, TF_MOBILE_ATLAS, TF_SPINAL,
+    )
+
     private fun google(id: String, label: String, short: String, view: MapLayer.GoogleView) = MapLayer(
+        family = MapLayer.Family.GOOGLE,
         id = id,
         label = label,
         short = short,
@@ -118,17 +155,24 @@ object Layers {
     val GOOGLE_TERRAIN = google("google-ter", "Google terrain", "TER", MapLayer.GoogleView.TERRAIN)
     val GOOGLE_HYBRID = google("google-hyb", "Google hybrid", "HYB", MapLayer.GoogleView.HYBRID)
 
-    /** The order the one button turns through: what works offline first, Google's four last. */
-    val ALL: List<MapLayer> = listOf(
-        OFFLINE, OSM, THUNDERFOREST, GOOGLE, GOOGLE_SATELLITE, GOOGLE_TERRAIN, GOOGLE_HYBRID,
-    )
+    val GOOGLE_ALL: List<MapLayer> = listOf(GOOGLE, GOOGLE_SATELLITE, GOOGLE_TERRAIN, GOOGLE_HYBRID)
+
+    /** Every map, in the order the settings list shows them: offline first, Google last. */
+    val ALL: List<MapLayer> = listOf(OFFLINE, OSM) + THUNDERFOREST_ALL + GOOGLE_ALL
 
     fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
 
-    fun next(current: MapLayer): MapLayer {
-        val i = ALL.indexOfFirst { it.id == current.id }
-        return ALL[(if (i < 0) 0 else i + 1) % ALL.size]
+    fun of(family: MapLayer.Family): List<MapLayer> = ALL.filter { it.family == family }
+
+    /** The next family round the circle. Which style of it appears is the caller's memory. */
+    fun nextFamily(current: MapLayer): MapLayer.Family {
+        val families = MapLayer.Family.entries
+        val i = families.indexOf(current.family)
+        return families[(i + 1) % families.size]
     }
+
+    /** The first map of a family, when nothing has been chosen from it yet. */
+    fun firstOf(family: MapLayer.Family): MapLayer = of(family).firstOrNull() ?: OFFLINE
 
     /**
      * One tile's URL. `auth` is whatever that service needs in the address: the key itself for

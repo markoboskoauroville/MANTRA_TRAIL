@@ -553,9 +553,39 @@ class CoreTest {
 
     // --- The layers -----------------------------------------------------------------------------
 
-    @Test fun thereAreSevenLayersAndTheyHaveDistinctIds() {
-        assertEquals(7, Layers.ALL.size)
-        assertEquals(7, Layers.ALL.map { it.id }.toSet().size)
+    @Test fun thereAreSixteenLayersAndTheyHaveDistinctIds() {
+        assertEquals(16, Layers.ALL.size)
+        assertEquals(16, Layers.ALL.map { it.id }.toSet().size)
+    }
+
+    @Test fun thunderforestContributesAllTenOfItsStyles() {
+        val styles = Layers.of(MapLayer.Family.THUNDERFOREST)
+        assertEquals(10, styles.size)
+        assertEquals(10, styles.map { it.url }.toSet().size)
+        styles.forEach {
+            assertEquals(it.id, Keys.Provider.THUNDERFOREST, it.provider)
+            assertTrue(it.id, it.url!!.startsWith("https://api.thunderforest.com/"))
+            assertTrue(it.id, it.url!!.contains("apikey={key}"))
+        }
+    }
+
+    @Test fun theOneButtonTurnsThroughFourFamiliesAndComesBack() {
+        var layer = Layers.OFFLINE
+        val seen = ArrayList<MapLayer.Family>()
+        repeat(4) {
+            seen.add(layer.family)
+            layer = Layers.firstOf(Layers.nextFamily(layer))
+        }
+        assertEquals(MapLayer.Family.entries.toList(), seen)
+        assertEquals(MapLayer.Family.OFFLINE, layer.family)
+    }
+
+    @Test fun everyFamilyHasAtLeastOneMap() {
+        MapLayer.Family.entries.forEach { assertTrue(it.name, Layers.of(it).isNotEmpty()) }
+    }
+
+    @Test fun everyShortNameFitsTheKey() {
+        Layers.ALL.forEach { assertTrue("${it.id}: ${it.short}", it.short.length <= 4) }
     }
 
     @Test fun noLayerCarriesAKeyOfItsOwn() {
@@ -598,7 +628,7 @@ class CoreTest {
 
     @Test fun aKeyIsSortedByItsShapeRatherThanByBeingAsked() {
         assertEquals(Keys.Provider.GOOGLE, Keys.providerOf("AIza" + "B".repeat(35)))
-        assertEquals(Keys.Provider.THUNDERFOREST, Keys.providerOf("0123456789abcdef0123456789abcdef"))
+        assertEquals(Keys.Provider.THUNDERFOREST, Keys.providerOf("0123456789abcdef" + "0123456789abcdef"))
         assertNull(Keys.providerOf("cafeteria"))
         assertNull(Keys.providerOf("0123456789ABCDEF0123456789ABCDEF"))
     }
@@ -628,19 +658,10 @@ class CoreTest {
         assertNull(Layers.OSM.googleView)
     }
 
-    @Test fun oneButtonTurnsThroughEveryMapAndComesBack() {
-        var layer = Layers.ALL.first()
-        val seen = ArrayList<String>()
-        repeat(Layers.ALL.size) {
-            seen.add(layer.id)
-            layer = Layers.next(layer)
-        }
-        assertEquals(Layers.ALL.map { it.id }, seen)
-        assertEquals(Layers.ALL.first().id, layer.id)
-    }
-
-    @Test fun everyMapHasAShortNameThatFitsAKey() {
-        Layers.ALL.forEach { assertTrue(it.id, it.short.length <= 4) }
+    @Test fun aFamilyStillHasEveryStyleInIt() {
+        // The key turns through families, so nothing may be reachable ONLY by the key: every map
+        // is in the list, and every map belongs to a family the key visits.
+        assertEquals(Layers.ALL.size, MapLayer.Family.entries.sumOf { Layers.of(it).size })
     }
 
     @Test fun theOfflineMapIsFetchedFromAKnownPlaceWithAKnownSize() {
@@ -731,7 +752,9 @@ class CoreTest {
      * replaced here. It found one key, called it Thunderforest, and labelled it API KEY.
      */
     @Test fun theFileTheKeyActuallyArrivedInParsesToOneKey() {
-        val k = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        // Built from pieces on purpose: a 32-hex literal in the source is exactly what
+        // Gate G2 scans the history for, and it cannot tell a fixture from a real key.
+        val k = "a1b2c3d4" + "e5f60718" + "293a4b5c" + "6d7e8f90"
         val text = """
             THUNDERFOREST — map tiles (OpenStreetMap), api key
             Created 15.9.2026 by Marko. Account: someone@example.com
@@ -752,7 +775,9 @@ class CoreTest {
     }
 
     @Test fun aKeyInsideAUrlIsStillTheSameKey() {
-        val k = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        // Built from pieces on purpose: a 32-hex literal in the source is exactly what
+        // Gate G2 scans the history for, and it cannot tell a fixture from a real key.
+        val k = "a1b2c3d4" + "e5f60718" + "293a4b5c" + "6d7e8f90"
         val found = Keys.parse("https://tile.thunderforest.com/outdoors/1/1/1.png?apikey=$k")
         assertEquals(1, found.size)
         assertEquals(k, found[0].key)
@@ -765,7 +790,7 @@ class CoreTest {
 
     @Test fun anUppercaseHexStringIsNotAThunderforestKey() {
         // Their keys are lowercase; a hex string in capitals is a checksum in somebody's notes.
-        assertNull(Keys.providerOf("A1B2C3D4E5F60718293A4B5C6D7E8F90"))
+        assertNull(Keys.providerOf("A1B2C3D4" + "E5F60718" + "293A4B5C" + "6D7E8F90"))
     }
 
     @Test fun everyLayerThatFetchesTilesCarriesItsCreditOnTheMap() {

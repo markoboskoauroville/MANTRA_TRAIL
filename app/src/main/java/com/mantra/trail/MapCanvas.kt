@@ -285,6 +285,33 @@ class MapCanvas(private val context: Context, private val store: Store) {
     fun currentZoom(): Int = view.model.mapViewPosition.zoomLevel.toInt()
 
     /**
+     * WHAT THE OFFLINE MAP ACTUALLY HAS, HERE, AT THIS ZOOM. A blank map has several causes and
+     * they look identical on the glass: no file, a file that does not cover this place, no data
+     * at this zoom, or a renderer that is failing. This asks the file and reports the counts.
+     */
+    fun diagnose(): String {
+        val file = mapFile ?: return "No offline map file is open. Settings: download Croatia."
+        return try {
+            val info = file.mapFileInfo
+            val centre = view.model.mapViewPosition.center
+            val z = currentZoom()
+            val tile = Tile(
+                Geo.tileX(centre.longitude, z),
+                Geo.tileY(centre.latitude, z),
+                z.toByte(),
+                view.model.displayModel.tileSize,
+            )
+            val inside = info.boundingBox.contains(centre)
+            val read = runCatching { file.readMapData(tile) }.getOrNull()
+            "z$z · file ${info.fileSize / 1_000_000} MB, zooms ${info.zoomLevelMin}-${info.zoomLevelMax} · " +
+                "here ${if (inside) "inside" else "OUTSIDE"} the map · " +
+                "this tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points"
+        } catch (e: Exception) {
+            "The map file could not be questioned: ${e.javaClass.simpleName}"
+        }
+    }
+
+    /**
      * Null when the file has something to draw under the crosshair, or a sentence when it has
      * nothing. Cheap: one tile's worth of a read that the renderer is about to do anyway.
      */

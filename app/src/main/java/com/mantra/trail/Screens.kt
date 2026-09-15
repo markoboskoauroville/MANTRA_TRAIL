@@ -200,7 +200,7 @@ fun TrailApp(
                         glyph = layer.short,
                         lit = false,
                         onClick = {
-                            val picked = Layers.next(layer)
+                            val picked = store.styleOf(Layers.nextFamily(layer))
                             layer = picked
                             store.layerId = picked.id
                             scope.launch { showLayer(store, picked) }
@@ -221,6 +221,7 @@ fun TrailApp(
                 onPick = { picked ->
                     layer = picked
                     store.layerId = picked.id
+                    store.rememberStyle(picked)
                     scope.launch { showLayer(store, picked) }
                 },
                 onZero = onZeroLevel,
@@ -556,8 +557,9 @@ private fun SettingsFace(
             }
             SettingRow("zero the level on this surface", "set it down first", onZero)
 
-            // The map, chosen the way one-of-many is always chosen (design-language.md 6).
-            // Three to a row: six across a phone would clip the words, so it stacks instead.
+            // The map, chosen the way one-of-many is always chosen (design-language.md 6), and
+            // grouped by family because sixteen chips in one block is a wall. Three to a row:
+            // more than that across a phone clips the words, so it stacks instead.
             Layers.ALL.chunked(3).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                     row.forEach { layer ->
