@@ -404,7 +404,10 @@ private fun CentreMark(hasFix: Boolean) {
 @Composable
 private fun FixLine(fix: Fix?, zoom: Int) {
     Panel {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = GAP, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Label(fix?.let { Geo.formatLat(it.lat) } ?: "N -- --.---", ink(fix != null), size = 13)
             Label(fix?.let { Geo.formatLon(it.lon) } ?: "E -- --.---", ink(fix != null), size = 13)
             Label(fix?.accuracyM?.let { "±${it.toInt()} m" } ?: "± -", accuracyInk(fix?.accuracyM), size = 13)
@@ -429,7 +432,10 @@ private fun ink(active: Boolean): Color = if (active) Paint.Sand else Paint.Dim
 @Composable
 private fun TrackLine(stats: TrackStats) {
     Panel {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = GAP, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Label(Geo.formatDistance(stats.distanceM), Paint.Sand, size = 13)
             Label(Geo.formatDuration(stats.durationMs), Paint.Sand, size = 13)
             Label("↑ ${stats.ascentM.toInt()} m", Paint.Sand, size = 13)
@@ -441,7 +447,9 @@ private fun TrackLine(stats: TrackStats) {
 @Composable
 private fun NoteLine(note: String?) {
     Panel {
-        Label(note ?: " ", Paint.Amber, size = 12, align = TextAlign.Start)
+        Box(Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = GAP, vertical = 2.dp)) {
+            Label(note ?: " ", Paint.Amber, size = 12, align = TextAlign.Start)
+        }
     }
 }
 
@@ -611,6 +619,9 @@ private fun SettingsFace(
                 size = 9,
                 align = TextAlign.Start,
             )
+            SettingRow("map credits", current.attribution, {
+                Trail.say(current.attribution)
+            })
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
             })

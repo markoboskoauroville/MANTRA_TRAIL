@@ -273,6 +273,14 @@ check("a layer that cannot draw falls back to one that can",
 check("zoom is on the screen as keys, not only as a pinch",
       "zoomOut()" in screens and "zoomIn()" in screens, "minus and plus at both ends of the row")
 
+
+# THE MAP CAME IN AS A BAND WITH WHITE ABOVE IT: tiles rendered from the offline file were thrown
+# away as soon as they left the screen, so mapsforge had no parent tile to scale while the new
+# ones rendered, and there was nothing to show.
+check("tiles rendered from the offline file are kept",
+      "layer.kind != LayerKind.GOOGLE_TILES," in canvas_src,
+      "the persistent cache covers our own rendering too; Google is the only exception")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))

@@ -31,7 +31,7 @@ object Paint {
      * legible because each of them also carries a shadow. It is the height of its line and never
      * taller — a bar that covers map is worse than no bar.
      */
-    val Bar = Color(0x730B0D10)
+    val Bar = Color(0x590B0D10)
 
     /** Ink for something present but not usable yet. The same ink, quieter. */
     val Dim = Color(0x8CF2DDB4)
