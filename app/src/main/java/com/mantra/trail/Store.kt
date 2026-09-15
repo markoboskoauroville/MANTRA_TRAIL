@@ -29,6 +29,11 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString(KEY_MAP_FILE, v).apply()
 
     /** The folder finished tracks are copied into, so they outlive the app. */
+    /** The folder's own name, so settings can say Documents/Tracks instead of "chosen". */
+    var exportFolderName: String?
+        get() = prefs.getString(KEY_EXPORT_NAME, null)
+        set(v) = prefs.edit().putString(KEY_EXPORT_NAME, v).apply()
+
     var exportTreeUri: String?
         get() = prefs.getString(KEY_EXPORT_TREE, null)
         set(v) = prefs.edit().putString(KEY_EXPORT_TREE, v).apply()
@@ -113,6 +118,7 @@ class Store(context: Context) {
         private const val KEY_KEYS = "keys"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
+        private const val KEY_EXPORT_NAME = "exportName"
         private const val KEY_PITCH_ZERO = "pitchZero"
         private const val KEY_ROLL_ZERO = "rollZero"
         private const val KEY_LAST_LAT = "lastLat"

@@ -854,6 +854,121 @@ class CoreTest {
         assertTrue(credits.any { it.contains("Google") })
     }
 
+    // --- Tracks: what they are called and what the manager does to them ----------------------
+
+    @Test fun aTrackIsCalledByItsDayItsTimeAndTheWordTrack() {
+        val name = Tracks.defaultName(1_789_387_200_000L, java.time.ZoneOffset.UTC)
+        assertEquals("2026-09-14 12:00 Track", name)
+    }
+
+    @Test fun twoWalksAnHourApartGetDifferentNames() {
+        val a = Tracks.defaultName(1_789_387_200_000L, java.time.ZoneOffset.UTC)
+        val b = Tracks.defaultName(1_789_390_800_000L, java.time.ZoneOffset.UTC)
+        assertFalse(a == b)
+    }
+
+    @Test fun aTypedNameCannotBreakAPath() {
+        assertEquals("north-south.gpx", Tracks.safeFileName("north/south"))
+        assertEquals("Velebit-2.gpx", Tracks.safeFileName("Velebit #2"))
+        assertFalse(Tracks.safeFileName("../../etc/passwd").contains("/"))
+        assertFalse(Tracks.safeFileName("a\u0000b").contains("\u0000"))
+    }
+
+    @Test fun anEmptyNameIsStillAFile() {
+        assertEquals("Track.gpx", Tracks.safeFileName("   "))
+        assertEquals("Track.gpx", Tracks.safeFileName("///"))
+    }
+
+    @Test fun theExtensionIsNotAddedTwice() {
+        assertEquals("Velebit.gpx", Tracks.safeFileName("Velebit.gpx"))
+        assertEquals("Velebit.gpx", Tracks.safeFileName("Velebit"))
+    }
+
+    @Test fun aVeryLongNameIsCutRatherThanRefused() {
+        val name = Tracks.safeFileName("x".repeat(200))
+        assertTrue(name.length <= 64)
+        assertTrue(name.endsWith(".gpx"))
+    }
+
+    @Test fun theNameShownIsTheFileNameWithoutItsExtension() {
+        assertEquals("2026-09-14 12:00 Track", Tracks.displayName("2026-09-14 12:00 Track.gpx"))
+    }
+
+    @Test fun theFolderIsTheList() {
+        val dir = createTempDir()
+        assertTrue(Tracks.list(dir).isEmpty())
+        java.io.File(dir, "one.gpx").writeText("<gpx/>")
+        java.io.File(dir, "notes.txt").writeText("not a track")
+        val found = Tracks.list(dir)
+        assertEquals(1, found.size)
+        assertEquals("one", found[0].name)
+        dir.deleteRecursively()
+    }
+
+    @Test fun theNewestTrackIsFirst() {
+        val dir = createTempDir()
+        val old = java.io.File(dir, "old.gpx").apply { writeText("<gpx/>"); setLastModified(1_000_000) }
+        val new = java.io.File(dir, "new.gpx").apply { writeText("<gpx/>"); setLastModified(9_000_000) }
+        assertEquals(listOf("new", "old"), Tracks.list(dir).map { it.name })
+        old.delete(); new.delete(); dir.deleteRecursively()
+    }
+
+    @Test fun renamingMovesTheFile() {
+        val dir = createTempDir()
+        val file = java.io.File(dir, "one.gpx").apply { writeText("<gpx/>") }
+        val (renamed, problem) = Tracks.rename(file, "Velebit north")
+        assertNull(problem)
+        assertEquals("Velebit north.gpx", renamed!!.name)
+        assertFalse(file.exists())
+        assertEquals("<gpx/>", renamed.readText())
+        dir.deleteRecursively()
+    }
+
+    @Test fun renamingNeverWritesOverAnotherWalk() {
+        val dir = createTempDir()
+        java.io.File(dir, "Velebit.gpx").writeText("the first walk")
+        val second = java.io.File(dir, "other.gpx").apply { writeText("the second walk") }
+        val (renamed, problem) = Tracks.rename(second, "Velebit")
+        assertNull(renamed)
+        assertNotNull(problem)
+        assertEquals("the first walk", java.io.File(dir, "Velebit.gpx").readText())
+        assertTrue(second.exists())
+        dir.deleteRecursively()
+    }
+
+    @Test fun renamingToItsOwnNameIsNotACollision() {
+        val dir = createTempDir()
+        val file = java.io.File(dir, "Velebit.gpx").apply { writeText("<gpx/>") }
+        val (renamed, problem) = Tracks.rename(file, "Velebit")
+        assertNull(problem)
+        assertEquals(file.absolutePath, renamed!!.absolutePath)
+        dir.deleteRecursively()
+    }
+
+    @Test fun renamingSomethingAlreadyGoneSaysSo() {
+        val dir = createTempDir()
+        val file = java.io.File(dir, "gone.gpx")
+        val (renamed, problem) = Tracks.rename(file, "anything")
+        assertNull(renamed)
+        assertNotNull(problem)
+        dir.deleteRecursively()
+    }
+
+    @Test fun deletingRemovesIt() {
+        val dir = createTempDir()
+        val file = java.io.File(dir, "one.gpx").apply { writeText("<gpx/>") }
+        assertNull(Tracks.delete(file))
+        assertFalse(file.exists())
+        assertNull(Tracks.delete(file))
+        dir.deleteRecursively()
+    }
+
+    @Test fun sizesAreWrittenForAWalkNotForADiskDrive() {
+        assertEquals("240 kB", Tracks.formatSize(240_000))
+        assertEquals("1.2 MB", Tracks.formatSize(1_200_000))
+        assertEquals("900 B", Tracks.formatSize(900))
+    }
+
     @Test fun aKeyIsDescribedByPositionAndLengthAndNothingElse() {
         val d = Keys.describe(0, 3, Keys.Found(fakeKey, Keys.Provider.GOOGLE, null))
         assertTrue(d.contains("1 of 3"))

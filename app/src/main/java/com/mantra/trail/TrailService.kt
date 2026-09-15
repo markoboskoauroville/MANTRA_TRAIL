@@ -100,6 +100,9 @@ class TrailService : Service() {
         if (::locator.isInitialized) locator.stop()
         FixWriter.detach()
         LastTrack.set(file, points, name, startedMs)
+        // The screen is told a track has just been written, which is what opens the rename
+        // popup. It carries the file so nothing has to be looked up again.
+        Trail.finished(file)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -164,7 +167,7 @@ class TrailService : Service() {
         private const val CHANNEL = "recording"
         private const val NOTIFICATION_ID = 41
 
-        fun defaultName(): String = "Trail"
+        fun defaultName(): String = Tracks.defaultName(System.currentTimeMillis())
 
         fun start(context: Context, name: String) {
             context.startForegroundService(

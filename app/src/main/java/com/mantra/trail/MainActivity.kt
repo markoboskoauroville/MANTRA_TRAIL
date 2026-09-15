@@ -101,9 +101,44 @@ class MainActivity : ComponentActivity() {
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
         )
         store.exportTreeUri = uri.toString()
+        // THE FOLDER'S OWN NAME IS KEPT, not just its address. "chosen" told him nothing; a
+        // settings row that says Documents/Tracks is a row he can act on (15.9.2026).
+        store.exportFolderName = DocumentFile.fromTreeUri(this, uri)?.name ?: uri.lastPathSegment
         UiTick.bump()
         exportLastTrack()
     }
+
+    /** Rename the track that was just recorded, then put it in the chosen folder. */
+    private fun renameAndSave(file: java.io.File, newName: String) {
+        val (renamed, problem) = Tracks.rename(file, newName)
+        if (problem != null) {
+            Trail.say(problem)
+            return
+        }
+        LastTrack.set(renamed, LastTrack.points, newName, LastTrack.startedMs)
+        exportLastTrack()
+        UiTick.bump()
+    }
+
+    private fun renameTrack(file: java.io.File, newName: String) {
+        val (_, problem) = Tracks.rename(file, newName)
+        Trail.say(problem ?: "Renamed to $newName")
+        UiTick.bump()
+    }
+
+    private fun deleteTrack(file: java.io.File) {
+        val name = Tracks.displayName(file.name)
+        val problem = Tracks.delete(file)
+        Trail.say(problem ?: "Deleted $name")
+        UiTick.bump()
+    }
+
+    private fun exportTrack(file: java.io.File) {
+        LastTrack.set(file, LastTrack.points, Tracks.displayName(file.name), LastTrack.startedMs)
+        exportLastTrack()
+    }
+
+    private fun trackFolder(): java.io.File = java.io.File(filesDir, "tracks").apply { mkdirs() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,6 +168,11 @@ class MainActivity : ComponentActivity() {
                 onOpenMapLink = ::openMapLink,
                 onZeroLevel = ::zeroLevel,
                 onBare = ::setFullScreen,
+                tracks = { Tracks.list(trackFolder()) },
+                onRenameJustFinished = ::renameAndSave,
+                onRenameTrack = ::renameTrack,
+                onDeleteTrack = ::deleteTrack,
+                onExportTrack = ::exportTrack,
             )
         }
 
@@ -299,7 +339,9 @@ class MainActivity : ComponentActivity() {
                 Trail.say("The file could not be written")
                 return
             }
-            Trail.say("Exported $name")
+            // The message says WHERE, because "exported" with no folder in it is a message that
+            // has to be trusted rather than checked.
+            Trail.say("Track saved to ${store.exportFolderName ?: "the chosen folder"}: $name")
         } catch (e: Exception) {
             Trail.say("Export failed: ${e.javaClass.simpleName}")
         }

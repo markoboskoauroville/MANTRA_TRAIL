@@ -10,11 +10,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/trail"
 TESTS = ROOT / "app/src/test/java/com/mantra/trail/CoreTest.kt"
-TEST_FLOOR = 105
+TEST_FLOOR = 130
 
 # The files Test 1 runs against on a desk. They may not reach for Android, or the mechanism can
 # only be tested in an emulator and it stops being tested at all.
-PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Keys.kt"]
+PURE = ["Geo.kt", "Track.kt", "Gpx.kt", "Level.kt", "Layers.kt", "Keys.kt", "Tracks.kt"]
 
 failures, checks = [], []
 
@@ -341,6 +341,24 @@ check("the scale bar is gone", "mapScaleBar.isVisible = false" in canvas_src,
 probe = ROOT / "tools/RenderProbe.java"
 check("the desk reproduction is kept", probe.exists() and "executeJob" in probe.read_text(),
       "renders the real file at every zoom and counts ways, points and colours")
+
+
+# THE TRACK, AFTER THE WALK (15.9.2026): a popup that names it, a folder he can see the name of,
+# and a manager that renames and deletes.
+tracks_src = (MAIN / "Tracks.kt").read_text()
+check("the popup's countdown stops the moment he types",
+      "if (touched) return@LaunchedEffect" in screens,
+      "three seconds to leave the name alone, never three seconds to finish typing")
+check("the popup offers both answers",
+      "keep the date" in screens and "save this name" in screens, "and closes on either")
+check("renaming never writes over another walk",
+      "already exists" in tracks_src, "a name collision refuses rather than overwrites")
+check("deleting a track asks twice",
+      "sure? delete" in screens, "one thumb on a hillside is not a decision")
+check("the settings row names the folder rather than saying chosen",
+      "store.exportFolderName" in screens, "Documents/Tracks, not the word chosen")
+check("the saved message says where it went",
+      "Track saved to" in activity, "a message that can be checked rather than trusted")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

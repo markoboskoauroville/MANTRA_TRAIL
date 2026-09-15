@@ -109,6 +109,19 @@ object Trail {
         return accepted
     }
 
+    private val _justFinished = MutableStateFlow<java.io.File?>(null)
+
+    /** The track that has just been written, until the screen has dealt with it. */
+    val justFinished: StateFlow<java.io.File?> = _justFinished.asStateFlow()
+
+    fun finished(file: java.io.File?) {
+        _justFinished.value = file
+    }
+
+    fun dealtWith() {
+        _justFinished.value = null
+    }
+
     fun say(message: String?) {
         _note.value = message
     }

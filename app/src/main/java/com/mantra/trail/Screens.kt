@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SolidColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,6 +97,11 @@ fun TrailApp(
     onOpenMapLink: () -> Unit,
     onZeroLevel: () -> Unit,
     onBare: (Boolean) -> Unit,
+    tracks: () -> List<Tracks.TrackFile>,
+    onRenameJustFinished: (java.io.File, String) -> Unit,
+    onRenameTrack: (java.io.File, String) -> Unit,
+    onDeleteTrack: (java.io.File) -> Unit,
+    onExportTrack: (java.io.File) -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
@@ -109,6 +116,8 @@ fun TrailApp(
     val note by Trail.note.collectAsState()
     val net by Net.line.collectAsState()
     val recording = recordingSince != null
+    val justFinished by Trail.justFinished.collectAsState()
+    var showTracks by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // The map the app opened on, drawn as soon as the view is real and not a moment before.
@@ -230,6 +239,31 @@ fun TrailApp(
             }
         }
 
+        // THE POPUP THAT ASKS WHAT THE WALK WAS CALLED. It opens when a recording is written and
+        // takes itself away after three seconds, so a walk can be ended with one press and no
+        // second thought — but the countdown STOPS the moment he touches the field, because a
+        // box that closes while somebody is typing in it is worse than no box at all.
+        justFinished?.let { file ->
+            RenamePopup(
+                suggested = Tracks.displayName(file.name),
+                onKeep = { Trail.dealtWith() },
+                onRename = { name ->
+                    Trail.dealtWith()
+                    onRenameJustFinished(file, name)
+                },
+            )
+        }
+
+        if (showTracks) {
+            TracksFace(
+                tracks = tracks(),
+                onRename = onRenameTrack,
+                onDelete = onDeleteTrack,
+                onExport = onExportTrack,
+                onClose = { showTracks = false },
+            )
+        }
+
         if (settings) {
             SettingsFace(
                 sensors = sensors,
@@ -251,6 +285,11 @@ fun TrailApp(
                 onExport = onExport,
                 onPause = onPause,
                 recordingPaused = paused,
+                onTracks = {
+                    settings = false
+                    showTracks = true
+                },
+                trackCount = tracks().size,
                 onClose = { settings = false },
             )
         }
@@ -525,6 +564,180 @@ private fun RowScope.RecordKey(recording: Boolean, paused: Boolean, onPress: () 
     }
 }
 
+
+/**
+ * THE RENAME POPUP, WHICH TAKES ITSELF AWAY.
+ *
+ * Baba, 15.9.2026: *"When I press stop for recording, there will be a popup asking me to rename
+ * track. After 3 seconds, this popup disappears automatically."*
+ *
+ * So it does — but the three seconds are a countdown to LEAVING THE NAME ALONE, not to discarding
+ * what somebody is in the middle of typing. The first touch of the field cancels the timer, and
+ * from then on it waits. A box that closes under a thumb is the kind of helpfulness that loses
+ * work, and a track is a walk that cannot be walked again.
+ */
+@Composable
+private fun RenamePopup(suggested: String, onKeep: () -> Unit, onRename: (String) -> Unit) {
+    var text by remember(suggested) { mutableStateOf(suggested) }
+    var touched by remember(suggested) { mutableStateOf(false) }
+    var secondsLeft by remember(suggested) { mutableIntStateOf(3) }
+
+    LaunchedEffect(suggested, touched) {
+        if (touched) return@LaunchedEffect
+        while (secondsLeft > 0) {
+            delay(1_000)
+            if (touched) return@LaunchedEffect
+            secondsLeft -= 1
+        }
+        onKeep()
+    }
+
+    Box(
+        Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP * 2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Paint.Ground)
+                .padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label("track saved. name it?", Paint.Sand, size = 13, align = TextAlign.Start)
+                Label(
+                    text = if (touched) "waiting" else "${secondsLeft}s",
+                    colour = if (touched) Paint.Dim else Paint.Amber,
+                    size = 13,
+                )
+            }
+            BasicTextField(
+                value = text,
+                onValueChange = {
+                    touched = true
+                    text = it
+                },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Paint.Sand,
+                    fontSize = 15.sp,
+                    fontFamily = FontFamily.Monospace,
+                ),
+                cursorBrush = SolidColor(Paint.Amber),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable(onClick = onKeep),
+                    contentAlignment = Alignment.Center,
+                ) { Label("keep the date", Paint.Sand, size = 12) }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Amber)
+                        .clickable { onRename(text) },
+                    contentAlignment = Alignment.Center,
+                ) { Label("save this name", Paint.Ground, size = 12) }
+            }
+        }
+    }
+}
+
+/**
+ * THE TRACK MANAGER. Every recording on the phone, newest first, with what it weighs. Rename it,
+ * send it to the chosen folder again, or delete it — and deleting asks a second time, because a
+ * walk deleted by a thumb on a hillside cannot be walked again.
+ */
+@Composable
+private fun TracksFace(
+    tracks: List<Tracks.TrackFile>,
+    onRename: (java.io.File, String) -> Unit,
+    onDelete: (java.io.File) -> Unit,
+    onExport: (java.io.File) -> Unit,
+    onClose: () -> Unit,
+) {
+    var renaming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
+    var confirming by remember { mutableStateOf<Tracks.TrackFile?>(null) }
+
+    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+        Column(
+            Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(46.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("tracks", Paint.Dim, size = 13)
+                Label("${tracks.size} on the phone", Paint.Dim, size = 11)
+                Box(
+                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Label("✕", Paint.Sand, size = 18) }
+            }
+
+            if (tracks.isEmpty()) {
+                Label("No tracks yet. The red circle starts one.", Paint.Dim, size = 12)
+            }
+
+            tracks.forEach { track ->
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .padding(GAP),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Label(track.name, Paint.Sand, size = 13, align = TextAlign.Start)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Label(Tracks.formatSize(track.bytes), Paint.Dim, size = 11)
+                        Label("rename", Paint.Amber, size = 12, modifier = Modifier.clickable { renaming = track })
+                        Label("export", Paint.Amber, size = 12, modifier = Modifier.clickable { onExport(track.file) })
+                        Label(
+                            text = if (confirming?.file == track.file) "sure? delete" else "delete",
+                            colour = Paint.Red,
+                            size = 12,
+                            modifier = Modifier.clickable {
+                                if (confirming?.file == track.file) {
+                                    onDelete(track.file)
+                                    confirming = null
+                                } else {
+                                    confirming = track
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        renaming?.let { track ->
+            RenamePopup(
+                suggested = track.name,
+                onKeep = { renaming = null },
+                onRename = { name ->
+                    renaming = null
+                    onRename(track.file, name)
+                },
+            )
+        }
+    }
+}
+
 /**
  * EVERYTHING ELSE LIVES HERE: the map choice, the offline map, the folders, the keys, the compass
  * and the level. One key on the map screen opens it, and the way out is at the right-hand end of
@@ -546,12 +759,17 @@ private fun SettingsFace(
     onExport: () -> Unit,
     onPause: () -> Unit,
     recordingPaused: Boolean,
+    onTracks: () -> Unit,
+    trackCount: Int,
     onClose: () -> Unit,
 ) {
     var heading by remember { mutableStateOf(0.0) }
     var reading by remember { mutableStateOf(sensors.level) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
-    val exportState = remember(UiTick.n) { if (store.exportTreeUri != null) "chosen" else "none" }
+    // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
+    val exportState = remember(UiTick.n) {
+        store.exportFolderName ?: if (store.exportTreeUri != null) "chosen" else "none yet"
+    }
     val keyState = remember(UiTick.n) { store.keyState }
 
     LaunchedEffect(Unit) {
@@ -650,6 +868,7 @@ private fun SettingsFace(
             // desktop browser if the phone is the wrong place to fetch 176 MB.
             Label(Layers.OfflineDownload.URL, Paint.Dim, size = 9, align = TextAlign.Start)
             SettingRow("folder for exported tracks", exportState, onChooseExportFolder)
+            SettingRow("tracks: rename, export, delete", "$trackCount on the phone", onTracks)
             SettingRow("export the last track", if (LastTrack.file != null) "ready" else "none yet", onExport)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)
@@ -770,8 +989,10 @@ private fun Label(
     colour: Color,
     size: Int = 14,
     align: TextAlign = TextAlign.Center,
+    modifier: Modifier = Modifier,
 ) {
     Text(
+        modifier = modifier,
         text = text,
         color = colour,
         fontSize = size.sp,
