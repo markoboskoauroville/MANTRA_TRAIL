@@ -34,13 +34,20 @@ object Tracks {
     fun safeFileName(name: String): String {
         val cleaned = name.trim().map { c ->
             when {
-                c.isLetterOrDigit() || c == ' ' || c == '-' || c == '_' || c == '.' -> c
+                // Parentheses are kept: a route saved from A and B is named "… (AB)" and that
+                // is the part somebody reads to tell it from a walk (16.9.2026). They are legal
+                // in a file name everywhere this app can write.
+                c.isLetterOrDigit() || c == ' ' || c == '-' || c == '_' || c == '.' ||
+                    c == '(' || c == ')' -> c
                 else -> '-'
             }
         }.joinToString("").trim('-', ' ', '.')
         // "Velebit #2" would otherwise become "Velebit -2": a run of replaced characters and the
         // spaces around it collapse into one dash, which is what somebody would have typed.
-        val tidied = cleaned.replace(Regex(" *-[ -]*"), "-").trim('-', ' ', '.')
+        val tidied = cleaned.replace(Regex(" *-[ -]*"), "-")
+            // An empty pair of brackets is nothing, and the space before it goes with it.
+            .replace(Regex(" *\\(\\s*\\)"), "")
+            .trim('-', ' ', '.')
         val base = if (tidied.isEmpty()) "Track" else tidied.take(60)
         return if (base.endsWith(".gpx", ignoreCase = true)) base else "$base.gpx"
     }

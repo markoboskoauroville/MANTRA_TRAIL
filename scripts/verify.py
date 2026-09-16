@@ -486,6 +486,24 @@ check("no part of the map server is left in this app",
       and not (MAIN / "ServerStatus.kt").exists() and "SERVER" not in layers,
       "the layer, the family, the status row and the file are all gone")
 
+
+# A AND B (16.9.2026): two keys either side of the row, a menu behind a long press, and a route
+# saved as an ordinary GPX so nothing downstream has to know what it is.
+check("A sits beside the minus and B beside the plus",
+      screens.index('letter = "A"') < screens.index('glyph = "T"') < screens.index('letter = "B"'),
+      "and the record circle is still the middle key of nine")
+check("a long press on either point opens one menu",
+      screens.count("onLongPress = { routeMenu = true }") == 2, "the same menu from both")
+check("unticking a point deletes it from the map",
+      'CanvasHolder.canvas?.setRoutePoint("A", pointA)' in screens
+      and "pointA = if (keep) pointA ?: CanvasHolder.canvas?.centre() else null" in screens,
+      "the tick is the marker")
+check("a saved route is an ordinary track with (AB) in its name",
+      '(AB)"' in activity and "Gpx.whole(name, points, now)" in activity,
+      "the manager renames, shows and deletes it like any other GPX")
+check("the key for routing says it is not built",
+      "not built yet" in screens, "a key that lies about being ready is worse than a missing key")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))

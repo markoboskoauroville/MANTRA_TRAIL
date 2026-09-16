@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -121,10 +123,14 @@ fun TrailApp(
     onDeleteTrack: (Folder.Entry) -> Unit,
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
+    onSaveRoute: (Pair<Double, Double>?, Pair<Double, Double>?) -> Unit,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
     var compass by remember { mutableIntStateOf(store.compassMode) }
+    var pointA by remember { mutableStateOf(store.point("A")) }
+    var pointB by remember { mutableStateOf(store.point("B")) }
+    var routeMenu by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
@@ -239,6 +245,19 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
+                    // A BESIDE THE MINUS, B BESIDE THE PLUS, and the record circle still the
+                    // middle key of nine. A tap drops that point where the crosshair is; a long
+                    // press on either opens the route menu (15.9.2026).
+                    PointKey(
+                        letter = "A",
+                        placed = pointA != null,
+                        onTap = {
+                            pointA = CanvasHolder.canvas?.centre()
+                            store.setPoint("A", pointA)
+                            CanvasHolder.canvas?.setRoutePoint("A", pointA)
+                        },
+                        onLongPress = { routeMenu = true },
+                    )
                     // T CYCLES THE COMPASS: dark, night, off. Dark ink for a light map, light
                     // ink for a dark one, and off for neither — three presses to come round
                     // (15.9.2026). The key lights while the compass is on the map.
@@ -288,6 +307,16 @@ fun TrailApp(
                         },
                     )
                     Key("⚙", lit = false, onClick = { settings = true })
+                    PointKey(
+                        letter = "B",
+                        placed = pointB != null,
+                        onTap = {
+                            pointB = CanvasHolder.canvas?.centre()
+                            store.setPoint("B", pointB)
+                            CanvasHolder.canvas?.setRoutePoint("B", pointB)
+                        },
+                        onLongPress = { routeMenu = true },
+                    )
                     Key(glyph = "+", lit = false, onClick = { CanvasHolder.canvas?.zoomIn() })
                 }
             }
@@ -310,6 +339,33 @@ fun TrailApp(
                     Trail.dealtWith()
                     onRenameJustFinished(file, name)
                 },
+            )
+        }
+
+        LaunchedEffect(ready) {
+            if (ready) {
+                CanvasHolder.canvas?.setRoutePoint("A", pointA)
+                CanvasHolder.canvas?.setRoutePoint("B", pointB)
+            }
+        }
+
+        if (routeMenu) {
+            RouteMenu(
+                store = store,
+                a = pointA,
+                b = pointB,
+                onA = { keep ->
+                    pointA = if (keep) pointA ?: CanvasHolder.canvas?.centre() else null
+                    store.setPoint("A", pointA)
+                    CanvasHolder.canvas?.setRoutePoint("A", pointA)
+                },
+                onB = { keep ->
+                    pointB = if (keep) pointB ?: CanvasHolder.canvas?.centre() else null
+                    store.setPoint("B", pointB)
+                    CanvasHolder.canvas?.setRoutePoint("B", pointB)
+                },
+                onSave = { onSaveRoute(pointA, pointB) },
+                onClose = { routeMenu = false },
             )
         }
 
@@ -1021,6 +1077,197 @@ private fun CompassOverlay(sensors: Sensors, night: Boolean) {
         ) {
             CompassDial(heading, full = true, ink = ink)
             Label("${heading.toInt()}° ${Geo.cardinal(heading)}", ink, size = 16)
+        }
+    }
+}
+
+
+/**
+ * A KEY FOR A ROUTE POINT. A tap drops it where the crosshair is; a long press opens the menu.
+ * Lit while the point is on the map, so the row says what has been placed without a word on it.
+ */
+@Composable
+private fun RowScope.PointKey(
+    letter: String,
+    placed: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    Box(
+        Modifier
+            .weight(1f)
+            .height(KEY)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (placed) Paint.Amber.copy(alpha = 0.3f) else Color.Transparent)
+            .pointerInput(letter) {
+                detectTapGestures(onTap = { onTap() }, onLongPress = { onLongPress() })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Label(letter, if (placed) Paint.AmberBright else Paint.Sand, size = 17)
+    }
+}
+
+/**
+ * THE ROUTE MENU, opened by a long press on either point.
+ *
+ * Baba, 16.9.2026: A, B and Save in one menu; unticking a point deletes it from the map; Save
+ * keeps the pair as a route in the same drawer as a recorded walk, with (AB) in its name so it
+ * can be told from one that was walked.
+ *
+ * Route is the button for the routing that is not written yet. It is here, it says what it will
+ * do, and it says plainly that it does not do it — a key that lies about being ready is worse
+ * than a key that is missing (silent-failure.md).
+ */
+@Composable
+private fun RouteMenu(
+    store: Store,
+    a: Pair<Double, Double>?,
+    b: Pair<Double, Double>?,
+    onA: (Boolean) -> Unit,
+    onB: (Boolean) -> Unit,
+    onSave: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var options by remember { mutableIntStateOf(store.routeOptions) }
+    var speed by remember { mutableStateOf(store.walkSpeedKmh) }
+    val both = a != null && b != null
+    val metres = if (both) Geo.distance(a!!.first, a.second, b!!.first, b.second) else 0.0
+
+    Box(
+        Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP * 2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Paint.Ground)
+                .padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label("route", Paint.Dim, size = 12, align = TextAlign.Start)
+                Label(
+                    text = if (both) {
+                        "${Geo.formatDistance(metres)} · ${Geo.formatDuration((metres / (speed * 1000.0 / 3600.0)).toLong() * 1000L)}"
+                    } else {
+                        "place both points"
+                    },
+                    colour = if (both) Paint.Sand else Paint.Dim,
+                    size = 12,
+                )
+            }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("  A", Paint.Sand, size = 14, align = TextAlign.Start, modifier = Modifier.weight(1f))
+                Tick(checked = a != null, onChange = { onA(it) })
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("  B", Paint.Sand, size = 14, align = TextAlign.Start, modifier = Modifier.weight(1f))
+                Tick(checked = b != null, onChange = { onB(it) })
+            }
+
+            // The two numbers the routing will need when it exists, kept now so they are his
+            // rather than mine when it arrives.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("options", Paint.Dim, size = 11)
+                (1..5).forEach { n ->
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (n == options) Paint.Amber else Paint.Veil)
+                            .clickable {
+                                options = n
+                                store.routeOptions = n
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Label("$n", if (n == options) Paint.Ground else Paint.Sand, size = 12) }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("walking speed", Paint.Dim, size = 11)
+                listOf(3f, 4f, 5f, 6f).forEach { option ->
+                    Box(
+                        Modifier
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (option == speed) Paint.Amber else Paint.Veil)
+                            .clickable {
+                                speed = option
+                                store.walkSpeedKmh = option
+                            }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Label(
+                            text = "${option.toInt()} km/h",
+                            colour = if (option == speed) Paint.Ground else Paint.Sand,
+                            size = 11,
+                        )
+                    }
+                }
+            }
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil)
+                    .clickable { Trail.say("Route finding is not built yet. A, B and save are.") }
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Label("route between them", Paint.Dim, size = 13, align = TextAlign.Start)
+                    Label("not built yet", Paint.Dim, size = 11)
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Label("close", Paint.Sand, size = 14) }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (both) Paint.Amber else Paint.Veil)
+                        .clickable { if (both) onSave() },
+                    contentAlignment = Alignment.Center,
+                ) { Label("save", if (both) Paint.Ground else Paint.Dim, size = 14) }
+            }
         }
     }
 }

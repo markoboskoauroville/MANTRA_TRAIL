@@ -793,6 +793,12 @@ class CoreTest {
         assertFalse(a == b)
     }
 
+    @Test fun parenthesesSurviveBecauseARouteIsNamedWithThem() {
+        assertEquals("Velebit (AB).gpx", Tracks.safeFileName("Velebit (AB)"))
+        // An empty pair is not worth keeping.
+        assertEquals("Velebit.gpx", Tracks.safeFileName("Velebit ()"))
+    }
+
     @Test fun aTypedNameCannotBreakAPath() {
         assertEquals("north-south.gpx", Tracks.safeFileName("north/south"))
         assertEquals("Velebit-2.gpx", Tracks.safeFileName("Velebit #2"))
@@ -963,6 +969,25 @@ class CoreTest {
         assertEquals(0L, GpxRead.parseTime("yesterday afternoon"))
         assertEquals(0L, GpxRead.parseTime(""))
         assertTrue(GpxRead.parseTime("2026-09-15T10:00:00Z") > 0)
+    }
+
+    @Test fun aRouteIsNamedSoItCanBeToldFromAWalk() {
+        val name = "${Tracks.defaultName(1_789_387_200_000L, java.time.ZoneOffset.UTC).removeSuffix(" Track")} (AB)"
+        assertEquals("2026-09-14 12:00 (AB)", name)
+        // And it survives becoming a file and coming back, like any other track.
+        val fileName = Tracks.safeFileName(name)
+        assertTrue(fileName.endsWith(".gpx"))
+        assertEquals("2026-09-14 12-00 (AB)", Tracks.displayName(fileName))
+    }
+
+    @Test fun aTwoPointRouteIsAnOrdinaryGpxFile() {
+        val a = Fix(45.815, 15.981, null, 1_000L, null)
+        val b = Fix(45.900, 16.100, null, 1_000L, null)
+        val text = Gpx.whole("2026-09-14 12:00 (AB)", listOf(a, b), 1_000L)
+        val read = GpxRead.points(text)
+        assertEquals(2, read.size)
+        assertEquals(45.815, read[0].lat, 1e-6)
+        assertEquals(16.100, read[1].lon, 1e-6)
     }
 
     @Test fun aNameTheAppMadeIsToldFromANameHeChose() {

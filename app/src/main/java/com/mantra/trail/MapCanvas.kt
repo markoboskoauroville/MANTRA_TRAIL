@@ -2,6 +2,11 @@ package com.mantra.trail
 
 import android.content.Context
 import android.net.Uri
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Color as AndroidColour
+import android.graphics.Paint as AndroidPaint
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.os.ParcelFileDescriptor
 import org.mapsforge.core.graphics.Style
 import org.mapsforge.core.model.LatLong
@@ -15,6 +20,7 @@ import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.AbstractTileSource
 import org.mapsforge.map.layer.overlay.Circle
+import org.mapsforge.map.layer.overlay.Marker
 import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
@@ -107,6 +113,8 @@ class MapCanvas(private val context: Context, private val store: Store) {
     private var tileCache: TileCache? = null
     private var trackLine: Polyline? = null
     private var shownLine: Polyline? = null
+    private var routeLine: Polyline? = null
+    private val routeMarkers = HashMap<String, Marker>()
     private var here: Circle? = null
     private var accuracyRing: Circle? = null
     private var mapFile: MapFile? = null
@@ -304,6 +312,10 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun restoreOverlays() {
+        routeMarkers.values.forEach {
+            if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
+        }
+        routeLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         shownLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         trackLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }

@@ -128,6 +128,34 @@ class Store(context: Context) {
         get() = prefs.getInt(KEY_COMPASS, 2).coerceIn(0, 2)
         set(v) = prefs.edit().putInt(KEY_COMPASS, v.coerceIn(0, 2)).apply()
 
+    /**
+     * The two points of a route, A and B. Kept between sessions, because a line drawn to the col
+     * before a walk is still wanted the next morning. NaN is "not placed": one value, no flag
+     * beside it to fall out of step with it.
+     */
+    fun point(letter: String): Pair<Double, Double>? {
+        val lat = java.lang.Double.longBitsToDouble(prefs.getLong("point-$letter-lat", NAN_BITS))
+        val lon = java.lang.Double.longBitsToDouble(prefs.getLong("point-$letter-lon", NAN_BITS))
+        return if (lat.isNaN() || lon.isNaN()) null else lat to lon
+    }
+
+    fun setPoint(letter: String, at: Pair<Double, Double>?) {
+        prefs.edit()
+            .putLong("point-$letter-lat", java.lang.Double.doubleToRawLongBits(at?.first ?: Double.NaN))
+            .putLong("point-$letter-lon", java.lang.Double.doubleToRawLongBits(at?.second ?: Double.NaN))
+            .apply()
+    }
+
+    /** How many route options to ask for when the routing is wired up. One to five. */
+    var routeOptions: Int
+        get() = prefs.getInt(KEY_ROUTE_OPTIONS, 3).coerceIn(1, 5)
+        set(v) = prefs.edit().putInt(KEY_ROUTE_OPTIONS, v.coerceIn(1, 5)).apply()
+
+    /** The walking speed a time estimate is made from, in kilometres an hour. */
+    var walkSpeedKmh: Float
+        get() = prefs.getFloat(KEY_WALK_SPEED, 4.0f).coerceIn(1f, 30f)
+        set(v) = prefs.edit().putFloat(KEY_WALK_SPEED, v.coerceIn(1f, 30f)).apply()
+
     /** The colour a loaded track is drawn in, as an ARGB value. */
     var trackColour: Long
         get() = prefs.getLong(KEY_TRACK_COLOUR, 0xFF34D399)
@@ -151,6 +179,8 @@ class Store(context: Context) {
         private const val KEY_KEYS = "keys"
         private const val KEY_TRACK_COLOUR = "trackColour"
         private const val KEY_COMPASS = "compassMode"
+        private const val KEY_ROUTE_OPTIONS = "routeOptions"
+        private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
         private const val KEY_EXPORT_NAME = "exportName"
@@ -159,6 +189,8 @@ class Store(context: Context) {
         private const val KEY_LAST_ZOOM = "lastZoom"
 
         /** Zagreb, because that is where the phone usually is when the app is opened cold. */
+        private val NAN_BITS = java.lang.Double.doubleToRawLongBits(Double.NaN)
+
         private val DEFAULT_LAT_BITS = java.lang.Double.doubleToRawLongBits(45.8150)
         private val DEFAULT_LON_BITS = java.lang.Double.doubleToRawLongBits(15.9819)
     }

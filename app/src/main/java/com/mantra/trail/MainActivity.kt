@@ -148,6 +148,36 @@ class MainActivity : ComponentActivity() {
     }
 
 
+    /**
+     * SAVE A AND B AS A ROUTE, in the same drawer as a recorded walk and in the same format, with
+     * (AB) in its name so it can be told from one that was walked (16.9.2026). Nothing about it
+     * is a special case downstream: the manager renames it, shows it and deletes it like any
+     * other GPX, because it IS any other GPX.
+     */
+    private fun saveRoute(a: Pair<Double, Double>?, b: Pair<Double, Double>?) {
+        if (a == null || b == null) {
+            report("Place both points first")
+            return
+        }
+        val now = System.currentTimeMillis()
+        val name = "${Tracks.defaultName(now).removeSuffix(" Track")} (AB)"
+        val points = listOf(
+            Fix(a.first, a.second, null, now, null),
+            Fix(b.first, b.second, null, now, null),
+        )
+        lifecycleScope.launch {
+            val problem = withContext(Dispatchers.IO) {
+                val temp = java.io.File(cacheDir, Tracks.safeFileName(name))
+                temp.writeText(Gpx.whole(name, points, now))
+                val answer = Folder.save(this@MainActivity, store, temp, name)
+                temp.delete()
+                answer
+            }
+            report(problem ?: "Saved $name to ${Folder.label(this@MainActivity, store)}")
+            UiTick.bump()
+        }
+    }
+
     /** Read a saved walk back out of the folder and draw it over the map. */
     private fun showTrack(entry: Folder.Entry) {
         lifecycleScope.launch {
@@ -200,6 +230,7 @@ class MainActivity : ComponentActivity() {
                 onDeleteTrack = ::deleteTrack,
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
+                onSaveRoute = ::saveRoute,
             )
         }
 
