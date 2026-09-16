@@ -585,15 +585,16 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
         Trail.say(if (layer.kind == LayerKind.VECTOR_FILE) canvas.emptyHere() else null)
         return
     }
-    // A MAP THAT CANNOT DRAW LEAVES THE SCREEN EMPTY, and an empty screen teaches nothing. So the
-    // reason is said AND the one map that always works is put up underneath it, rather than
-    // leaving somebody looking at white paper wondering whether the app is broken.
-    if (layer.id == Layers.OSM.id) {
+    // A MAP THAT CANNOT DRAW LEAVES THE SCREEN EMPTY, and an empty screen teaches nothing. The
+    // fallback used to be OpenStreetMap, which left the app on 16.9.2026; the offline file is
+    // what always works now, and when it is the offline file that failed there is nothing to
+    // fall back TO, so the reason is all there is to give.
+    if (layer.id == Layers.OFFLINE.id) {
         Trail.say(problem)
         return
     }
-    val fallback = attempt(canvas, store, Layers.OSM)
-    Trail.say(if (fallback == null) "$problem — showing OpenStreetMap meanwhile" else problem)
+    val fallback = attempt(canvas, store, Layers.OFFLINE)
+    Trail.say(if (fallback == null) "$problem — showing the offline map meanwhile" else problem)
 }
 
 /** One attempt at one layer. Returns null when it drew, or the reason it did not. */
@@ -855,11 +856,9 @@ private fun Tick(checked: Boolean, onChange: (Boolean) -> Unit, dimmed: Boolean 
     }
 }
 
-/** The four families, named as somebody would say them. */
+/** The families, named as somebody would say them. */
 private fun familyLabel(family: MapLayer.Family): String = when (family) {
-    MapLayer.Family.THUNDERFOREST -> "Thunderforest"
-    MapLayer.Family.OFFLINE -> "Offline file"
-    MapLayer.Family.OSM -> "OpenStreetMap"
+    MapLayer.Family.OFFLINE -> "Offline map"
     MapLayer.Family.GOOGLE -> "Google"
 }
 

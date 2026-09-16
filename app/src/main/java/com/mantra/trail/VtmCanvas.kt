@@ -17,6 +17,7 @@ import org.oscim.layers.tile.vector.labeling.LabelLayer
 import org.oscim.theme.internal.VtmThemes
 import org.oscim.tiling.source.bitmap.BitmapTileSource
 import org.oscim.tiling.source.mapfile.MapFileTileSource
+import java.io.File
 import java.io.FileInputStream
 
 /**
