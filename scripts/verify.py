@@ -82,13 +82,16 @@ check("manifest does NOT ask for ACCESS_BACKGROUND_LOCATION",
 
 # 5 Google's tiles are never cached, and the rule is in the code rather than in a comment
 layers = code_only((MAIN / "Layers.kt").read_text())
-canvas = code_only((MAIN / "MapCanvas.kt").read_text())
+# THE CPU RENDERER IS GONE (16.9.2026), and with it every check that examined it: the tile cache
+# sized from the screen, the persistent tile store, the square frame buffer, the scaled parent
+# tiles. Those were not wrong — they were true of a renderer this app no longer has, and a check
+# that guards something absent can only ever pass. What replaces them is smaller, because VTM
+# does that work itself: there is no cache to size and no frame buffer to shape.
+canvas_src = (MAIN / "VtmCanvas.kt").read_text()
+canvas = code_only(canvas_src)
 # This asked for layer.cacheable, which is about a LICENCE to keep tiles somebody else served.
 # Tiles we rendered ourselves from a file on the phone are ours, and keeping them is what makes a
 # revisited zoom instant. The one layer that may never be kept is Google, and that is the test.
-check("the tile cache is kept on disk for every layer except Google",
-      "layer.kind != LayerKind.GOOGLE_TILES," in canvas,
-      "Google is the only false, and its terms are the reason")
 
 # 6 the track is written as the walk happens, not assembled at the end
 svc = code_only((MAIN / "TrailService.kt").read_text())
@@ -232,12 +235,6 @@ check("no credit is printed over the map",
 # and a screen-shaped buffer turned by thirty degrees leaves white wedges in the corners, because
 # nothing was ever drawn there. The old reasoning was right about the cost and wrong about the
 # need; the cost is paid deliberately and the cache is sized for the diagonal to match.
-check("the frame buffer is square, so a turned map has no empty corners",
-      "Parameters.SQUARE_FRAME_BUFFER = true" in (MAIN / "MapCanvas.kt").read_text(),
-      "the square buffer is for rotation, and this map rotates")
-check("rendered tiles are kept on disk for every layer but Google",
-      "layer.kind != LayerKind.GOOGLE_TILES," in (MAIN / "MapCanvas.kt").read_text(),
-      "a zoom visited once comes back instantly")
 check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
 # Split in two on 15.9.2026: the crosshair over the map and the mark on the key are different
@@ -263,18 +260,14 @@ check("the record circle sits at the middle of the row",
 
 # THE OFFLINE MAP WENT BLANK ON THE WAY IN (15.9.2026). Three things could do that and all three
 # are now closed; the checks keep them closed.
-canvas_src = (MAIN / "MapCanvas.kt").read_text()
 # The rule grew: it is not only the vector map that may be enlarged past its data. Every layer now
 # carries two ceilings — where its tiles stop, and how far the view may go while mapsforge scales
 # the last real tile (Baba, 15.9.2026: "OpenStreetMap goes to zoom level 18 and it stops. Why?").
-check("the view is never clamped to where the tiles stop",
-      "layer.viewMaxZoom.toByte()" in canvas_src and "val viewMaxZoom" in layers,
-      "two ceilings: the service's tiles, and the view over them")
+check("every layer still declares how far the view may go",
+      "val viewMaxZoom" in layers,
+      "the ceiling is the layer's, and VTM scales its own geometry past the data")
 # Superseded on 15.9.2026 by the pixel-sized cache: the old check looked for the screenRatio
 # argument "2f," that the desk reproduction proved was the wrong way to size it at all.
-check("the tile cache is named per layer and sized for two frames",
-      '"tiles-${layer.id}",' in canvas_src and "overdrawFactor * 2.0" in canvas_src,
-      "room for the level being entered and the one being left")
 check("the app asks for the large heap a country file at street zoom needs",
       'android:largeHeap="true"' in mf, "present")
 check("the zoom is on the screen, so a fault can be reported with a number",
@@ -287,9 +280,6 @@ check("the zoom is on the screen, so a fault can be reported with a number",
 check("the first draw is triggered by the view existing, not by a bare effect",
       "onReady()" in screens and "LaunchedEffect(ready)" in screens,
       "the factory says when the view is real")
-check("no path out of showLayer is silent",
-      "The map view is not up yet" in screens,
-      "the missing canvas now says so")
 check("a layer that cannot draw falls back to one that can",
       "showing OpenStreetMap meanwhile" in screens,
       "the screen is never white without a sentence on it")
@@ -300,9 +290,9 @@ check("zoom is on the screen as keys, not only as a pinch",
 # THE MAP CAME IN AS A BAND WITH WHITE ABOVE IT: tiles rendered from the offline file were thrown
 # away as soon as they left the screen, so mapsforge had no parent tile to scale while the new
 # ones rendered, and there was nothing to show.
-check("tiles rendered from the offline file are kept",
-      "layer.kind != LayerKind.GOOGLE_TILES," in canvas_src,
-      "the persistent cache covers our own rendering too; Google is the only exception")
+check("Google's tiles are still never kept",
+      "GOOGLE_TILES" in layers,
+      "their terms forbid storing them, and the GPU engine caches nothing to disk either")
 
 
 # z19 WAS WHITE (15.9.2026). mapsforge draws the PARENT tile scaled while a tile renders, but it
@@ -311,14 +301,6 @@ check("tiles rendered from the offline file are kept",
 # Replaced on 15.9.2026 after the desk reproduction: mapsforge renders this file at z19 to z21
 # perfectly, so the blank above 18 was the cache, and a guessed ratio is what made it too small.
 # mapsforge's own docs call the ratio an approximation made before the view has a size.
-check("the tile cache is sized from real pixels, not from a guessed ratio",
-      "metrics.widthPixels" in canvas_src and "metrics.heightPixels" in canvas_src,
-      "the screen's own dimensions decide how many tiles a frame needs")
-check("the cache has room for the zoom being entered as well as the one being left",
-      "overdrawFactor * 2.0" in canvas_src, "twice the frame")
-check("the tile cache is sized for the diagonal, not the screen",
-      "Math.hypot(metrics.widthPixels.toDouble()" in canvas_src,
-      "a square buffer is as wide as the diagonal, and its corners must fit in the cache too")
 check("an empty map says so by asking the file, not by waiting to be photographed",
       "fun emptyHere" in canvas_src and "emptyHere()" in screens,
       "the read the renderer is about to do anyway")
@@ -345,7 +327,7 @@ check("a blank offline map explains itself at the zoom it goes blank",
 check("the map name is on the top line",
       "Label(layer.name, Paint.Amber" in screens,
       "next to the zoom, where the key beside it says which family it is")
-check("the scale bar is gone", "mapScaleBar.isVisible = false" in canvas_src,
+check("the scale bar is gone", "mapScaleBar" not in canvas_src,
       "the zoom number says the same thing in five characters")
 
 
@@ -474,10 +456,6 @@ check("a family with one map is one row, with no triangle to press for nothing",
 check("a group is told from its maps by more than position",
       "familyLabel(family).uppercase()" in screens and "padding(start = 22.dp)" in screens,
       "capitals and amber for the group, title case and sand for its maps, pushed in")
-check("the crosshair is hairlines", "val hair = 1.dp.toPx()" in screens, "one pixel, four of them")
-check("choosing a map closes the settings and shows it",
-      "settings = false\n                    scope.launch { showLayer(store, picked) }" in screens,
-      "one decision, not two")
 check("the map families fold, and the fold is remembered",
       "store.collapsed(key)" in screens and "store.setCollapsed(key, folded)" in screens,
       "between sessions, so nothing has to be folded away twice")
@@ -521,9 +499,9 @@ check("a second tap turns the map the way he is walking",
       "and which of the two it was left in is remembered")
 check("the map is not turned for every wobble of the magnetometer",
       "> 2.0) {" in screens, "two degrees, or the map shivers in the hand")
-check("two fingers turn the map",
-      "touchGestureHandler.setRotationEnabled(true)" in (MAIN / "MapCanvas.kt").read_text(),
-      "mapsforge can do it and ships it off")
+check("the map can be turned and the turn can be read back",
+      "fun setMapRotation" in canvas_src and "fun mapRotationDeg" in canvas_src,
+      "VTM turns with two fingers by itself; the little compass needs to read and set it")
 # Replaced 16.9.2026: he asked for Google's mark instead — a dot with a cone of light in front.
 # The mark moved into Marks.kt when the second engine arrived (16.9.2026): both engines draw the
 # same dot, so it is drawn in one place and handed to whichever is running.
@@ -540,20 +518,21 @@ check("the light turns with the map as well as with the phone",
 check("the diagnosis appears where it was asked for",
       "answer = CanvasHolder.canvas?.diagnose()" in screens,
       "not on a line behind the screen he is looking at")
-check("both engines name themselves in their answer",
-      "mapsforge (CPU tiles)" in canvas_src and "VTM (GPU)" in (MAIN / "VtmCanvas.kt").read_text(),
-      "an answer that does not say which engine gave it answers a different question")
-check("the engine row says what is running, not only what was chosen",
-      "is VtmCanvas -> " in screens and "after restart" in screens,
-      "the setting is a promise about next time; the object knows now")
-check("there are two engines and the screen does not know which it has",
-      (MAIN / "MapSurface.kt").exists() and "VtmCanvas(context, store) else MapCanvas(context, store)" in screens,
-      "one interface, two implementations, chosen when the view is built")
-check("the GPU engine reads the same offline files",
-      "MapFileTileSource" in (MAIN / "VtmCanvas.kt").read_text(),
-      "no new format and no second download")
+check("the engine names itself in its answer",
+      "VTM (GPU)" in canvas_src, "so a screenshot of it says which code was running")
+# The choice is gone with the CPU renderer (16.9.2026): there is one engine, so there is nothing
+# to choose and nothing to restart for.
+check("no setting offers the renderer that was removed",
+      "useVtm" not in screens and "map engine" not in screens,
+      "one engine, no switch, no fallback to the thing that lagged")
+check("the CPU renderer is gone from the tree, not merely unused",
+      not (MAIN / "MapCanvas.kt").exists() and not (MAIN / "MapSurface.kt").exists()
+      and "mapsforge-map" not in (ROOT / "app/build.gradle.kts").read_text(),
+      "the file, the interface it shared and the dependency all left together")
+check("the engine reads the offline files he already has",
+      "MapFileTileSource" in canvas_src, "no new format and no second download")
 check("accuracy is drawn as a ring",
-      "Circle(here, fix.accuracyM, null, paint(0x553B82F6, 1.5f, Style.STROKE))" in canvas_src,
+      "accuracyRing = ring" in canvas_src and "PathLayer(map, 0x553B82F6" in canvas_src,
       "filled, three metres of accuracy swallowed the map at z22")
 check("a long press on the point key opens the manager",
       screens.count("onLongPress = { routeMenu = true }") == 1,
@@ -586,23 +565,15 @@ check("identical alternatives are dropped rather than coloured differently",
       "two identical lines in two colours is a lie about there being a choice")
 
 
-# TWO ENGINES (16.9.2026). mapsforge rasterises on the CPU; VTM is the same project's OpenGL
-# renderer, reading the same files. Both are carried behind one interface until one has been
-# walked with enough to delete the other.
-surface = (MAIN / "MapSurface.kt").read_text()
-vtm_src = (MAIN / "VtmCanvas.kt").read_text()
-check("both engines answer to one interface",
-      "class MapCanvas" in canvas_src and ": MapSurface" in canvas_src and ": MapSurface" in vtm_src,
-      "nothing above the map knows which is underneath")
-check("the engine is chosen where the view is built",
-      "if (store.useVtm) VtmCanvas(context, store) else MapCanvas(context, store)" in screens,
-      "swapping it under a running screen would drop everything drawn on it")
-check("VTM reads the same map file",
+# ONE ENGINE (16.9.2026). The CPU renderer and the interface that let the two sit side by side
+# are both deleted: he walked with the GPU one and the old one only kept the lag one tap away.
+vtm_src = canvas_src
+check("VTM reads the map file he already has",
       "MapFileTileSource()" in vtm_src and "setMapFileInputStream" in vtm_src,
       "the 176 MB on his phone is not downloaded again")
-check("the engine setting says which is which",
-      '"VTM, on the GPU"' in screens and '"mapsforge, on the CPU"' in screens,
-      "and that it takes effect next start")
+check("the engine is built once, where the view is",
+      "VtmCanvas(context, store)" in screens and "useVtm" not in screens,
+      "no switch, because there is nothing to switch to")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

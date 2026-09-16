@@ -112,7 +112,7 @@ fun TrailApp(
     store: Store,
     sensors: Sensors,
     version: String,
-    onCanvas: (MapSurface) -> Unit,
+    onCanvas: (VtmCanvas) -> Unit,
     onWhereAmI: () -> Unit,
     onRecord: () -> Unit,
     onPause: () -> Unit,
@@ -494,7 +494,7 @@ private fun MapSurface(
     fix: Fix?,
     line: List<Fix>,
     follow: Boolean,
-    onCanvas: (MapSurface) -> Unit,
+    onCanvas: (VtmCanvas) -> Unit,
     onReady: () -> Unit,
 ) {
     // ONE SURFACE FOR EVERY MAP. Google's own SDK is gone with the key that was compiled in:
@@ -503,10 +503,9 @@ private fun MapSurface(
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
-            // WHICHEVER ENGINE HE CHOSE, read once when the view is built. Swapping it under a
-            // running screen would drop everything drawn on it, so the setting says "next time".
-            val made: MapSurface =
-                if (store.useVtm) VtmCanvas(context, store) else MapCanvas(context, store)
+            // ONE ENGINE (16.9.2026). The CPU renderer is gone from this app: it was the reason
+            // the map lagged, and keeping it as a fallback only kept the lag one setting away.
+            val made = VtmCanvas(context, store)
             CanvasHolder.canvas = made
             onCanvas(made)
             // THE VIEW EXISTS NOW, AND NOT BEFORE. This is the whole bug of v6 to v10: the first
@@ -591,7 +590,7 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
 }
 
 /** One attempt at one layer. Returns null when it drew, or the reason it did not. */
-private suspend fun attempt(canvas: MapSurface, store: Store, layer: MapLayer): String? {
+private suspend fun attempt(canvas: VtmCanvas, store: Store, layer: MapLayer): String? {
     val key = layer.provider?.let { store.key(it) }
     if (layer.provider != null && key.isNullOrEmpty()) return Layers.missingKey(layer)
     if (layer.kind == LayerKind.GOOGLE_TILES) {
@@ -632,7 +631,7 @@ private fun RowScope.MarkKey(
 
 /** One place the composable side can reach the view it made. */
 object CanvasHolder {
-    var canvas: MapSurface? = null
+    var canvas: VtmCanvas? = null
 }
 
 /**
@@ -1507,16 +1506,7 @@ private fun SettingsFace(
     trackCount: Int,
     onClose: () -> Unit,
 ) {
-    var engine by remember { mutableStateOf(store.useVtm) }
     var answer by remember { mutableStateOf<String?>(null) }
-    // WHAT IS ACTUALLY DRAWING, asked of the live object rather than of the setting. The setting
-    // says what will run next time; only the object knows what is running now.
-    val running = remember(UiTick.n) {
-        when (CanvasHolder.canvas) {
-            is VtmCanvas -> "VTM, on the GPU"
-            is MapCanvas -> "mapsforge, on the CPU"
-            else -> "not up yet"
-        }
     }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
@@ -1697,25 +1687,6 @@ private fun SettingsFace(
                 }
             }
 
-            // THE ENGINE. It takes effect on the next start, because a map view cannot be
-            // exchanged under a running screen without dropping everything drawn on it.
-            SettingRow(
-                title = "map engine · now: $running",
-                state = if (engine == (running == "VTM, on the GPU")) {
-                    if (engine) "VTM" else "mapsforge"
-                } else {
-                    if (engine) "VTM after restart" else "mapsforge after restart"
-                },
-                onPress = {
-                    engine = !engine
-                    store.useVtm = engine
-                    Trail.say(
-                        if (engine) "VTM next time the app starts. It draws the offline map and " +
-                            "Thunderforest; Google stays on mapsforge."
-                        else "mapsforge next time the app starts."
-                    )
-                },
-            )
             SettingRow("choose a .map file for the offline layer", "picker", onChooseMapFile)
             // THE ANSWER APPEARS HERE, where the question was asked. It used to go to the map's
             // note line, which is behind this screen — so pressing it looked like nothing

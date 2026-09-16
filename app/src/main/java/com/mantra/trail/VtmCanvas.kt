@@ -37,9 +37,14 @@ import java.io.FileInputStream
  * chip can be proved on a desk with no graphics chip (four-tests.md — this is a Test 4 change,
  * and Test 4 is him, on the phone).
  */
-class VtmCanvas(private val context: Context, private val store: Store) : MapSurface {
+/**
+ * THE ONE ENGINE (16.9.2026). The interface that let two of them live side by side is gone with
+ * the CPU renderer it existed for; an interface with a single implementation is a promise about
+ * a second one that nobody intends to keep.
+ */
+class VtmCanvas(private val context: Context, private val store: Store) {
 
-    override val view: MapView = MapView(context)
+    val view: MapView = MapView(context)
     private val map get() = view.map()
 
     private var baseLayer: VectorTileLayer? = null
@@ -50,6 +55,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
     private var routePath: PathLayer? = null
     private var markers: ItemizedLayer? = null
     private var positionLayer: ItemizedLayer? = null
+    private var accuracyRing: PathLayer? = null
     private var mapFileStream: FileInputStream? = null
     private var headingDeg: Double = Double.NaN
     private var lastFix: Fix? = null
@@ -62,7 +68,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
      * Put a layer on the map. The offline file becomes a vector layer with labels and buildings;
      * everything else is a raster source, which VTM draws as textures — still on the chip.
      */
-    override fun show(layer: MapLayer, session: String?, key: String?): String? {
+    fun show(layer: MapLayer, session: String?, key: String?): String? {
         clearBaseLayers()
         return when (layer.kind) {
             LayerKind.VECTOR_FILE -> showVector()
@@ -128,7 +134,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
 
     // --- what is drawn over the map ---------------------------------------------------------
 
-    override fun drawTrack(points: List<Fix>) {
+    fun drawTrack(points: List<Fix>) {
         recordingPath?.let { map.layers().remove(it) }
         recordingPath = null
         if (points.size < 2) return
@@ -139,7 +145,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         map.updateMap(false)
     }
 
-    override fun showSavedTrack(points: List<Fix>, colour: Long) {
+    fun showSavedTrack(points: List<Fix>, colour: Long) {
         shownPath?.let { map.layers().remove(it) }
         shownPath = null
         if (points.size < 2) return
@@ -151,13 +157,13 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         map.setMapPosition(middle.lat, middle.lon, map.mapPosition.scale)
     }
 
-    override fun clearSavedTrack() {
+    fun clearSavedTrack() {
         shownPath?.let { map.layers().remove(it) }
         shownPath = null
         map.updateMap(false)
     }
 
-    override fun showRouteOptions(options: List<Routing.Option>) {
+    fun showRouteOptions(options: List<Routing.Option>) {
         optionPaths.forEach { map.layers().remove(it) }
         optionPaths.clear()
         options.forEach { option ->
@@ -169,13 +175,13 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         map.updateMap(false)
     }
 
-    override fun clearRouteOptions() {
+    fun clearRouteOptions() {
         optionPaths.forEach { map.layers().remove(it) }
         optionPaths.clear()
         map.updateMap(false)
     }
 
-    override fun setRoutePoints(points: List<Pair<Double, Double>>) {
+    fun setRoutePoints(points: List<Pair<Double, Double>>) {
         markers?.let { map.layers().remove(it) }
         markers = null
         routePath?.let { map.layers().remove(it) }
@@ -208,12 +214,12 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         map.updateMap(false)
     }
 
-    override fun drawPosition(fix: Fix?) {
+    fun drawPosition(fix: Fix?) {
         lastFix = fix
         redrawPosition()
     }
 
-    override fun setHeading(degrees: Double) {
+    fun setHeading(degrees: Double) {
         val before = headingDeg
         headingDeg = degrees
         if (lastFix != null && (before.isNaN() || Math.abs(before - degrees) > 4.0)) redrawPosition()
@@ -222,7 +228,29 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
     private fun redrawPosition() {
         positionLayer?.let { map.layers().remove(it) }
         positionLayer = null
+        accuracyRing?.let { map.layers().remove(it) }
+        accuracyRing = null
         val fix = lastFix ?: return
+
+        // THE ACCURACY RING CAME BACK WITH THE ENGINE SWAP (16.9.2026). The CPU renderer drew it
+        // and this one did not, which the checks caught before he did. It is a ring and never a
+        // disc — filled, three metres of accuracy swallowed the map at z22 — and it is drawn as a
+        // circle of points in metres, so it is honest at every zoom without a library for it.
+        val metres = fix.accuracyM?.toDouble() ?: 0.0
+        if (metres > 1.0) {
+            val ring = PathLayer(map, 0x553B82F6, 2f)
+            val points = ArrayList<GeoPoint>(49)
+            for (step in 0..48) {
+                val angle = Math.toRadians(step * 360.0 / 48.0)
+                val dLat = metres * Math.cos(angle) / 111_320.0
+                val dLon = metres * Math.sin(angle) /
+                    (111_320.0 * Math.cos(Math.toRadians(fix.lat)).coerceAtLeast(0.01))
+                points.add(GeoPoint(fix.lat + dLat, fix.lon + dLon))
+            }
+            ring.setPoints(points)
+            map.layers().add(ring)
+            accuracyRing = ring
+        }
         val turn = map.mapPosition.bearing.toDouble()
         val item = MarkerItem("here", "", GeoPoint(fix.lat, fix.lon)).apply {
             marker = MarkerSymbol(positionSymbol(headingDeg, turn), MarkerSymbol.HotspotPlace.CENTER)
@@ -254,46 +282,46 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
 
     // --- what the screen asks of any map ------------------------------------------------------
 
-    override fun zoomIn() {
+    fun zoomIn() {
         map.animator().animateZoom(200, 2.0, 0f, 0f)
     }
 
-    override fun zoomOut() {
+    fun zoomOut() {
         map.animator().animateZoom(200, 0.5, 0f, 0f)
     }
 
-    override fun currentZoom(): Int = map.mapPosition.zoomLevel
+    fun currentZoom(): Int = map.mapPosition.zoomLevel
 
-    override fun centre(): Pair<Double, Double> =
+    fun centre(): Pair<Double, Double> =
         map.mapPosition.let { it.getLatitude() to it.getLongitude() }
 
-    override fun centreOn(fix: Fix) {
+    fun centreOn(fix: Fix) {
         val position = MapPosition(fix.lat, fix.lon, map.mapPosition.scale)
         position.bearing = map.mapPosition.bearing
         map.animator().animateTo(400, position)
     }
 
-    override fun mapRotationDeg(): Float = -map.mapPosition.bearing
+    fun mapRotationDeg(): Float = -map.mapPosition.bearing
 
-    override fun setMapRotation(degrees: Float) {
+    fun setMapRotation(degrees: Float) {
         val position = map.mapPosition
         position.bearing = -degrees
         map.mapPosition = position
         redrawPosition()
     }
 
-    override fun remember() {
+    fun remember() {
         val position = map.mapPosition
         store.lastLat = position.getLatitude()
         store.lastLon = position.getLongitude()
         store.lastZoom = position.zoomLevel
     }
 
-    override fun resume() {
+    fun resume() {
         view.onResume()
     }
 
-    override fun pause() {
+    fun pause() {
         view.onPause()
     }
 
@@ -302,19 +330,19 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
      * this side cannot see it, so the honest answer is the one the file gives: is this place
      * inside the map's own area at all.
      */
-    override fun emptyHere(): String? {
+    fun emptyHere(): String? {
         val file = MapDownload.target(context)
         if (!file.exists()) return "No offline map on the phone yet"
         return null
     }
 
-    override fun diagnose(): String {
+    fun diagnose(): String {
         val position = map.mapPosition
         return "VTM (GPU) · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
             "${Geo.formatLon(position.getLongitude())} · layers ${map.layers().size}"
     }
 
-    override fun destroy() {
+    fun destroy() {
         runCatching { view.onDestroy() }
         mapFileStream?.let { runCatching { it.close() } }
     }

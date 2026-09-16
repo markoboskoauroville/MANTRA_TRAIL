@@ -20,7 +20,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
-import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 
 /**
  * ONE ACTIVITY. The map is the app; the compass and the level are a second face of the same
@@ -35,7 +34,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var store: Store
     private lateinit var locator: Locator
     private lateinit var sensors: Sensors
-    private var canvas: MapSurface? = null
+    private var canvas: VtmCanvas? = null
 
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false
@@ -282,7 +281,6 @@ class MainActivity : ComponentActivity() {
         // the window is the whole glass and the bars are painted over whatever is under them.
         // The screen applies safeDrawingPadding; this line is the other half of the same fact.
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        AndroidGraphicFactory.createInstance(application)
         store = Store(this)
         Routing.prepare(this)
         locator = Locator(this)

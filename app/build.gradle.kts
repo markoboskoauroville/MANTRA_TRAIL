@@ -91,10 +91,8 @@ android {
     }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/DEPENDENCIES")
-        // BOTH THEME JARS CARRY THE SAME SYMBOLS. mapsforge-themes and vtm-themes are the same
-        // project's render themes for its two renderers, and they ship an identical set of map
-        // symbols — a laundrette is a laundrette. Take the first of each rather than failing the
-        // build over a file that is the same file twice.
+        // Kept from when two theme jars were on the path: harmless with one, and the day a
+        // second library ships a laundrette symbol again this will not fail the build.
         resources.pickFirsts += setOf("assets/symbols/**", "assets/patterns/**")
     }
 }
@@ -117,8 +115,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
 
-    // The map engine: offline vector .map files (OpenAndroMaps) and raster tile layers with a
-    // file-backed cache, in one view. Pure Java, no native libraries, so CI builds it unchanged.
+    // THE MAP ENGINE, AND THERE IS ONE (16.9.2026). The CPU tile renderer was removed with the
+    // lag it caused; VTM reads the same .map files on the GPU. The natives are its tile decoder.
     // instead of rasterised tile by tile on the CPU — which is the whole of why Google's map
     // turns and zooms smoothly and this one did not. LGPL-3.0, the same licence as mapsforge,
     // which this app already carries.
@@ -137,15 +135,10 @@ dependencies {
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-armeabi-v7a")
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-x86_64")
 
-    implementation("org.mapsforge:mapsforge-map-android:0.25.0")
 
-    implementation("org.mapsforge:mapsforge-map:0.25.0")
-    implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
-    implementation("org.mapsforge:mapsforge-themes:0.25.0")
 
-    // androidsvg is NOT declared here: mapsforge-map-android already brings the plain jar, and
-    // declaring the aar as well put both on the path and every class in it twice
-    // (checkReleaseDuplicateClasses, build 2). One copy, and it is the one mapsforge chose.
+    // androidsvg is NOT declared here: vtm-android already brings it, and declaring the aar as
+    // well put every class in it on the path twice (checkReleaseDuplicateClasses, build 2).
 
     // The fix: GPS, Wi-Fi and cell fused by the system, plus the raw satellite status underneath it.
     implementation("com.google.android.gms:play-services-location:21.3.0")
