@@ -68,7 +68,12 @@ class VtmCanvas(private val context: Context, private val store: Store) {
      * Put a layer on the map. The offline file becomes a vector layer with labels and buildings;
      * everything else is a raster source, which VTM draws as textures — still on the chip.
      */
-    fun show(layer: MapLayer, session: String?, key: String?): String? {
+    /**
+     * Put a layer on the map; null when it worked, or a sentence saying why not. The session and
+     * the key belong to the layers that need them — Google's tiles want both, Thunderforest's
+     * want a key, the offline file wants neither — so callers with none say nothing.
+     */
+    fun show(layer: MapLayer, session: String? = null, key: String? = null): String? {
         clearBaseLayers()
         return when (layer.kind) {
             LayerKind.VECTOR_FILE -> showVector()

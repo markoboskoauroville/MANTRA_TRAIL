@@ -1507,7 +1507,6 @@ private fun SettingsFace(
     onClose: () -> Unit,
 ) {
     var answer by remember { mutableStateOf<String?>(null) }
-    }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
