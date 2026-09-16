@@ -227,11 +227,14 @@ check("an empty line takes no height at all",
 check("no credit is printed over the map",
       "attribution" not in map_screen, "the map screen carries none of them")
 
-# The map drew halfway because mapsforge renders a SQUARE frame buffer by default: two and a half
-# screens of tiles on a tall phone, thrown away at every zoom.
-check("the frame buffer is the shape of the screen, not a square",
-      "Parameters.SQUARE_FRAME_BUFFER = false" in (MAIN / "MapCanvas.kt").read_text(),
-      "the square buffer is for rotation, and this map does not rotate")
+# REVERSED 16.9.2026, with the reason kept (never-back-to-zero.md). This check was written when
+# the map did not rotate and a square buffer looked like wasted rendering. The map rotates now,
+# and a screen-shaped buffer turned by thirty degrees leaves white wedges in the corners, because
+# nothing was ever drawn there. The old reasoning was right about the cost and wrong about the
+# need; the cost is paid deliberately and the cache is sized for the diagonal to match.
+check("the frame buffer is square, so a turned map has no empty corners",
+      "Parameters.SQUARE_FRAME_BUFFER = true" in (MAIN / "MapCanvas.kt").read_text(),
+      "the square buffer is for rotation, and this map rotates")
 check("rendered tiles are kept on disk for every layer but Google",
       "layer.kind != LayerKind.GOOGLE_TILES," in (MAIN / "MapCanvas.kt").read_text(),
       "a zoom visited once comes back instantly")
@@ -313,9 +316,9 @@ check("the tile cache is sized from real pixels, not from a guessed ratio",
       "the screen's own dimensions decide how many tiles a frame needs")
 check("the cache has room for the zoom being entered as well as the one being left",
       "overdrawFactor * 2.0" in canvas_src, "twice the frame")
-check("the frame buffer is not square, because this map does not rotate",
-      "Parameters.SQUARE_FRAME_BUFFER = false" in canvas_src,
-      "a square buffer renders two and a half screens for every one you look at")
+check("the tile cache is sized for the diagonal, not the screen",
+      "Math.hypot(metrics.widthPixels.toDouble()" in canvas_src,
+      "a square buffer is as wide as the diagonal, and its corners must fit in the cache too")
 check("an empty map says so by asking the file, not by waiting to be photographed",
       "fun emptyHere" in canvas_src and "emptyHere()" in screens,
       "the read the renderer is about to do anyway")
@@ -493,9 +496,13 @@ check("no part of the map server is left in this app",
 # saved as an ordinary GPX so nothing downstream has to know what it is.
 # The second key is no longer always called B: it shows the last letter placed, and it takes that
 # point back (16.9.2026). What must hold is that one key adds and the other removes, either side.
-check("one point key adds and the other takes the last one back",
-      "points = points + at" in screens and "points = points.dropLast(1)" in screens,
-      "and the record circle is still the middle key of nine")
+# One key, not two (16.9.2026): it drops the next point where the crosshair is and shows which
+# letter that will be; removing happens in the manager behind a long press.
+check("there is one point key and it shows the letter it will drop next",
+      screens.count("PointKey(") == 2 and "letter = Route.letterFor(points.size)" in screens,
+      "one definition, one use")
+check("the manager is what removes a point",
+      "points = points.filterIndexed { i, _ -> i != index }" in screens, "behind a long press")
 check("a route can hold more than two points",
       "fun setRoutePoints" in canvas_src and "Route.MAX_POINTS" in screens,
       "A, B, C and on, walked in the order they were placed")
@@ -508,14 +515,20 @@ check("the engine is given every point as a waypoint",
 check("two fingers turn the map",
       "touchGestureHandler.setRotationEnabled(true)" in (MAIN / "MapCanvas.kt").read_text(),
       "mapsforge can do it and ships it off")
-check("the position is a crosshair of its own colour, not a disc",
-      "fun positionBitmap" in canvas_src and "52, 211, 153" in canvas_src,
-      "green, so it is never the black centre crosshair nor a blue route")
+# Replaced 16.9.2026: he asked for Google's mark instead — a dot with a cone of light in front.
+check("the position is a dot with the light in front of it",
+      "fun positionBitmap" in canvas_src and "RadialGradient" in canvas_src
+      and "drawArc" in canvas_src,
+      "the cone is the compass, drawn where the eye already is")
+check("the light turns with the map as well as with the phone",
+      "view.model.mapViewPosition.rotation?.degrees" in canvas_src,
+      "or it would point the wrong way as soon as the map was turned")
 check("accuracy is drawn as a ring",
-      "Circle(here, fix.accuracyM, null, paint(0x66FBBF5E, 1.5f, Style.STROKE))" in canvas_src,
+      "Circle(here, fix.accuracyM, null, paint(0x553B82F6, 1.5f, Style.STROKE))" in canvas_src,
       "filled, three metres of accuracy swallowed the map at z22")
-check("a long press on either point opens one menu",
-      screens.count("onLongPress = { routeMenu = true }") == 2, "the same menu from both")
+check("a long press on the point key opens the manager",
+      screens.count("onLongPress = { routeMenu = true }") == 1,
+      "one key, one long press, one menu")
 check("removing a point takes it off the map",
       "points = points.filterIndexed { i, _ -> i != index }" in screens
       and "CanvasHolder.canvas?.setRoutePoints(points)" in screens,

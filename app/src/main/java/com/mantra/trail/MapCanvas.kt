@@ -88,7 +88,14 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // are looking at is finished. Every zoom threw that work away and began again — which is
         // exactly what a map that "draws halfway, and at the next zoom nothing" looks like. The
         // square buffer exists for rotating the map, and this map does not rotate.
-        Parameters.SQUARE_FRAME_BUFFER = false
+        // REVERSED ON 16.9.2026, WITH THE REASON (never-back-to-zero.md). This was set false on
+        // 15.9.2026 while hunting the blank map above z18, on the theory that a square buffer
+        // asked for too many tiles. The desk reproduction later proved the blank was the tile
+        // cache and nothing else, and turning rotation on made the cost of this setting plain:
+        // a screen-shaped buffer turned by 30 degrees shows white wedges in the corners, because
+        // nothing was ever drawn there. Square is what the setting is FOR — a buffer as wide as
+        // the screen's diagonal, so every corner is covered at every angle.
+        Parameters.SQUARE_FRAME_BUFFER = true
         // 16-bit colour for the buffer: half the memory per tile, and on a street map nobody can
         // tell. Memory is what the renderer runs out of first on a dense city at street zoom.
         Parameters.ANDROID_32BIT_COLOR = false
@@ -120,7 +127,6 @@ class MapCanvas(private val context: Context, private val store: Store) {
     private var routeLine: Polyline? = null
     private var positionMark: Marker? = null
     private var accuracyRing: Circle? = null
-    private var positionBitmapCache: org.mapsforge.core.graphics.Bitmap? = null
     private val optionLines = ArrayList<Polyline>()
     private val routeMarkers = HashMap<String, Marker>()
     private var mapFile: MapFile? = null
@@ -161,12 +167,16 @@ class MapCanvas(private val context: Context, private val store: Store) {
         // thrown out before it can be drawn, and the screen stays white while the phone works
         // hard. The other overload takes real pixels, and the real pixels are known here.
         val metrics = context.resources.displayMetrics
+        // The buffer is square and as wide as the diagonal, so the cache is sized for the
+        // diagonal too: sizing it for the screen would leave the corners evicting each other,
+        // which is the same fault as the blank map, wearing a different hat.
+        val diagonal = Math.hypot(metrics.widthPixels.toDouble(), metrics.heightPixels.toDouble()).toInt()
         val cache = AndroidUtil.createTileCache(
             context,
             "tiles-${layer.id}",
             view.model.displayModel.tileSize,
-            metrics.widthPixels,
-            metrics.heightPixels,
+            diagonal,
+            diagonal,
             // Twice the frame, so a zoom has room for the level it is going to as well as the one
             // it is leaving — which is what mapsforge scales up while the new tiles render.
             view.model.frameBufferModel.overdrawFactor * 2.0,
@@ -401,39 +411,65 @@ class MapCanvas(private val context: Context, private val store: Store) {
         return c.latitude to c.longitude
     }
 
+    private var lastFix: Fix? = null
+    private var headingDeg: Double = Double.NaN
+    private var drawnHeadingBucket: Int = Int.MIN_VALUE
+
+    /**
+     * WHERE HE IS, AND WHICH WAY HE IS FACING.
+     *
+     * Baba, 16.9.2026, with a Google Maps screenshot: that dot, with the light in front of it.
+     * So: a blue dot with a white collar, and a cone of light thrown in the direction the phone
+     * is pointing, fading out as it goes. The cone is the compass, drawn where the eye already
+     * is, rather than a number on a bar somewhere else.
+     *
+     * It is a bitmap, so it stays the same size on the screen at every zoom — the filled circle
+     * this replaces was three metres of accuracy drawn to scale, which at z22 was the size of a
+     * football ground. Accuracy is the thin ring around it and nothing more.
+     */
     fun drawPosition(fix: Fix?) {
+        lastFix = fix
+        redrawPosition()
+    }
+
+    /** The phone's heading, in degrees from true north. Redraws only when it has really moved. */
+    fun setHeading(degrees: Double) {
+        headingDeg = degrees
+        val bucket = ((degrees + 2.5) / 5.0).toInt()
+        if (bucket != drawnHeadingBucket && lastFix != null) redrawPosition()
+    }
+
+    private fun redrawPosition() {
         positionMark?.let { view.layerManager.layers.remove(it) }
         positionMark = null
         accuracyRing?.let { view.layerManager.layers.remove(it) }
         accuracyRing = null
+        val fix = lastFix
         if (fix == null) {
             view.repaint()
             return
         }
         val here = LatLong(fix.lat, fix.lon)
 
-        // THE ACCURACY IS A RING, NOT A DISC (16.9.2026). Filled, it swallowed the map at z22 —
-        // three metres of accuracy is a stadium-sized orange blob when a pixel is four
-        // centimetres. A thin ring says the same true thing and hides nothing under it.
         if (fix.accuracyM != null && fix.accuracyM > 0f) {
-            val ring = Circle(here, fix.accuracyM, null, paint(0x66FBBF5E, 1.5f, Style.STROKE))
+            val ring = Circle(here, fix.accuracyM, null, paint(0x553B82F6, 1.5f, Style.STROKE))
             view.layerManager.layers.add(ring)
             accuracyRing = ring
         }
 
-        // AND THE POSITION IS A CROSSHAIR IN ITS OWN COLOUR — green, so it is never confused with
-        // the black crosshair at the centre of the screen or the blue of a route. A bitmap, so it
-        // stays the same size on the screen however far in the map is zoomed.
-        val mark = Marker(here, positionBitmap(), 0, 0)
+        // The cone is drawn against the MAP, not against the screen, so when the map is turned
+        // with two fingers the light still points where the phone points.
+        val mapTurn = view.model.mapViewPosition.rotation?.degrees?.toDouble() ?: 0.0
+        drawnHeadingBucket = ((headingDeg + 2.5) / 5.0).toInt()
+        val mark = Marker(here, positionBitmap(headingDeg, mapTurn), 0, 0)
         view.layerManager.layers.add(mark)
         positionMark = mark
         view.repaint()
     }
 
-    private fun positionBitmap(): org.mapsforge.core.graphics.Bitmap {
-        positionBitmapCache?.let { return it }
+    private fun positionBitmap(heading: Double, mapTurn: Double): org.mapsforge.core.graphics.Bitmap {
         val scale = context.resources.displayMetrics.density
-        val side = (34 * scale).toInt()
+        val side = (72 * scale).toInt()
         val bitmap = android.graphics.Bitmap.createBitmap(
             side,
             side,
@@ -441,31 +477,52 @@ class MapCanvas(private val context: Context, private val store: Store) {
         )
         val canvas = AndroidCanvas(bitmap)
         val c = side / 2f
-        val arm = side / 2f - 2 * scale
-        val gap = arm * 0.3f
+        val dotRadius = 7f * scale
 
-        fun cross(colour: Int, width: Float) {
-            val p = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                this.color = colour
-                strokeWidth = width
-                style = AndroidPaint.Style.STROKE
+        if (!heading.isNaN()) {
+            // THE LIGHT IN FRONT. A wedge fading from the dot outwards: bright at the phone,
+            // gone by the end, because a heading is a direction and not a claim about distance.
+            val reach = c - 1f
+            val sweep = 62f
+            val start = (heading + mapTurn - 90.0 - sweep / 2).toFloat()
+            val cone = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                shader = android.graphics.RadialGradient(
+                    c,
+                    c,
+                    reach,
+                    intArrayOf(
+                        AndroidColour.argb(150, 59, 130, 246),
+                        AndroidColour.argb(70, 59, 130, 246),
+                        AndroidColour.argb(0, 59, 130, 246),
+                    ),
+                    floatArrayOf(0f, 0.55f, 1f),
+                    android.graphics.Shader.TileMode.CLAMP,
+                )
             }
-            canvas.drawLine(c - arm, c, c - gap, c, p)
-            canvas.drawLine(c + gap, c, c + arm, c, p)
-            canvas.drawLine(c, c - arm, c, c - gap, p)
-            canvas.drawLine(c, c + gap, c, c + arm, p)
-            canvas.drawCircle(c, c, gap, p)
+            canvas.drawArc(
+                android.graphics.RectF(c - reach, c - reach, c + reach, c + reach),
+                start,
+                sweep,
+                true,
+                cone,
+            )
         }
-        cross(AndroidColour.argb(210, 11, 13, 16), 3.2f * scale)
-        cross(AndroidColour.argb(255, 52, 211, 153), 1.5f * scale)
-        val dot = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(255, 52, 211, 153)
-        }
-        canvas.drawCircle(c, c, 1.6f * scale, dot)
 
-        val made = AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
-        positionBitmapCache = made
-        return made
+        // The dot: white collar, blue middle, and a shadow under both so it reads on snow.
+        val shadow = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColour.argb(60, 0, 0, 0)
+        }
+        canvas.drawCircle(c, c + 0.5f * scale, dotRadius + 2.5f * scale, shadow)
+        val collar = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColour.argb(255, 255, 255, 255)
+        }
+        canvas.drawCircle(c, c, dotRadius + 2f * scale, collar)
+        val middle = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColour.argb(255, 59, 130, 246)
+        }
+        canvas.drawCircle(c, c, dotRadius, middle)
+
+        return AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
     }
 
     private fun restoreOverlays() {

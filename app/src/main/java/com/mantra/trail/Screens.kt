@@ -247,30 +247,8 @@ fun TrailApp(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
-                    // A BESIDE THE MINUS, B BESIDE THE PLUS, and the record circle still the
-                    // middle key of nine. A tap drops that point where the crosshair is; a long
-                    // press on either opens the route menu (15.9.2026).
-                    // A ADDS A POINT WHERE THE CROSSHAIR IS — A, then B, then C (16.9.2026).
-                    // B takes the last one back, so a misplaced point costs one press. Both open
-                    // the menu on a long press, where any of them can be removed.
-                    PointKey(
-                        letter = "A",
-                        placed = points.isNotEmpty(),
-                        onTap = {
-                            val at = CanvasHolder.canvas?.centre() ?: return@PointKey
-                            if (points.size >= Route.MAX_POINTS) {
-                                Trail.say("That is as many points as one route holds")
-                                return@PointKey
-                            }
-                            points = points + at
-                            store.routePoints = points
-                            CanvasHolder.canvas?.setRoutePoints(points)
-                        },
-                        onLongPress = { routeMenu = true },
-                    )
-                    // T CYCLES THE COMPASS: dark, night, off. Dark ink for a light map, light
-                    // ink for a dark one, and off for neither — three presses to come round
-                    // (15.9.2026). The key lights while the compass is on the map.
+                    // T CYCLES THE COMPASS: dark, night, off. Dark ink for a light map, light ink
+                    // for a dark one, and off for neither — three presses to come round.
                     Key(
                         glyph = "T",
                         lit = compass != COMPASS_OFF,
@@ -317,15 +295,20 @@ fun TrailApp(
                         },
                     )
                     Key("⚙", lit = false, onClick = { settings = true })
+                    // ONE KEY FOR POINTS (16.9.2026). Pressing it drops the next one where the
+                    // crosshair is — A, then B, then C — and it shows which letter is next. A
+                    // long press opens the manager, where they are removed and the ways found.
+                    // Two keys for this were two ways of doing one thing.
                     PointKey(
-                        letter = if (points.size > 1) Route.letterFor(points.size - 1) else "B",
-                        placed = points.size > 1,
+                        letter = Route.letterFor(points.size),
+                        placed = points.isNotEmpty(),
                         onTap = {
-                            if (points.isEmpty()) {
-                                Trail.say("Place A first")
+                            val at = CanvasHolder.canvas?.centre() ?: return@PointKey
+                            if (points.size >= Route.MAX_POINTS) {
+                                Trail.say("That is as many points as one route holds")
                                 return@PointKey
                             }
-                            points = points.dropLast(1)
+                            points = points + at
                             store.routePoints = points
                             CanvasHolder.canvas?.setRoutePoints(points)
                         },
@@ -358,6 +341,16 @@ fun TrailApp(
 
         LaunchedEffect(ready) {
             if (ready) CanvasHolder.canvas?.setRoutePoints(points)
+        }
+
+        // THE LIGHT IN FRONT OF THE DOT NEEDS THE HEADING, whether or not the compass overlay is
+        // on. Five times a second is enough for a light that only moves when the phone turns, and
+        // the canvas redraws only when the heading has really moved (bounded by the composition).
+        LaunchedEffect(ready) {
+            while (true) {
+                if (ready) CanvasHolder.canvas?.setHeading(sensors.heading())
+                delay(200)
+            }
         }
 
         if (routeMenu) {

@@ -84,8 +84,10 @@ jobs:
           #      it just made, and the loop leaves when there is no next match
           #   6  SegmentDownload's read loop — the end of the stream, and the socket's own read
           #      timeout, which is what stops a server that accepts and then goes quiet
+          #   7  the heading reader that turns the light in front of the position — a
+          #      LaunchedEffect; dies with the composition
           echo "written as while(true): $UNBOUNDED   (every bound is named in the workflow)"
-          [ "$UNBOUNDED" -le 6 ] || { echo "an unbounded loop appeared that nobody has justified"; exit 1; }
+          [ "$UNBOUNDED" -le 7 ] || { echo "an unbounded loop appeared that nobody has justified"; exit 1; }
           grep -q "readTimeout" app/src/main/java/com/mantra/trail/MapDownload.kt || { echo "the download loop lost its deadline"; exit 1; }
           [ "$LOOPS" -ge 3 ] || { echo "found fewer loops than exist: this check is broken, not the code"; exit 1; }
 
