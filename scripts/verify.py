@@ -267,9 +267,11 @@ canvas_src = (MAIN / "MapCanvas.kt").read_text()
 check("the view is never clamped to where the tiles stop",
       "layer.viewMaxZoom.toByte()" in canvas_src and "val viewMaxZoom" in layers,
       "two ceilings: the service's tiles, and the view over them")
-check("the tile cache holds more than one screenful",
-      '"tiles-${layer.id}",' in canvas_src and "2f," in canvas_src,
-      "two screenfuls, so there is room for the level being rendered into")
+# Superseded on 15.9.2026 by the pixel-sized cache: the old check looked for the screenRatio
+# argument "2f," that the desk reproduction proved was the wrong way to size it at all.
+check("the tile cache is named per layer and sized for two frames",
+      '"tiles-${layer.id}",' in canvas_src and "overdrawFactor * 2.0" in canvas_src,
+      "room for the level being entered and the one being left")
 check("the app asks for the large heap a country file at street zoom needs",
       'android:largeHeap="true"' in mf, "present")
 check("the zoom is on the screen, so a fault can be reported with a number",
@@ -489,18 +491,38 @@ check("no part of the map server is left in this app",
 
 # A AND B (16.9.2026): two keys either side of the row, a menu behind a long press, and a route
 # saved as an ordinary GPX so nothing downstream has to know what it is.
-check("A sits beside the minus and B beside the plus",
-      screens.index('letter = "A"') < screens.index('glyph = "T"') < screens.index('letter = "B"'),
+# The second key is no longer always called B: it shows the last letter placed, and it takes that
+# point back (16.9.2026). What must hold is that one key adds and the other removes, either side.
+check("one point key adds and the other takes the last one back",
+      "points = points + at" in screens and "points = points.dropLast(1)" in screens,
       "and the record circle is still the middle key of nine")
+check("a route can hold more than two points",
+      "fun setRoutePoints" in canvas_src and "Route.MAX_POINTS" in screens,
+      "A, B, C and on, walked in the order they were placed")
+check("the menu can add a point where the crosshair is",
+      "add ${Route.letterFor(points.size)} where the crosshair is" in screens,
+      "the plus he asked for")
+check("the engine is given every point as a waypoint",
+      "points.forEachIndexed { index, at -> waypoints.add(" in (MAIN / "Routing.kt").read_text(),
+      "one route through them all, not legs stitched together")
+check("two fingers turn the map",
+      "touchGestureHandler.setRotationEnabled(true)" in (MAIN / "MapCanvas.kt").read_text(),
+      "mapsforge can do it and ships it off")
+check("the position is a crosshair of its own colour, not a disc",
+      "fun positionBitmap" in canvas_src and "52, 211, 153" in canvas_src,
+      "green, so it is never the black centre crosshair nor a blue route")
+check("accuracy is drawn as a ring",
+      "Circle(here, fix.accuracyM, null, paint(0x66FBBF5E, 1.5f, Style.STROKE))" in canvas_src,
+      "filled, three metres of accuracy swallowed the map at z22")
 check("a long press on either point opens one menu",
       screens.count("onLongPress = { routeMenu = true }") == 2, "the same menu from both")
-check("unticking a point deletes it from the map",
-      'CanvasHolder.canvas?.setRoutePoint("A", pointA)' in screens
-      and "pointA = if (keep) pointA ?: CanvasHolder.canvas?.centre() else null" in screens,
-      "the tick is the marker")
-check("a saved route is an ordinary track with (AB) in its name",
-      '(AB)"' in activity and "Gpx.whole(name, points, now)" in activity,
-      "the manager renames, shows and deletes it like any other GPX")
+check("removing a point takes it off the map",
+      "points = points.filterIndexed { i, _ -> i != index }" in screens
+      and "CanvasHolder.canvas?.setRoutePoints(points)" in screens,
+      "the row's own way out, one per point")
+check("a saved route is an ordinary track named for the letters it ran through",
+      "Route.nameFor(now, points.size)" in activity and "Gpx.whole(name, fixes, now)" in activity,
+      "(AB), (AD), and the manager treats it like any other GPX")
 # It is built now (16.9.2026): BRouter, MIT, vendored under btools/ and proved on a desk first.
 routing_src = (MAIN / "Routing.kt").read_text()
 check("the routing engine is in the APK and runs offline",

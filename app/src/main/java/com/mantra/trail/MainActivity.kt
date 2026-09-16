@@ -157,21 +157,18 @@ class MainActivity : ComponentActivity() {
      * The square of the world it needs is 130 MB, so it is not fetched behind his back: if it is
      * missing the app says which file and how big, and the same press again starts the download.
      */
-    private fun findWays(
-        a: Pair<Double, Double>?,
-        b: Pair<Double, Double>?,
-        profile: String,
-        wanted: Int,
-    ) {
-        if (a == null || b == null) {
-            Trail.say("Place both points first")
+    private fun findWays(points: List<Pair<Double, Double>>, profile: String, wanted: Int) {
+        if (points.size < 2) {
+            Trail.say("Place at least two points")
             return
         }
         if (routing) {
             Trail.say("Still looking")
             return
         }
-        val missing = Segments.namesFor(a.first, a.second, b.first, b.second)
+        val missing = points
+            .flatMap { Segments.namesFor(it.first, it.second, it.first, it.second) }
+            .distinct()
             .filterNot { java.io.File(Routing.segmentDir(this), it).exists() }
         if (missing.isNotEmpty()) {
             val name = missing.first()
@@ -186,7 +183,7 @@ class MainActivity : ComponentActivity() {
         routing = true
         Trail.say("Looking for ways…")
         lifecycleScope.launch {
-            val (options, problem) = Routing.between(this@MainActivity, a, b, profile, wanted) {
+            val (options, problem) = Routing.through(this@MainActivity, points, profile, wanted) {
                 Trail.say(it)
             }
             routing = false
@@ -218,7 +215,7 @@ class MainActivity : ComponentActivity() {
     /** Keep one of the ways it found as a track, like anything else in the folder. */
     private fun saveOption(option: Routing.Option) {
         val now = System.currentTimeMillis()
-        val name = "${Tracks.defaultName(now).removeSuffix(" Track")} (AB ${option.metres / 1000}km)"
+        val name = "${Route.nameFor(now, store.routePoints.size)} ${option.metres / 1000}km"
         lifecycleScope.launch {
             val problem = withContext(Dispatchers.IO) {
                 val temp = java.io.File(cacheDir, Tracks.safeFileName(name))
@@ -238,21 +235,18 @@ class MainActivity : ComponentActivity() {
      * is a special case downstream: the manager renames it, shows it and deletes it like any
      * other GPX, because it IS any other GPX.
      */
-    private fun saveRoute(a: Pair<Double, Double>?, b: Pair<Double, Double>?) {
-        if (a == null || b == null) {
-            report("Place both points first")
+    private fun saveRoute(points: List<Pair<Double, Double>>) {
+        if (points.size < 2) {
+            report("Place at least two points")
             return
         }
         val now = System.currentTimeMillis()
-        val name = "${Tracks.defaultName(now).removeSuffix(" Track")} (AB)"
-        val points = listOf(
-            Fix(a.first, a.second, null, now, null),
-            Fix(b.first, b.second, null, now, null),
-        )
+        val name = Route.nameFor(now, points.size)
+        val fixes = points.map { Fix(it.first, it.second, null, now, null) }
         lifecycleScope.launch {
             val problem = withContext(Dispatchers.IO) {
                 val temp = java.io.File(cacheDir, Tracks.safeFileName(name))
-                temp.writeText(Gpx.whole(name, points, now))
+                temp.writeText(Gpx.whole(name, fixes, now))
                 val answer = Folder.save(this@MainActivity, store, temp, name)
                 temp.delete()
                 answer

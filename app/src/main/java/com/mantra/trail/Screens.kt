@@ -123,16 +123,15 @@ fun TrailApp(
     onDeleteTrack: (Folder.Entry) -> Unit,
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
-    onSaveRoute: (Pair<Double, Double>?, Pair<Double, Double>?) -> Unit,
-    onFindWays: (Pair<Double, Double>?, Pair<Double, Double>?, String, Int) -> Unit,
+    onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
+    onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
     routeOptions: List<Routing.Option>,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
     var compass by remember { mutableIntStateOf(store.compassMode) }
-    var pointA by remember { mutableStateOf(store.point("A")) }
-    var pointB by remember { mutableStateOf(store.point("B")) }
+    var points by remember { mutableStateOf(store.routePoints) }
     var routeMenu by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
@@ -251,13 +250,21 @@ fun TrailApp(
                     // A BESIDE THE MINUS, B BESIDE THE PLUS, and the record circle still the
                     // middle key of nine. A tap drops that point where the crosshair is; a long
                     // press on either opens the route menu (15.9.2026).
+                    // A ADDS A POINT WHERE THE CROSSHAIR IS — A, then B, then C (16.9.2026).
+                    // B takes the last one back, so a misplaced point costs one press. Both open
+                    // the menu on a long press, where any of them can be removed.
                     PointKey(
                         letter = "A",
-                        placed = pointA != null,
+                        placed = points.isNotEmpty(),
                         onTap = {
-                            pointA = CanvasHolder.canvas?.centre()
-                            store.setPoint("A", pointA)
-                            CanvasHolder.canvas?.setRoutePoint("A", pointA)
+                            val at = CanvasHolder.canvas?.centre() ?: return@PointKey
+                            if (points.size >= Route.MAX_POINTS) {
+                                Trail.say("That is as many points as one route holds")
+                                return@PointKey
+                            }
+                            points = points + at
+                            store.routePoints = points
+                            CanvasHolder.canvas?.setRoutePoints(points)
                         },
                         onLongPress = { routeMenu = true },
                     )
@@ -311,12 +318,16 @@ fun TrailApp(
                     )
                     Key("⚙", lit = false, onClick = { settings = true })
                     PointKey(
-                        letter = "B",
-                        placed = pointB != null,
+                        letter = if (points.size > 1) Route.letterFor(points.size - 1) else "B",
+                        placed = points.size > 1,
                         onTap = {
-                            pointB = CanvasHolder.canvas?.centre()
-                            store.setPoint("B", pointB)
-                            CanvasHolder.canvas?.setRoutePoint("B", pointB)
+                            if (points.isEmpty()) {
+                                Trail.say("Place A first")
+                                return@PointKey
+                            }
+                            points = points.dropLast(1)
+                            store.routePoints = points
+                            CanvasHolder.canvas?.setRoutePoints(points)
                         },
                         onLongPress = { routeMenu = true },
                     )
@@ -346,31 +357,30 @@ fun TrailApp(
         }
 
         LaunchedEffect(ready) {
-            if (ready) {
-                CanvasHolder.canvas?.setRoutePoint("A", pointA)
-                CanvasHolder.canvas?.setRoutePoint("B", pointB)
-            }
+            if (ready) CanvasHolder.canvas?.setRoutePoints(points)
         }
 
         if (routeMenu) {
             RouteMenu(
                 store = store,
-                a = pointA,
-                b = pointB,
-                onA = { keep ->
-                    pointA = if (keep) pointA ?: CanvasHolder.canvas?.centre() else null
-                    store.setPoint("A", pointA)
-                    CanvasHolder.canvas?.setRoutePoint("A", pointA)
-                },
-                onB = { keep ->
-                    pointB = if (keep) pointB ?: CanvasHolder.canvas?.centre() else null
-                    store.setPoint("B", pointB)
-                    CanvasHolder.canvas?.setRoutePoint("B", pointB)
-                },
+                points = points,
                 found = routeOptions,
-                onRoute = { profile, wanted -> onFindWays(pointA, pointB, profile, wanted) },
+                onAdd = {
+                    val at = CanvasHolder.canvas?.centre()
+                    if (at != null && points.size < Route.MAX_POINTS) {
+                        points = points + at
+                        store.routePoints = points
+                        CanvasHolder.canvas?.setRoutePoints(points)
+                    }
+                },
+                onRemove = { index ->
+                    points = points.filterIndexed { i, _ -> i != index }
+                    store.routePoints = points
+                    CanvasHolder.canvas?.setRoutePoints(points)
+                },
+                onRoute = { profile, wanted -> onFindWays(points, profile, wanted) },
                 onSaveOption = { option -> onSaveOption(option) },
-                onSave = { onSaveRoute(pointA, pointB) },
+                onSave = { onSaveRoute(points) },
                 onClose = { routeMenu = false },
             )
         }
@@ -1128,11 +1138,10 @@ private fun RowScope.PointKey(
 @Composable
 private fun RouteMenu(
     store: Store,
-    a: Pair<Double, Double>?,
-    b: Pair<Double, Double>?,
+    points: List<Pair<Double, Double>>,
     found: List<Routing.Option>,
-    onA: (Boolean) -> Unit,
-    onB: (Boolean) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (Int) -> Unit,
     onRoute: (String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
     onSave: () -> Unit,
@@ -1141,11 +1150,11 @@ private fun RouteMenu(
     var options by remember { mutableIntStateOf(store.routeOptions) }
     var speed by remember { mutableStateOf(store.walkSpeedKmh) }
     var profile by remember { mutableStateOf(store.routeProfile) }
-    val both = a != null && b != null
-    val metres = if (both) Geo.distance(a!!.first, a.second, b!!.first, b.second) else 0.0
+    val enough = points.size >= 2
+    val straight = Route.straightMetres(points)
 
     Box(
-        Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP * 2),
+        Modifier.fillMaxSize().background(Paint.Veil).safeDrawingPadding().padding(GAP),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -1153,96 +1162,66 @@ private fun RouteMenu(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(Paint.Ground)
+                .verticalScroll(rememberScrollState())
                 .padding(GAP),
             verticalArrangement = Arrangement.spacedBy(GAP),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Label("route", Paint.Dim, size = 12, align = TextAlign.Start)
                 Label(
-                    text = if (both) {
-                        "${Geo.formatDistance(metres)} · ${Geo.formatDuration((metres / (speed * 1000.0 / 3600.0)).toLong() * 1000L)}"
-                    } else {
-                        "place both points"
-                    },
-                    colour = if (both) Paint.Sand else Paint.Dim,
-                    size = 12,
+                    text = if (enough) "${points.size} points · ${Geo.formatDistance(straight)} straight" else "place at least two",
+                    colour = if (enough) Paint.Sand else Paint.Dim,
+                    size = 11,
                 )
             }
 
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Paint.Veil),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label("  A", Paint.Sand, size = 14, align = TextAlign.Start, modifier = Modifier.weight(1f))
-                Tick(checked = a != null, onChange = { onA(it) })
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Paint.Veil),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label("  B", Paint.Sand, size = 14, align = TextAlign.Start, modifier = Modifier.weight(1f))
-                Tick(checked = b != null, onChange = { onB(it) })
-            }
-
-            // The two numbers the routing will need when it exists, kept now so they are his
-            // rather than mine when it arrives.
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label("options", Paint.Dim, size = 11)
-                (1..5).forEach { n ->
-                    Box(
-                        Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (n == options) Paint.Amber else Paint.Veil)
-                            .clickable {
-                                options = n
-                                store.routeOptions = n
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) { Label("$n", if (n == options) Paint.Ground else Paint.Sand, size = 12) }
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label("walking speed", Paint.Dim, size = 11)
-                listOf(3f, 4f, 5f, 6f).forEach { option ->
-                    Box(
-                        Modifier
-                            .height(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (option == speed) Paint.Amber else Paint.Veil)
-                            .clickable {
-                                speed = option
-                                store.walkSpeedKmh = option
-                            }
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Label(
-                            text = "${option.toInt()} km/h",
-                            colour = if (option == speed) Paint.Ground else Paint.Sand,
-                            size = 11,
-                        )
-                    }
+            // ONE ROW PER POINT, in the order they will be walked, each with its own way out.
+            points.forEachIndexed { index, at ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Label(Route.letterFor(index), Paint.Amber, size = 15)
+                    Label(
+                        text = "${Geo.formatLat(at.first)}  ${Geo.formatLon(at.second)}",
+                        colour = Paint.Sand,
+                        size = 11,
+                    )
+                    Label(
+                        text = "remove",
+                        colour = Paint.Red,
+                        size = 11,
+                        modifier = Modifier.clickable { onRemove(index) },
+                    )
                 }
             }
 
-            // THE PROFILE: what kind of walking the ways are found for.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil)
+                    .clickable(onClick = onAdd)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Label(
+                        text = "+  add ${Route.letterFor(points.size)} where the crosshair is",
+                        colour = Paint.Amber,
+                        size = 12,
+                        align = TextAlign.Start,
+                    )
+                }
+            }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Routing.PROFILES.forEach { name ->
                     Box(
@@ -1270,34 +1249,80 @@ private fun RouteMenu(
                 }
             }
 
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("options", Paint.Dim, size = 11)
+                (1..5).forEach { n ->
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (n == options) Paint.Amber else Paint.Veil)
+                            .clickable {
+                                options = n
+                                store.routeOptions = n
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Label("$n", if (n == options) Paint.Ground else Paint.Sand, size = 12) }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("speed", Paint.Dim, size = 11)
+                listOf(3f, 4f, 5f, 6f).forEach { option ->
+                    Box(
+                        Modifier
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (option == speed) Paint.Amber else Paint.Veil)
+                            .clickable {
+                                speed = option
+                                store.walkSpeedKmh = option
+                            }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Label(
+                            text = "${option.toInt()} km/h",
+                            colour = if (option == speed) Paint.Ground else Paint.Sand,
+                            size = 11,
+                        )
+                    }
+                }
+            }
+
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(46.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (both) Paint.Amber else Paint.Veil)
-                    .clickable { if (both) onRoute(profile, options) }
+                    .background(if (enough) Paint.Amber else Paint.Veil)
+                    .clickable { if (enough) onRoute(profile, options) }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Label(
                         text = "find the ways",
-                        colour = if (both) Paint.Ground else Paint.Dim,
+                        colour = if (enough) Paint.Ground else Paint.Dim,
                         size = 13,
                         align = TextAlign.Start,
                     )
                     Label(
-                        text = if (both) "$options to look for" else "place both points",
-                        colour = if (both) Paint.Ground else Paint.Dim,
+                        text = if (enough) "$options to look for" else "place at least two",
+                        colour = if (enough) Paint.Ground else Paint.Dim,
                         size = 11,
                     )
                 }
             }
 
-            // Every way it found, with what it costs to walk it at the speed he chose. The
-            // colours are the colours on the map, so a row and a line are read together.
-            found.forEachIndexed { index, option ->
+            found.forEach { option ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -1343,10 +1368,10 @@ private fun RouteMenu(
                         .weight(1f)
                         .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (both) Paint.Amber else Paint.Veil)
-                        .clickable { if (both) onSave() },
+                        .background(if (enough) Paint.Amber else Paint.Veil)
+                        .clickable { if (enough) onSave() },
                     contentAlignment = Alignment.Center,
-                ) { Label("save", if (both) Paint.Ground else Paint.Dim, size = 14) }
+                ) { Label("save points", if (enough) Paint.Ground else Paint.Dim, size = 14) }
             }
         }
     }

@@ -63,16 +63,23 @@ object Routing {
      * Find up to [wanted] ways between the two points. Returns the options, or an empty list with
      * the reason on [problem].
      */
-    suspend fun between(
+    /**
+     * Find up to [wanted] ways THROUGH the points, in the order they were placed (16.9.2026).
+     * BRouter takes the whole list as waypoints, so A to B to C is one route with the engine
+     * choosing the way between each pair, not three routes stitched together afterwards.
+     */
+    suspend fun through(
         context: Context,
-        from: Pair<Double, Double>,
-        to: Pair<Double, Double>,
+        points: List<Pair<Double, Double>>,
         profile: String,
         wanted: Int,
         onProgress: (String) -> Unit,
     ): Pair<List<Option>, String?> = withContext(Dispatchers.IO) {
+        if (points.size < 2) return@withContext emptyList<Option>() to "Place at least two points"
         prepare(context)
-        val missing = Segments.namesFor(from.first, from.second, to.first, to.second)
+        val missing = points
+            .flatMap { Segments.namesFor(it.first, it.second, it.first, it.second) }
+            .distinct()
             .filterNot { File(segmentDir(context), it).exists() }
         if (missing.isNotEmpty()) {
             return@withContext emptyList<Option>() to
@@ -87,7 +94,7 @@ object Routing {
         val seen = HashSet<String>()
         for (alternative in 0 until wanted.coerceIn(1, 5)) {
             onProgress("Looking for way ${alternative + 1} of $wanted…")
-            val option = runCatching { one(context, from, to, profileFile, alternative) }
+            val option = runCatching { one(context, points, profileFile, alternative) }
                 .getOrElse { return@withContext found to "Routing failed: ${it.javaClass.simpleName}" }
                 ?: continue
             // BROUTER WILL HAND BACK THE SAME WAY TWICE when there is no real alternative, and
@@ -105,8 +112,7 @@ object Routing {
 
     private fun one(
         context: Context,
-        from: Pair<Double, Double>,
-        to: Pair<Double, Double>,
+        points: List<Pair<Double, Double>>,
         profileFile: File,
         alternative: Int,
     ): Option? {
@@ -115,8 +121,7 @@ object Routing {
         rc.setAlternativeIdx(alternative)
 
         val waypoints = ArrayList<OsmNodeNamed>()
-        waypoints.add(node("from", from.first, from.second))
-        waypoints.add(node("to", to.first, to.second))
+        points.forEachIndexed { index, at -> waypoints.add(node(Route.letterFor(index), at.first, at.second)) }
 
         val engine = RoutingEngine(
             null,

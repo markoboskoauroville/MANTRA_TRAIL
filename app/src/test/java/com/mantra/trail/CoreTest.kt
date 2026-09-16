@@ -466,6 +466,52 @@ class CoreTest {
 
 
 
+    // --- a route of more than two points ----------------------------------------------------------
+
+    @Test fun thePointsAreLetteredFromA() {
+        assertEquals("A", Route.letterFor(0))
+        assertEquals("B", Route.letterFor(1))
+        assertEquals("Z", Route.letterFor(25))
+    }
+
+    @Test fun aPointListSurvivesBeingWrittenDownAndReadBack() {
+        val points = listOf(45.815 to 15.982, 45.911 to 15.969, 45.9 to 16.1)
+        val read = Route.decode(Route.encode(points))
+        assertEquals(3, read.size)
+        assertEquals(45.911, read[1].first, 1e-9)
+        assertEquals(16.1, read[2].second, 1e-9)
+    }
+
+    @Test fun aCorruptedLineYieldsWhatItCanRatherThanThrowing() {
+        assertTrue(Route.decode(null).isEmpty())
+        assertTrue(Route.decode("").isEmpty())
+        assertTrue(Route.decode("nonsense").isEmpty())
+        assertEquals(1, Route.decode("45.8,15.9;broken").size)
+        assertEquals(1, Route.decode("45.8,15.9;91.0,15.9").size)
+    }
+
+    @Test fun aRouteCannotGrowPastTheAlphabet() {
+        val many = (0 until 40).map { 45.0 + it / 100.0 to 15.0 }
+        assertEquals(Route.MAX_POINTS, Route.decode(Route.encode(many)).size)
+    }
+
+    @Test fun theStraightLengthAddsUpEveryLeg() {
+        val a = 45.0 to 15.0
+        val b = 45.1 to 15.0
+        val c = 45.2 to 15.0
+        val oneLeg = Route.straightMetres(listOf(a, b))
+        val twoLegs = Route.straightMetres(listOf(a, b, c))
+        assertEquals(oneLeg * 2, twoLegs, oneLeg * 0.01)
+        assertEquals(0.0, Route.straightMetres(listOf(a)), 0.001)
+        assertEquals(0.0, Route.straightMetres(emptyList()), 0.001)
+    }
+
+    @Test fun aSavedRouteIsNamedForTheLettersItRanThrough() {
+        val name = Route.nameFor(1_789_387_200_000L, 4)
+        assertTrue(name, name.endsWith("(AD)"))
+        assertTrue(Route.nameFor(1_789_387_200_000L, 2).endsWith("(AB)"))
+    }
+
     // --- which square of the world a route needs ------------------------------------------------
 
     @Test fun zagrebIsInTheSquareBRouterCallsE15N45() {

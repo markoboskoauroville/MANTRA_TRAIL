@@ -129,22 +129,13 @@ class Store(context: Context) {
         set(v) = prefs.edit().putInt(KEY_COMPASS, v.coerceIn(0, 2)).apply()
 
     /**
-     * The two points of a route, A and B. Kept between sessions, because a line drawn to the col
-     * before a walk is still wanted the next morning. NaN is "not placed": one value, no flag
-     * beside it to fall out of step with it.
+     * The points of a route, in the order they were placed: A, B, C and on (16.9.2026). Kept
+     * between sessions, because a line drawn to the col before a walk is still wanted the next
+     * morning. One line of text, decoded by Route where Test 1 can attack it.
      */
-    fun point(letter: String): Pair<Double, Double>? {
-        val lat = java.lang.Double.longBitsToDouble(prefs.getLong("point-$letter-lat", NAN_BITS))
-        val lon = java.lang.Double.longBitsToDouble(prefs.getLong("point-$letter-lon", NAN_BITS))
-        return if (lat.isNaN() || lon.isNaN()) null else lat to lon
-    }
-
-    fun setPoint(letter: String, at: Pair<Double, Double>?) {
-        prefs.edit()
-            .putLong("point-$letter-lat", java.lang.Double.doubleToRawLongBits(at?.first ?: Double.NaN))
-            .putLong("point-$letter-lon", java.lang.Double.doubleToRawLongBits(at?.second ?: Double.NaN))
-            .apply()
-    }
+    var routePoints: List<Pair<Double, Double>>
+        get() = Route.decode(prefs.getString(KEY_ROUTE_POINTS, null))
+        set(v) = prefs.edit().putString(KEY_ROUTE_POINTS, Route.encode(v)).apply()
 
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
@@ -186,6 +177,7 @@ class Store(context: Context) {
         private const val KEY_COMPASS = "compassMode"
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
         private const val KEY_ROUTE_PROFILE = "routeProfile"
+        private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"

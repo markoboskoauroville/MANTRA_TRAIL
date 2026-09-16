@@ -96,6 +96,10 @@ class MapCanvas(private val context: Context, private val store: Store) {
 
     val view: MapView = MapView(context).apply {
         setClickable(true)
+        // TWO FINGERS TURN THE MAP (16.9.2026). mapsforge has the gesture and ships it switched
+        // off; everything drawn on the map — the position, the route marks, the lines — turns
+        // with it, because the same view draws them all.
+        touchGestureHandler.setRotationEnabled(true)
         // 256 px tiles, fixed. Left to itself mapsforge scales the tile to the screen density,
         // which on this phone is 2.75: a 704 px tile at street zoom over a country file is a very
         // different amount of work from a 256 px one, and a tile that takes too long is a tile
@@ -114,10 +118,11 @@ class MapCanvas(private val context: Context, private val store: Store) {
     private var trackLine: Polyline? = null
     private var shownLine: Polyline? = null
     private var routeLine: Polyline? = null
+    private var positionMark: Marker? = null
+    private var accuracyRing: Circle? = null
+    private var positionBitmapCache: org.mapsforge.core.graphics.Bitmap? = null
     private val optionLines = ArrayList<Polyline>()
     private val routeMarkers = HashMap<String, Marker>()
-    private var here: Circle? = null
-    private var accuracyRing: Circle? = null
     private var mapFile: MapFile? = null
 
     private val factory get() = AndroidGraphicFactory.INSTANCE
@@ -297,14 +302,16 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * centre of the screen, with its letter beside it, so a placed point and the place it was
      * taken from look like each other. The line appears when both exist and goes when either does.
      */
-    fun setRoutePoint(letter: String, at: Pair<Double, Double>?) {
-        routeMarkers.remove(letter)?.let { view.layerManager.layers.remove(it) }
-        if (at != null) {
+    fun setRoutePoints(points: List<Pair<Double, Double>>) {
+        routeMarkers.values.forEach { view.layerManager.layers.remove(it) }
+        routeMarkers.clear()
+        points.forEachIndexed { index, at ->
+            val letter = Route.letterFor(index)
             val marker = Marker(LatLong(at.first, at.second), markerBitmap(letter), 0, 0)
             view.layerManager.layers.add(marker)
             routeMarkers[letter] = marker
         }
-        drawRouteLine()
+        drawRouteLine(points)
         view.repaint()
     }
 
@@ -331,15 +338,17 @@ class MapCanvas(private val context: Context, private val store: Store) {
         view.repaint()
     }
 
-    private fun drawRouteLine() {
+    /**
+     * The straight line through the points in order, which is what there is to draw before the
+     * engine has been asked. It goes as soon as real ways are drawn: two meanings for one line is
+     * one too many.
+     */
+    private fun drawRouteLine(points: List<Pair<Double, Double>>) {
         routeLine?.let { view.layerManager.layers.remove(it) }
         routeLine = null
-        if (optionLines.isNotEmpty()) return
-        val a = routeMarkers["A"]?.latLong ?: return
-        val b = routeMarkers["B"]?.latLong ?: return
-        val line = Polyline(paint(0xFF60A5FA, 5f, Style.STROKE), factory)
-        line.addPoint(a)
-        line.addPoint(b)
+        if (optionLines.isNotEmpty() || points.size < 2) return
+        val line = Polyline(paint(0x8060A5FA, 4f, Style.STROKE), factory)
+        points.forEach { line.addPoint(LatLong(it.first, it.second)) }
         view.layerManager.layers.add(line)
         routeLine = line
     }
@@ -393,34 +402,83 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     fun drawPosition(fix: Fix?) {
-        here?.let { view.layerManager.layers.remove(it) }
+        positionMark?.let { view.layerManager.layers.remove(it) }
+        positionMark = null
         accuracyRing?.let { view.layerManager.layers.remove(it) }
-        here = null
         accuracyRing = null
-        if (fix == null) return
-        val at = LatLong(fix.lat, fix.lon)
-        fix.accuracyM?.let { metres ->
-            val ring = Circle(
-                at,
-                metres.toFloat(),
-                paint(0x22E8A64B, 0f, Style.FILL),
-                paint(0x88E8A64B, 2f, Style.STROKE),
-            )
+        if (fix == null) {
+            view.repaint()
+            return
+        }
+        val here = LatLong(fix.lat, fix.lon)
+
+        // THE ACCURACY IS A RING, NOT A DISC (16.9.2026). Filled, it swallowed the map at z22 —
+        // three metres of accuracy is a stadium-sized orange blob when a pixel is four
+        // centimetres. A thin ring says the same true thing and hides nothing under it.
+        if (fix.accuracyM != null && fix.accuracyM > 0f) {
+            val ring = Circle(here, fix.accuracyM, null, paint(0x66FBBF5E, 1.5f, Style.STROKE))
             view.layerManager.layers.add(ring)
             accuracyRing = ring
         }
-        val dot = Circle(at, 4f, paint(0xFFE8A64B, 0f, Style.FILL), paint(0xFF0B0D10, 2f, Style.STROKE))
-        view.layerManager.layers.add(dot)
-        here = dot
+
+        // AND THE POSITION IS A CROSSHAIR IN ITS OWN COLOUR — green, so it is never confused with
+        // the black crosshair at the centre of the screen or the blue of a route. A bitmap, so it
+        // stays the same size on the screen however far in the map is zoomed.
+        val mark = Marker(here, positionBitmap(), 0, 0)
+        view.layerManager.layers.add(mark)
+        positionMark = mark
+        view.repaint()
+    }
+
+    private fun positionBitmap(): org.mapsforge.core.graphics.Bitmap {
+        positionBitmapCache?.let { return it }
+        val scale = context.resources.displayMetrics.density
+        val side = (34 * scale).toInt()
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            side,
+            side,
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = AndroidCanvas(bitmap)
+        val c = side / 2f
+        val arm = side / 2f - 2 * scale
+        val gap = arm * 0.3f
+
+        fun cross(colour: Int, width: Float) {
+            val p = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                this.color = colour
+                strokeWidth = width
+                style = AndroidPaint.Style.STROKE
+            }
+            canvas.drawLine(c - arm, c, c - gap, c, p)
+            canvas.drawLine(c + gap, c, c + arm, c, p)
+            canvas.drawLine(c, c - arm, c, c - gap, p)
+            canvas.drawLine(c, c + gap, c, c + arm, p)
+            canvas.drawCircle(c, c, gap, p)
+        }
+        cross(AndroidColour.argb(210, 11, 13, 16), 3.2f * scale)
+        cross(AndroidColour.argb(255, 52, 211, 153), 1.5f * scale)
+        val dot = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColour.argb(255, 52, 211, 153)
+        }
+        canvas.drawCircle(c, c, 1.6f * scale, dot)
+
+        val made = AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
+        positionBitmapCache = made
+        return made
     }
 
     private fun restoreOverlays() {
         optionLines.forEach { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+        accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+        positionMark?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         routeMarkers.values.forEach {
             if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
         }
         routeLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         optionLines.forEach { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+        accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+        positionMark?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         routeMarkers.values.forEach {
             if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
         }
@@ -428,7 +486,6 @@ class MapCanvas(private val context: Context, private val store: Store) {
         shownLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         trackLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         accuracyRing?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
-        here?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
     }
 
     /** The corners of what is on the screen now, which is what CH means by "this view". */
