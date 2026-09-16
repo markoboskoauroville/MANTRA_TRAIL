@@ -571,6 +571,12 @@ vtm_src = canvas_src
 # 16.9.2026: every map was blank because setting a layer began by clearing VTM's whole layer list,
 # which holds VTM's own layers — the gesture handler among them. Proved on a desk that the file and
 # the reader were both fine (235 elements at z17), so the fault was ours.
+# 16.9.2026: the raster path hard-coded "/{Z}/{X}/{Y}.png" and dropped everything after it, so
+# Thunderforest's key never reached Thunderforest and every tile came back a refusal.
+check("the tile pattern keeps whatever follows the numbers",
+      "fun tilePattern" in layers and 'tilePath(path)' in canvas_src
+      and '"/{Z}/{X}/{Y}.png"' not in code_only(canvas_src),
+      "a key or a session lives in the query, and the query is part of the path")
 check("VTM's own layers are never cleared",
       "map.layers().clear()" not in code_only(canvas_src),
       "only what this class added is removed, by reference")

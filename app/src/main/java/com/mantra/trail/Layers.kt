@@ -208,6 +208,23 @@ object Layers {
      * null when the layer needs an auth it has not been given — a URL with an empty key in it
      * would fetch four hundred refusals and look like a dead server.
      */
+    /**
+     * THE SAME URL, SPLIT THE WAY THE GPU ENGINE WANTS IT: a base, and a path with {Z} {X} {Y} in
+     * it. VTM builds every request from those two, substituting the numbers and appending the
+     * rest verbatim — so whatever follows, a key or a session among it, must stay in the path.
+     *
+     * It did not (16.9.2026). The path was hard-coded as "/{Z}/{X}/{Y}.png", which threw away
+     * "?apikey=…" and left Thunderforest answering every tile with a refusal and a blank screen.
+     * The arithmetic lives here, in the half Test 1 can attack, rather than in the canvas.
+     */
+    fun tilePattern(layer: MapLayer, auth: String? = null, key: String? = null): Pair<String, String>? {
+        val sample = tileUrl(layer, 0, 0, 0, auth, key) ?: return null
+        val pattern = sample.replace("/0/0/0", "/{Z}/{X}/{Y}")
+        val cut = pattern.indexOf("/{Z}")
+        if (cut < 0) return null
+        return pattern.substring(0, cut) to pattern.substring(cut)
+    }
+
     fun tileUrl(layer: MapLayer, zoom: Int, x: Int, y: Int, auth: String? = null, key: String? = null): String? {
         val template = layer.url ?: return null
         if (layer.kind == LayerKind.VECTOR_FILE) return null

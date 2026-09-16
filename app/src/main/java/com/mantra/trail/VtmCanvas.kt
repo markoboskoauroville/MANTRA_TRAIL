@@ -79,7 +79,7 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         clearBaseLayers()
         return when (layer.kind) {
             LayerKind.VECTOR_FILE -> showVector()
-            else -> showRaster(layer, key)
+            else -> showRaster(layer, session, key)
         }
     }
 
@@ -110,15 +110,12 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         }
     }
 
-    private fun showRaster(layer: MapLayer, key: String?): String? {
-        val template = Layers.tileUrl(layer, 0, 0, 0, null, key)
+    private fun showRaster(layer: MapLayer, session: String?, key: String?): String? {
+        val (base, path) = Layers.tilePattern(layer, session, key)
             ?: return "That map needs a key first"
-        // VTM builds its own URLs from a pattern, so the numbers are given back as {Z}/{X}/{Y}.
-        val pattern = template
-            .replace("/0/0/0", "/{Z}/{X}/{Y}")
         val source = BitmapTileSource.builder()
-            .url(pattern.substringBeforeLast("/{Z}"))
-            .tilePath("/{Z}/{X}/{Y}.png")
+            .url(base)
+            .tilePath(path)
             .zoomMin(layer.minZoom)
             .zoomMax(layer.maxZoom)
             .build()

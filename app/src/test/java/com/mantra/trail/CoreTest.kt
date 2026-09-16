@@ -466,6 +466,41 @@ class CoreTest {
 
 
 
+    // --- the URL, split the way the GPU engine wants it ------------------------------------------
+
+    @Test fun theKeyStaysInThePatternHandedToTheEngine() {
+        // The fault this closes: a hard-coded path threw the query away and Thunderforest
+        // refused every tile (16.9.2026).
+        val key = "0123456789abcdef" + "0123456789abcdef"
+        val (base, path) = Layers.tilePattern(Layers.THUNDERFOREST, null, key)!!
+        assertTrue(base, base.startsWith("https://"))
+        assertFalse(base, base.contains("{Z}"))
+        assertTrue(path, path.startsWith("/{Z}/{X}/{Y}"))
+        assertTrue(path, path.contains(key))
+    }
+
+    @Test fun aMapThatNeedsNoKeyStillSplits() {
+        val (base, path) = Layers.tilePattern(Layers.OSM)!!
+        assertTrue(base.startsWith("https://"))
+        assertEquals("/{Z}/{X}/{Y}.png", path)
+    }
+
+    @Test fun aMapWithNoKeyYetHasNoPattern() {
+        assertNull(Layers.tilePattern(Layers.THUNDERFOREST, null, null))
+    }
+
+    @Test fun theOfflineFileHasNoPatternBecauseItHasNoUrl() {
+        assertNull(Layers.tilePattern(Layers.OFFLINE))
+    }
+
+    @Test fun everyNumberTheEngineSubstitutesIsInThePath() {
+        val key = "0123456789abcdef" + "0123456789abcdef"
+        Layers.THUNDERFOREST_ALL.forEach { layer ->
+            val (_, path) = Layers.tilePattern(layer, null, key)!!
+            assertTrue(layer.name, path.contains("{Z}") && path.contains("{X}") && path.contains("{Y}"))
+        }
+    }
+
     // --- a route of more than two points ----------------------------------------------------------
 
     @Test fun thePointsAreLetteredFromA() {
