@@ -281,8 +281,10 @@ check("the zoom is on the screen, so a fault can be reported with a number",
 check("the first draw is triggered by the view existing, not by a bare effect",
       "onReady()" in screens and "LaunchedEffect(ready)" in screens,
       "the factory says when the view is real")
+# The fallback was OpenStreetMap until it left the app on 16.9.2026; it is the offline file now,
+# and when that is what failed there is nothing to fall back TO, so the sentence stands alone.
 check("a layer that cannot draw falls back to one that can",
-      "showing OpenStreetMap meanwhile" in screens,
+      "showing the offline map meanwhile" in screens,
       "the screen is never white without a sentence on it")
 check("zoom is on the screen as keys, not only as a pinch",
       "zoomOut()" in screens and "zoomIn()" in screens, "minus and plus at both ends of the row")
