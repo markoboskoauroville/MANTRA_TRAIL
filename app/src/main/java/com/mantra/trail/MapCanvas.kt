@@ -318,7 +318,14 @@ class MapCanvas(private val context: Context, private val store: Store) : MapSur
         routeMarkers.clear()
         points.forEachIndexed { index, at ->
             val letter = Route.letterFor(index)
-            val marker = Marker(LatLong(at.first, at.second), markerBitmap(letter), 0, 0)
+            val marker = Marker(
+                LatLong(at.first, at.second),
+                AndroidGraphicFactory.convertToBitmap(
+                    BitmapDrawable(context.resources, Marks.routePoint(context, letter))
+                ),
+                0,
+                0,
+            )
             view.layerManager.layers.add(marker)
             routeMarkers[letter] = marker
         }
@@ -368,43 +375,6 @@ class MapCanvas(private val context: Context, private val store: Store) : MapSur
      * The marker, drawn rather than shipped as an image: a hairline cross in near-black under the
      * colour so it reads on a satellite photograph and on a street map, with its letter beside it.
      */
-    private fun markerBitmap(letter: String): org.mapsforge.core.graphics.Bitmap {
-        val scale = context.resources.displayMetrics.density
-        val side = (44 * scale).toInt()
-        val bitmap = android.graphics.Bitmap.createBitmap(
-            side,
-            side,
-            android.graphics.Bitmap.Config.ARGB_8888,
-        )
-        val canvas = AndroidCanvas(bitmap)
-        val centre = side / 2f
-        val arm = side / 2f - 2 * scale
-        val gap = arm * 0.36f
-
-        fun cross(colour: Int, width: Float) {
-            val p = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                this.color = colour
-                strokeWidth = width
-                style = AndroidPaint.Style.STROKE
-            }
-            canvas.drawLine(centre - arm, centre, centre - gap, centre, p)
-            canvas.drawLine(centre + gap, centre, centre + arm, centre, p)
-            canvas.drawLine(centre, centre - arm, centre, centre - gap, p)
-            canvas.drawLine(centre, centre + gap, centre, centre + arm, p)
-            canvas.drawCircle(centre, centre, gap, p)
-        }
-        cross(AndroidColour.argb(200, 11, 13, 16), 3f * scale)
-        cross(AndroidColour.argb(255, 96, 165, 250), 1.4f * scale)
-
-        val text = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(255, 96, 165, 250)
-            textSize = 13f * scale
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setShadowLayer(3f * scale, 0f, 0f, AndroidColour.argb(220, 11, 13, 16))
-        }
-        canvas.drawText(letter, centre + gap + 2 * scale, centre - gap, text)
-        return AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
-    }
 
     /**
      * WHICH WAY THE MAP IS FACING, and turning it. Zero is north up; the number grows the way the
@@ -477,69 +447,19 @@ class MapCanvas(private val context: Context, private val store: Store) : MapSur
         // with two fingers the light still points where the phone points.
         val mapTurn = view.model.mapViewPosition.rotation?.degrees?.toDouble() ?: 0.0
         drawnHeadingBucket = ((headingDeg + 2.5) / 5.0).toInt()
-        val mark = Marker(here, positionBitmap(headingDeg, mapTurn), 0, 0)
+        val mark = Marker(
+            here,
+            AndroidGraphicFactory.convertToBitmap(
+                BitmapDrawable(context.resources, Marks.position(context, headingDeg, mapTurn))
+            ),
+            0,
+            0,
+        )
         view.layerManager.layers.add(mark)
         positionMark = mark
         view.repaint()
     }
 
-    private fun positionBitmap(heading: Double, mapTurn: Double): org.mapsforge.core.graphics.Bitmap {
-        val scale = context.resources.displayMetrics.density
-        val side = (72 * scale).toInt()
-        val bitmap = android.graphics.Bitmap.createBitmap(
-            side,
-            side,
-            android.graphics.Bitmap.Config.ARGB_8888,
-        )
-        val canvas = AndroidCanvas(bitmap)
-        val c = side / 2f
-        val dotRadius = 7f * scale
-
-        if (!heading.isNaN()) {
-            // THE LIGHT IN FRONT. A wedge fading from the dot outwards: bright at the phone,
-            // gone by the end, because a heading is a direction and not a claim about distance.
-            val reach = c - 1f
-            val sweep = 62f
-            val start = (heading + mapTurn - 90.0 - sweep / 2).toFloat()
-            val cone = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                shader = android.graphics.RadialGradient(
-                    c,
-                    c,
-                    reach,
-                    intArrayOf(
-                        AndroidColour.argb(150, 59, 130, 246),
-                        AndroidColour.argb(70, 59, 130, 246),
-                        AndroidColour.argb(0, 59, 130, 246),
-                    ),
-                    floatArrayOf(0f, 0.55f, 1f),
-                    android.graphics.Shader.TileMode.CLAMP,
-                )
-            }
-            canvas.drawArc(
-                android.graphics.RectF(c - reach, c - reach, c + reach, c + reach),
-                start,
-                sweep,
-                true,
-                cone,
-            )
-        }
-
-        // The dot: white collar, blue middle, and a shadow under both so it reads on snow.
-        val shadow = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(60, 0, 0, 0)
-        }
-        canvas.drawCircle(c, c + 0.5f * scale, dotRadius + 2.5f * scale, shadow)
-        val collar = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(255, 255, 255, 255)
-        }
-        canvas.drawCircle(c, c, dotRadius + 2f * scale, collar)
-        val middle = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(255, 59, 130, 246)
-        }
-        canvas.drawCircle(c, c, dotRadius, middle)
-
-        return AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
-    }
 
     private fun restoreOverlays() {
         optionLines.forEach { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }

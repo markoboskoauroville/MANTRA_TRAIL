@@ -3,41 +3,23 @@ package com.mantra.trail
 import android.view.View
 
 /**
- * WHAT THE REST OF THE APP ASKS OF A MAP, whichever engine is drawing it.
+ * WHAT THE REST OF THE APP ASKS OF A MAP, and nothing about how it is drawn.
  *
- * Two engines now (16.9.2026): mapsforge, which rasterises tiles on the CPU, and VTM, the same
- * project's OpenGL renderer reading the same files. Everything above this line — the key row, the
- * route menu, the track manager, the recording — must not know or care which is underneath.
+ * There are two engines now (16.9.2026). mapsforge rasterises vector data on the CPU into
+ * bitmaps; VTM hands the same vector data to the GPU and redraws it every frame, which is why
+ * Google's map turns and zooms the way it does and this one did not. Both read the same .map
+ * file, so the choice costs no data and no download.
  *
- * The list is short on purpose. It is exactly what Screens.kt and MainActivity.kt already called,
- * no more, so neither engine has to grow a method for the other's sake.
+ * The interface exists so the screen never knows which it is talking to. It is deliberately small:
+ * everything on it is something the map screen or the activity already needed before VTM arrived.
  */
 interface MapSurface {
 
+    /** The Android view to put on the screen. */
     val view: View
 
-    /** Put a map on the screen. Null when it worked, or the reason it did not. */
-    fun show(layer: MapLayer, session: String? = null, key: String? = null): String?
-
-    fun drawTrack(points: List<Fix>)
-
-    fun drawPosition(fix: Fix?)
-
-    fun setHeading(degrees: Double)
-
-    fun showSavedTrack(points: List<Fix>, colour: Long)
-
-    fun clearSavedTrack()
-
-    fun setRoutePoints(points: List<Pair<Double, Double>>)
-
-    fun showRouteOptions(options: List<Routing.Option>)
-
-    fun clearRouteOptions()
-
-    fun centre(): Pair<Double, Double>
-
-    fun centreOn(fix: Fix)
+    /** Put a layer on the map; null when it worked, or a sentence saying why not. */
+    fun show(layer: MapLayer, session: String?, key: String?): String?
 
     fun zoomIn()
 
@@ -45,22 +27,54 @@ interface MapSurface {
 
     fun currentZoom(): Int
 
+    /** Where the middle of the screen is: latitude to longitude. */
+    fun centre(): Pair<Double, Double>
+
+    fun centreOn(fix: Fix)
+
+    /** How far the map has been turned from north, in degrees. */
     fun mapRotationDeg(): Float
 
     fun setMapRotation(degrees: Float)
 
-    /** Keep where we are looking, for next time. */
-    fun remember()
+    /** The line being recorded now. */
+    fun drawTrack(points: List<Fix>)
 
-    /** What the engine can say about itself when the map looks wrong. */
-    fun diagnose(): String
+    /** A walk read back from a file, in the colour he chose. */
+    fun showSavedTrack(points: List<Fix>, colour: Long)
 
-    /** Whether the map has nothing to draw here, and why. Null when it has. */
+    fun clearSavedTrack()
+
+    /** The route points A, B, C… and the straight line through them. */
+    fun setRoutePoints(points: List<Pair<Double, Double>>)
+
+    /** The ways the router found, each in its own colour. */
+    fun showRouteOptions(options: List<Routing.Option>)
+
+    fun clearRouteOptions()
+
+    /** Where he is, and the light in front showing which way the phone points. */
+    fun drawPosition(fix: Fix?)
+
+    fun setHeading(degrees: Double)
+
+    /** Null when there is something to draw here, or a sentence about why the screen is bare. */
     fun emptyHere(): String?
 
-    fun resume()
+    /** A sentence about what the map is doing, for when it is doing nothing. */
+    fun diagnose(): String
+
+    fun remember()
 
     fun pause()
 
+    fun resume()
+
     fun destroy()
+}
+
+/** Which engine draws the map. The names are what the settings row shows. */
+enum class Engine(val label: String) {
+    MAPSFORGE("mapsforge (tiles)"),
+    VTM("VTM (OpenGL)"),
 }

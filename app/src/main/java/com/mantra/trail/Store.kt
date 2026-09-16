@@ -137,6 +137,7 @@ class Store(context: Context) {
         get() = Route.decode(prefs.getString(KEY_ROUTE_POINTS, null))
         set(v) = prefs.edit().putString(KEY_ROUTE_POINTS, Route.encode(v)).apply()
 
+
     /** 0 free, 1 north up, 2 turning with the walk. Which the little compass was left in. */
     var northMode: Int
         get() = prefs.getInt(KEY_NORTH_MODE, 1).coerceIn(0, 2)

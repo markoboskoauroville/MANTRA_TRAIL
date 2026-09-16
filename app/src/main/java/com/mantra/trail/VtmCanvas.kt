@@ -1,17 +1,12 @@
 package com.mantra.trail
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
-import android.graphics.Color as AndroidColour
-import android.graphics.Paint as AndroidPaint
-import android.graphics.Typeface
-import android.net.Uri
+import android.graphics.drawable.BitmapDrawable
 import org.oscim.android.MapView
-import org.oscim.android.canvas.AndroidBitmap
-import org.oscim.backend.canvas.Color
+import org.oscim.android.canvas.AndroidGraphics
 import org.oscim.core.GeoPoint
 import org.oscim.core.MapPosition
+import org.oscim.layers.PathLayer
 import org.oscim.layers.marker.ItemizedLayer
 import org.oscim.layers.marker.MarkerItem
 import org.oscim.layers.marker.MarkerSymbol
@@ -19,131 +14,129 @@ import org.oscim.layers.tile.bitmap.BitmapTileLayer
 import org.oscim.layers.tile.buildings.BuildingLayer
 import org.oscim.layers.tile.vector.VectorTileLayer
 import org.oscim.layers.tile.vector.labeling.LabelLayer
-import org.oscim.layers.PathLayer
 import org.oscim.theme.internal.VtmThemes
 import org.oscim.tiling.source.bitmap.BitmapTileSource
 import org.oscim.tiling.source.mapfile.MapFileTileSource
 import java.io.FileInputStream
 
 /**
- * THE SAME MAPS, DRAWN BY THE GPU.
+ * THE SAME MAPS, DRAWN BY THE GRAPHICS CHIP.
  *
- * Baba, 16.9.2026: *"Google Maps works fantastic on my phone... why is this slow?"* Because
- * mapsforge rasterises tiles on the CPU — every zoom step re-renders sixty bitmaps, and until
- * they arrive you are looking at the old ones stretched. VTM is mapsforge's own OpenGL renderer:
- * the geometry goes to the GPU once and a zoom or a turn is a matrix per frame. The map file is
- * the same file. The render theme is VTM's own.
+ * Baba, 16.9.2026, after asking why Google's map is smooth and this one is not. The answer was
+ * not vector against raster — his offline file was always vector — but WHERE THE DRAWING HAPPENS.
+ * mapsforge turns vectors into 256-pixel pictures on the processor, sixty of them to a screen, and
+ * every zoom step throws them away and makes them again. VTM hands the geometry to the graphics
+ * chip once; a zoom or a turn after that is a matrix, done every frame, with nothing redrawn on
+ * the processor at all.
  *
- * THIS IS THE SECOND ENGINE, NOT A REPLACEMENT. The mapsforge canvas stays exactly as it is and
- * the setting chooses between them, so a map that will not draw on a hillside is one press away
- * from the one that did yesterday. When this has been walked with for a while, one of the two
- * will be deleted rather than both being carried for ever.
+ * It is mapsforge's own sibling and reads THE SAME .map file, so nothing he has downloaded is
+ * wasted, and it takes raster tiles too, so Thunderforest and Google still work.
  *
- * WHAT IS NOT TESTED: everything. Nothing about a GPU can be proved on the desk this was written
- * on — no OpenGL context, no phone. The first real test is his.
+ * THIS IS THE SECOND ENGINE, NOT THE REPLACEMENT. The old one stays until he says otherwise: a
+ * map that does not draw is not something to discover on a hillside, and nothing about a graphics
+ * chip can be proved on a desk with no graphics chip (four-tests.md — this is a Test 4 change,
+ * and Test 4 is him, on the phone).
  */
 class VtmCanvas(private val context: Context, private val store: Store) : MapSurface {
 
     override val view: MapView = MapView(context)
+    private val map get() = view.map()
 
     private var baseLayer: VectorTileLayer? = null
     private var bitmapLayer: BitmapTileLayer? = null
-    private var trackPath: PathLayer? = null
+    private var recordingPath: PathLayer? = null
     private var shownPath: PathLayer? = null
-    private var routePath: PathLayer? = null
     private val optionPaths = ArrayList<PathLayer>()
-    private var markerLayer: ItemizedLayer? = null
+    private var routePath: PathLayer? = null
+    private var markers: ItemizedLayer? = null
     private var positionLayer: ItemizedLayer? = null
+    private var mapFileStream: FileInputStream? = null
     private var headingDeg: Double = Double.NaN
     private var lastFix: Fix? = null
 
-    private val map get() = view.map()
-
     init {
-        map.mapPosition = MapPosition(store.lastLat, store.lastLon, (1 shl store.lastZoom).toDouble())
+        map.setMapPosition(store.lastLat, store.lastLon, (1 shl store.lastZoom).toDouble())
     }
 
-    /** Put a map on the screen. Returns null when it worked, or the reason it did not. */
+    /**
+     * Put a layer on the map. The offline file becomes a vector layer with labels and buildings;
+     * everything else is a raster source, which VTM draws as textures — still on the chip.
+     */
     override fun show(layer: MapLayer, session: String?, key: String?): String? {
-        clearBase()
+        clearBaseLayers()
         return when (layer.kind) {
-            LayerKind.VECTOR_FILE -> showOffline()
-            LayerKind.RASTER_XYZ -> showRaster(layer)
-            // Google's tiles need a session and a key on every request, which this engine's tile
-            // source cannot carry. They stay on the other engine and the settings say so.
-            else -> "That map is drawn by the other engine. Settings, map engine."
+            LayerKind.VECTOR_FILE -> showVector()
+            else -> showRaster(layer, key)
         }
     }
 
-    private fun showOffline(): String? {
-        val uri = store.mapFileUri
+    private fun showVector(): String? {
         val file = MapDownload.target(context)
+        if (!file.exists() || file.length() < 1_000_000) {
+            return "No offline map yet. Settings, choose a .map file."
+        }
         return try {
             val source = MapFileTileSource()
-            val opened = when {
-                uri != null -> {
-                    val descriptor = context.contentResolver.openFileDescriptor(Uri.parse(uri), "r")
-                        ?: return "That map file cannot be opened any more. Choose it again."
-                    source.setMapFileInputStream(FileInputStream(descriptor.fileDescriptor))
-                    true
-                }
-
-                file.exists() && file.length() > 1_000_000 -> source.setMapFile(file.absolutePath)
-                else -> return "No offline map yet. Settings, choose a .map file."
-            }
-            if (!opened) return "mapsforge would not open that file"
+            val stream = FileInputStream(file)
+            mapFileStream = stream
+            source.setMapFileInputStream(stream)
             val base = map.setBaseMap(source)
-            map.setTheme(VtmThemes.DEFAULT)
+            baseLayer = base
             map.layers().add(BuildingLayer(map, base))
             map.layers().add(LabelLayer(map, base))
-            baseLayer = base
+            map.setTheme(VtmThemes.MOTORIDER)
             restoreOverlays()
             map.updateMap(true)
             null
         } catch (e: Exception) {
-            "The map could not be opened: ${e.javaClass.simpleName}"
+            "The offline map would not open: ${e.javaClass.simpleName}"
         }
     }
 
-    private fun showRaster(layer: MapLayer): String? {
-        val key = layer.provider?.let { store.key(it) }
-        if (layer.provider != null && key.isNullOrEmpty()) return "${layer.name} needs a key first."
+    private fun showRaster(layer: MapLayer, key: String?): String? {
+        val template = Layers.tileUrl(layer, 0, 0, 0, null, key)
+            ?: return "That map needs a key first"
+        // VTM builds its own URLs from a pattern, so the numbers are given back as {Z}/{X}/{Y}.
+        val pattern = template
+            .replace("/0/0/0", "/{Z}/{X}/{Y}")
+        val source = BitmapTileSource.builder()
+            .url(pattern.substringBeforeLast("/{Z}"))
+            .tilePath("/{Z}/{X}/{Y}.png")
+            .zoomMin(layer.minZoom)
+            .zoomMax(layer.maxZoom)
+            .build()
         return try {
-            // The template is the one every layer already carries; VTM wants it split into a host
-            // and a path, with its own placeholders.
-            val url = Layers.tileUrl(layer, 0, 0, 0, null, key)
-                ?: return "That map has no address"
-            val host = url.substringBefore("/0/0/0")
-            val source = BitmapTileSource(host, "/{Z}/{X}/{Y}.png", layer.minZoom, layer.maxZoom)
-            val tiles = BitmapTileLayer(map, source)
-            map.layers().add(tiles)
-            bitmapLayer = tiles
+            val bitmaps = BitmapTileLayer(map, source)
+            map.layers().add(bitmaps)
+            bitmapLayer = bitmaps
             restoreOverlays()
             map.updateMap(true)
             null
         } catch (e: Exception) {
-            "That map could not be opened: ${e.javaClass.simpleName}"
+            "That map would not open: ${e.javaClass.simpleName}"
         }
     }
 
-    private fun clearBase() {
+    private fun clearBaseLayers() {
         bitmapLayer?.let { map.layers().remove(it) }
         bitmapLayer = null
         baseLayer = null
+        mapFileStream?.let { runCatching { it.close() } }
+        mapFileStream = null
         map.layers().clear()
     }
 
-    // --- what is drawn over the map -----------------------------------------------------------
+    // --- what is drawn over the map ---------------------------------------------------------
 
     override fun drawTrack(points: List<Fix>) {
-        trackPath?.let { map.layers().remove(it) }
-        trackPath = null
+        recordingPath?.let { map.layers().remove(it) }
+        recordingPath = null
         if (points.size < 2) return
-        val path = PathLayer(map, Color.get(232, 166, 75), 6f)
-        points.forEach { path.addPoint(GeoPoint(it.lat, it.lon)) }
+        val path = PathLayer(map, 0xFFEF4444.toInt(), 6f)
+        path.setPoints(points.map { GeoPoint(it.lat, it.lon) })
         map.layers().add(path)
-        trackPath = path
-        map.updateMap(true)
+        recordingPath = path
+        map.updateMap(false)
     }
 
     override fun showSavedTrack(points: List<Fix>, colour: Long) {
@@ -151,7 +144,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         shownPath = null
         if (points.size < 2) return
         val path = PathLayer(map, colour.toInt(), 6f)
-        points.forEach { path.addPoint(GeoPoint(it.lat, it.lon)) }
+        path.setPoints(points.map { GeoPoint(it.lat, it.lon) })
         map.layers().add(path)
         shownPath = path
         val middle = points[points.size / 2]
@@ -161,41 +154,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
     override fun clearSavedTrack() {
         shownPath?.let { map.layers().remove(it) }
         shownPath = null
-        map.updateMap(true)
-    }
-
-    override fun setRoutePoints(points: List<Pair<Double, Double>>) {
-        markerLayer?.let { map.layers().remove(it) }
-        markerLayer = null
-        routePath?.let { map.layers().remove(it) }
-        routePath = null
-        if (points.isEmpty()) {
-            map.updateMap(true)
-            return
-        }
-        val layer = ItemizedLayer(
-            map,
-            MarkerSymbol(AndroidBitmap(letterBitmap("A")), MarkerSymbol.HotspotPlace.CENTER),
-        )
-        points.forEachIndexed { index, at ->
-            val letter = Route.letterFor(index)
-            val item = MarkerItem(letter, "", GeoPoint(at.first, at.second))
-            item.marker = MarkerSymbol(
-                AndroidBitmap(letterBitmap(letter)),
-                MarkerSymbol.HotspotPlace.CENTER,
-            )
-            layer.addItem(item)
-        }
-        map.layers().add(layer)
-        markerLayer = layer
-
-        if (points.size > 1 && optionPaths.isEmpty()) {
-            val path = PathLayer(map, Color.get(96, 165, 250), 4f)
-            points.forEach { path.addPoint(GeoPoint(it.first, it.second)) }
-            map.layers().add(path)
-            routePath = path
-        }
-        map.updateMap(true)
+        map.updateMap(false)
     }
 
     override fun showRouteOptions(options: List<Routing.Option>) {
@@ -203,17 +162,50 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
         optionPaths.clear()
         options.forEach { option ->
             val path = PathLayer(map, option.colour.toInt(), 7f)
-            option.points.forEach { path.addPoint(GeoPoint(it.lat, it.lon)) }
+            path.setPoints(option.points.map { GeoPoint(it.lat, it.lon) })
             map.layers().add(path)
             optionPaths.add(path)
         }
-        map.updateMap(true)
+        map.updateMap(false)
     }
 
     override fun clearRouteOptions() {
         optionPaths.forEach { map.layers().remove(it) }
         optionPaths.clear()
-        map.updateMap(true)
+        map.updateMap(false)
+    }
+
+    override fun setRoutePoints(points: List<Pair<Double, Double>>) {
+        markers?.let { map.layers().remove(it) }
+        markers = null
+        routePath?.let { map.layers().remove(it) }
+        routePath = null
+        if (points.isEmpty()) {
+            map.updateMap(false)
+            return
+        }
+        val items = points.mapIndexed { index, at ->
+            val letter = Route.letterFor(index)
+            MarkerItem(letter, "", GeoPoint(at.first, at.second)).apply {
+                marker = MarkerSymbol(symbolFor(letter), MarkerSymbol.HotspotPlace.CENTER)
+            }
+        }
+        val layer = ItemizedLayer(
+            map,
+            items.toMutableList<org.oscim.layers.marker.MarkerInterface>(),
+            symbolFor("A").let { MarkerSymbol(it, MarkerSymbol.HotspotPlace.CENTER) },
+            null,
+        )
+        map.layers().add(layer)
+        markers = layer
+
+        if (points.size >= 2 && optionPaths.isEmpty()) {
+            val path = PathLayer(map, 0x8060A5FA.toInt(), 4f)
+            path.setPoints(points.map { GeoPoint(it.first, it.second) })
+            map.layers().add(path)
+            routePath = path
+        }
+        map.updateMap(false)
     }
 
     override fun drawPosition(fix: Fix?) {
@@ -222,159 +214,108 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
     }
 
     override fun setHeading(degrees: Double) {
-        val moved = Math.abs(degrees - headingDeg) > 4.0 || headingDeg.isNaN()
+        val before = headingDeg
         headingDeg = degrees
-        if (moved && lastFix != null) redrawPosition()
+        if (lastFix != null && (before.isNaN() || Math.abs(before - degrees) > 4.0)) redrawPosition()
     }
 
     private fun redrawPosition() {
         positionLayer?.let { map.layers().remove(it) }
         positionLayer = null
         val fix = lastFix ?: return
-        val bitmap = AndroidBitmap(positionBitmap(headingDeg))
-        val symbol = MarkerSymbol(bitmap, MarkerSymbol.HotspotPlace.CENTER)
-        val layer = ItemizedLayer(map, symbol)
-        layer.addItem(MarkerItem("here", "", GeoPoint(fix.lat, fix.lon)))
+        val turn = map.mapPosition.bearing.toDouble()
+        val item = MarkerItem("here", "", GeoPoint(fix.lat, fix.lon)).apply {
+            marker = MarkerSymbol(positionSymbol(headingDeg, turn), MarkerSymbol.HotspotPlace.CENTER)
+        }
+        val layer = ItemizedLayer(
+            map,
+            mutableListOf<org.oscim.layers.marker.MarkerInterface>(item),
+            MarkerSymbol(positionSymbol(headingDeg, turn), MarkerSymbol.HotspotPlace.CENTER),
+            null,
+        )
         map.layers().add(layer)
         positionLayer = layer
-        map.updateMap(true)
+        map.updateMap(false)
     }
+
+    private fun symbolFor(letter: String): org.oscim.backend.canvas.Bitmap =
+        AndroidGraphics.drawableToBitmap(
+            BitmapDrawable(context.resources, Marks.routePoint(context, letter))
+        )
+
+    private fun positionSymbol(heading: Double, mapTurn: Double): org.oscim.backend.canvas.Bitmap =
+        AndroidGraphics.drawableToBitmap(
+            BitmapDrawable(context.resources, Marks.position(context, heading, mapTurn))
+        )
 
     private fun restoreOverlays() {
         lastFix?.let { drawPosition(it) }
     }
 
-    // --- the bitmaps, drawn rather than shipped -------------------------------------------------
+    // --- what the screen asks of any map ------------------------------------------------------
 
-    private fun positionBitmap(heading: Double): Bitmap {
-        val scale = context.resources.displayMetrics.density
-        val side = (72 * scale).toInt()
-        val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-        val canvas = AndroidCanvas(bitmap)
-        val c = side / 2f
-        val dot = 7f * scale
-        if (!heading.isNaN()) {
-            val reach = c - 1f
-            val cone = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                shader = android.graphics.RadialGradient(
-                    c,
-                    c,
-                    reach,
-                    intArrayOf(
-                        AndroidColour.argb(150, 59, 130, 246),
-                        AndroidColour.argb(70, 59, 130, 246),
-                        AndroidColour.argb(0, 59, 130, 246),
-                    ),
-                    floatArrayOf(0f, 0.55f, 1f),
-                    android.graphics.Shader.TileMode.CLAMP,
-                )
-            }
-            canvas.drawArc(
-                android.graphics.RectF(c - reach, c - reach, c + reach, c + reach),
-                (heading - 90.0 - 31.0).toFloat(),
-                62f,
-                true,
-                cone,
-            )
-        }
-        canvas.drawCircle(
-            c,
-            c,
-            dot + 2f * scale,
-            AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply { color = AndroidColour.WHITE },
-        )
-        canvas.drawCircle(
-            c,
-            c,
-            dot,
-            AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                color = AndroidColour.argb(255, 59, 130, 246)
-            },
-        )
-        return bitmap
+    override fun zoomIn() {
+        map.animator().animateZoom(200, 2.0, 0f, 0f)
     }
 
-    private fun letterBitmap(letter: String): Bitmap {
-        val scale = context.resources.displayMetrics.density
-        val side = (44 * scale).toInt()
-        val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-        val canvas = AndroidCanvas(bitmap)
-        val c = side / 2f
-        val arm = side / 2f - 2 * scale
-        val gap = arm * 0.36f
-
-        fun cross(colour: Int, width: Float) {
-            val p = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-                this.color = colour
-                strokeWidth = width
-                style = AndroidPaint.Style.STROKE
-            }
-            canvas.drawLine(c - arm, c, c - gap, c, p)
-            canvas.drawLine(c + gap, c, c + arm, c, p)
-            canvas.drawLine(c, c - arm, c, c - gap, p)
-            canvas.drawLine(c, c + gap, c, c + arm, p)
-            canvas.drawCircle(c, c, gap, p)
-        }
-        cross(AndroidColour.argb(200, 11, 13, 16), 3f * scale)
-        cross(AndroidColour.argb(255, 96, 165, 250), 1.4f * scale)
-        val text = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColour.argb(255, 96, 165, 250)
-            textSize = 13f * scale
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setShadowLayer(3f * scale, 0f, 0f, AndroidColour.argb(220, 11, 13, 16))
-        }
-        canvas.drawText(letter, c + gap + 2 * scale, c - gap, text)
-        return bitmap
-    }
-
-    // --- moving the map ------------------------------------------------------------------------
-
-    override fun zoomIn() { map.animator().animateZoom(200, 2.0, 0f, 0f)
-    }
-
-    override fun zoomOut() { map.animator().animateZoom(200, 0.5, 0f, 0f)
+    override fun zoomOut() {
+        map.animator().animateZoom(200, 0.5, 0f, 0f)
     }
 
     override fun currentZoom(): Int = map.mapPosition.zoomLevel
 
-    override fun centre(): Pair<Double, Double> = map.mapPosition.let { it.latitude to it.longitude }
+    override fun centre(): Pair<Double, Double> =
+        map.mapPosition.let { it.getLatitude() to it.getLongitude() }
 
     override fun centreOn(fix: Fix) {
-        map.setMapPosition(fix.lat, fix.lon, map.mapPosition.scale)
+        val position = MapPosition(fix.lat, fix.lon, map.mapPosition.scale)
+        position.bearing = map.mapPosition.bearing
+        map.animator().animateTo(400, position)
     }
 
-    /** Which way the map faces. VTM calls it bearing and counts it the other way round. */
     override fun mapRotationDeg(): Float = -map.mapPosition.bearing
 
     override fun setMapRotation(degrees: Float) {
         val position = map.mapPosition
         position.bearing = -degrees
         map.mapPosition = position
+        redrawPosition()
     }
 
     override fun remember() {
         val position = map.mapPosition
-        store.lastLat = position.latitude
-        store.lastLon = position.longitude
+        store.lastLat = position.getLatitude()
+        store.lastLon = position.getLongitude()
         store.lastZoom = position.zoomLevel
     }
 
-    override fun resume() = view.onResume()
-
-    override fun pause() = view.onPause()
-
-    override fun destroy() = view.onDestroy()
-
-    /**
-     * What this engine can say about itself. Less than the other one can: the tile cache and the
-     * frame buffer it used to report belong to CPU rasterising and have no meaning here.
-     */
-    override fun diagnose(): String {
-        val position = map.mapPosition
-        return "VTM · z${position.zoomLevel} · bearing ${position.bearing.toInt()}° · " +
-            "base ${if (baseLayer != null) "vector" else if (bitmapLayer != null) "raster" else "none"}"
+    override fun resume() {
+        view.onResume()
     }
 
-    /** VTM draws what the file has; when the file has nothing here it simply draws nothing. */
-    override fun emptyHere(): String? = null
+    override fun pause() {
+        view.onPause()
+    }
+
+    /**
+     * WHETHER THERE IS ANYTHING TO DRAW HERE. VTM decides that inside the graphics chip, where
+     * this side cannot see it, so the honest answer is the one the file gives: is this place
+     * inside the map's own area at all.
+     */
+    override fun emptyHere(): String? {
+        val file = MapDownload.target(context)
+        if (!file.exists()) return "No offline map on the phone yet"
+        return null
+    }
+
+    override fun diagnose(): String {
+        val position = map.mapPosition
+        return "VTM · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
+            "${Geo.formatLon(position.getLongitude())} · layers ${map.layers().size}"
+    }
+
+    override fun destroy() {
+        runCatching { view.onDestroy() }
+        mapFileStream?.let { runCatching { it.close() } }
+    }
 }
