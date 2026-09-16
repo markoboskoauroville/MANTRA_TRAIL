@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var store: Store
     private lateinit var locator: Locator
     private lateinit var sensors: Sensors
-    private var canvas: MapCanvas? = null
+    private var canvas: MapSurface? = null
 
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false

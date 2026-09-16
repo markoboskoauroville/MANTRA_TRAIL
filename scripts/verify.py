@@ -565,6 +565,25 @@ check("identical alternatives are dropped rather than coloured differently",
       "if (!seen.add(fingerprint)) continue" in routing_src,
       "two identical lines in two colours is a lie about there being a choice")
 
+
+# TWO ENGINES (16.9.2026). mapsforge rasterises on the CPU; VTM is the same project's OpenGL
+# renderer, reading the same files. Both are carried behind one interface until one has been
+# walked with enough to delete the other.
+surface = (MAIN / "MapSurface.kt").read_text()
+vtm_src = (MAIN / "VtmCanvas.kt").read_text()
+check("both engines answer to one interface",
+      "class MapCanvas" in canvas_src and ": MapSurface" in canvas_src and ": MapSurface" in vtm_src,
+      "nothing above the map knows which is underneath")
+check("the engine is chosen where the view is built",
+      "if (store.useVtm) VtmCanvas(context, store) else MapCanvas(context, store)" in screens,
+      "swapping it under a running screen would drop everything drawn on it")
+check("VTM reads the same map file",
+      "MapFileTileSource()" in vtm_src and "setMapFileInputStream" in vtm_src,
+      "the 176 MB on his phone is not downloaded again")
+check("the engine setting says which is which",
+      '"VTM, on the GPU"' in screens and '"mapsforge, on the CPU"' in screens,
+      "and that it takes effect next start")
+
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:
     print("failed: " + ", ".join(failures))

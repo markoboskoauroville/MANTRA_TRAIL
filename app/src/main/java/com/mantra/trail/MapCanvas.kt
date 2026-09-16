@@ -79,7 +79,7 @@ class WebTileSource(
  * Google is not drawn here at all. Its SDK draws its own view and its tiles may not be cached, so
  * it is a different surface behind the same controls.
  */
-class MapCanvas(private val context: Context, private val store: Store) {
+class MapCanvas(private val context: Context, private val store: Store) : MapSurface {
 
     init {
         // WHY THE MAP DREW HALFWAY AND THEN STOPPED.
@@ -102,7 +102,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
         Parameters.ANDROID_32BIT_COLOR = false
     }
 
-    val view: MapView = MapView(context).apply {
+    override val view: MapView = MapView(context).apply {
         setClickable(true)
         // TWO FINGERS TURN THE MAP (16.9.2026). mapsforge has the gesture and ships it switched
         // off; everything drawn on the map — the position, the route marks, the lines — turns
@@ -144,7 +144,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * Put a layer under everything else. Returns the reason when it cannot, so the screen can say
      * it in a sentence instead of showing an empty grid and letting somebody wonder.
      */
-    fun show(layer: MapLayer, session: String? = null, key: String? = null): String? {
+    override fun show(layer: MapLayer, session: String?, key: String?): String? {
         baseLayer?.let { view.layerManager.layers.remove(it) }
         (baseLayer as? TileDownloadLayer)?.onPause()
         baseLayer = null
@@ -260,7 +260,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     /** The line of the walk so far, in the recording red. */
-    fun drawTrack(points: List<Fix>) {
+    override fun drawTrack(points: List<Fix>) {
         val existing = trackLine
         if (existing != null) view.layerManager.layers.remove(existing)
         if (points.size < 2) {
@@ -283,7 +283,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * recorded and a separate colour, because both on screen at once is the point: yesterday's
      * route under today's position.
      */
-    fun showSavedTrack(points: List<Fix>, colour: Long) {
+    override fun showSavedTrack(points: List<Fix>, colour: Long) {
         shownLine?.let { view.layerManager.layers.remove(it) }
         shownLine = null
         if (points.size < 2) {
@@ -300,7 +300,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
         view.repaint()
     }
 
-    fun clearSavedTrack() {
+    override fun clearSavedTrack() {
         shownLine?.let { view.layerManager.layers.remove(it) }
         shownLine = null
         view.repaint()
@@ -313,7 +313,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * centre of the screen, with its letter beside it, so a placed point and the place it was
      * taken from look like each other. The line appears when both exist and goes when either does.
      */
-    fun setRoutePoints(points: List<Pair<Double, Double>>) {
+    override fun setRoutePoints(points: List<Pair<Double, Double>>) {
         routeMarkers.values.forEach { view.layerManager.layers.remove(it) }
         routeMarkers.clear()
         points.forEachIndexed { index, at ->
@@ -331,7 +331,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * and half transparent so the path beneath still reads: the line is an answer about the
      * ground, not a replacement for it.
      */
-    fun showRouteOptions(options: List<Routing.Option>) {
+    override fun showRouteOptions(options: List<Routing.Option>) {
         optionLines.forEach { view.layerManager.layers.remove(it) }
         optionLines.clear()
         options.forEach { option ->
@@ -343,7 +343,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
         view.repaint()
     }
 
-    fun clearRouteOptions() {
+    override fun clearRouteOptions() {
         optionLines.forEach { view.layerManager.layers.remove(it) }
         optionLines.clear()
         view.repaint()
@@ -410,9 +410,9 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * WHICH WAY THE MAP IS FACING, and turning it. Zero is north up; the number grows the way the
      * map has been turned, which is the number the little compass draws.
      */
-    fun mapRotationDeg(): Float = view.model.mapViewPosition.rotation?.degrees ?: 0f
+    override fun mapRotationDeg(): Float = view.model.mapViewPosition.rotation?.degrees ?: 0f
 
-    fun setMapRotation(degrees: Float) {
+    override fun setMapRotation(degrees: Float) {
         val px = view.width / 2f
         val py = view.height / 2f
         view.model.mapViewPosition.setRotation(Rotation(degrees, px, py))
@@ -422,7 +422,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     /** Where the middle of the screen is, which is where a point is placed from. */
-    fun centre(): Pair<Double, Double> {
+    override fun centre(): Pair<Double, Double> {
         val c = view.model.mapViewPosition.center
         return c.latitude to c.longitude
     }
@@ -443,13 +443,13 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * this replaces was three metres of accuracy drawn to scale, which at z22 was the size of a
      * football ground. Accuracy is the thin ring around it and nothing more.
      */
-    fun drawPosition(fix: Fix?) {
+    override fun drawPosition(fix: Fix?) {
         lastFix = fix
         redrawPosition()
     }
 
     /** The phone's heading, in degrees from true north. Redraws only when it has really moved. */
-    fun setHeading(degrees: Double) {
+    override fun setHeading(degrees: Double) {
         headingDeg = degrees
         val bucket = ((degrees + 2.5) / 5.0).toInt()
         if (bucket != drawnHeadingBucket && lastFix != null) redrawPosition()
@@ -567,14 +567,14 @@ class MapCanvas(private val context: Context, private val store: Store) {
         return doubleArrayOf(b.minLatitude, b.minLongitude, b.maxLatitude, b.maxLongitude)
     }
 
-    fun currentZoom(): Int = view.model.mapViewPosition.zoomLevel.toInt()
+    override fun currentZoom(): Int = view.model.mapViewPosition.zoomLevel.toInt()
 
     /**
      * WHAT THE OFFLINE MAP ACTUALLY HAS, HERE, AT THIS ZOOM. A blank map has several causes and
      * they look identical on the glass: no file, a file that does not cover this place, no data
      * at this zoom, or a renderer that is failing. This asks the file and reports the counts.
      */
-    fun diagnose(): String {
+    override fun diagnose(): String {
         val file = mapFile ?: return "No offline map file is open. Settings: download Croatia."
         return try {
             val info = file.mapFileInfo
@@ -604,7 +604,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
      * Null when the file has something to draw under the crosshair, or a sentence when it has
      * nothing. Cheap: one tile's worth of a read that the renderer is about to do anyway.
      */
-    fun emptyHere(): String? {
+    override fun emptyHere(): String? {
         val file = mapFile ?: return null
         return try {
             val centre = view.model.mapViewPosition.center
@@ -629,35 +629,35 @@ class MapCanvas(private val context: Context, private val store: Store) {
         }
     }
 
-    fun centreOn(fix: Fix) {
+    override fun centreOn(fix: Fix) {
         view.model.mapViewPosition.setCenter(LatLong(fix.lat, fix.lon))
     }
 
-    fun zoomIn() {
+    override fun zoomIn() {
         view.model.mapViewPosition.zoomIn()
     }
 
-    fun zoomOut() {
+    override fun zoomOut() {
         view.model.mapViewPosition.zoomOut()
     }
 
     /** Where the map is looking now, remembered so the next opening starts where this one ended. */
-    fun remember() {
+    override fun remember() {
         val centre = view.model.mapViewPosition.center
         store.lastLat = centre.latitude
         store.lastLon = centre.longitude
         store.lastZoom = view.model.mapViewPosition.zoomLevel.toInt()
     }
 
-    fun pause() {
+    override fun pause() {
         (baseLayer as? TileDownloadLayer)?.onPause()
     }
 
-    fun resume() {
+    override fun resume() {
         (baseLayer as? TileDownloadLayer)?.onResume()
     }
 
-    fun destroy() {
+    override fun destroy() {
         remember()
         view.destroyAll()
         mapFile?.close()

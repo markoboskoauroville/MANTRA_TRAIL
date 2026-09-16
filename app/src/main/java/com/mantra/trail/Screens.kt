@@ -112,7 +112,7 @@ fun TrailApp(
     store: Store,
     sensors: Sensors,
     version: String,
-    onCanvas: (MapCanvas) -> Unit,
+    onCanvas: (MapSurface) -> Unit,
     onWhereAmI: () -> Unit,
     onRecord: () -> Unit,
     onPause: () -> Unit,
@@ -494,7 +494,7 @@ private fun MapSurface(
     fix: Fix?,
     line: List<Fix>,
     follow: Boolean,
-    onCanvas: (MapCanvas) -> Unit,
+    onCanvas: (MapSurface) -> Unit,
     onReady: () -> Unit,
 ) {
     // ONE SURFACE FOR EVERY MAP. Google's own SDK is gone with the key that was compiled in:
@@ -503,7 +503,10 @@ private fun MapSurface(
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
-            val made = MapCanvas(context, store)
+            // WHICHEVER ENGINE HE CHOSE, read once when the view is built. Swapping it under a
+            // running screen would drop everything drawn on it, so the setting says "next time".
+            val made: MapSurface =
+                if (store.useVtm) VtmCanvas(context, store) else MapCanvas(context, store)
             CanvasHolder.canvas = made
             onCanvas(made)
             // THE VIEW EXISTS NOW, AND NOT BEFORE. This is the whole bug of v6 to v10: the first
@@ -629,7 +632,7 @@ private fun RowScope.MarkKey(
 
 /** One place the composable side can reach the view it made. */
 object CanvasHolder {
-    var canvas: MapCanvas? = null
+    var canvas: MapSurface? = null
 }
 
 /**
@@ -1504,6 +1507,7 @@ private fun SettingsFace(
     trackCount: Int,
     onClose: () -> Unit,
 ) {
+    var engine by remember { mutableStateOf(store.useVtm) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
@@ -1683,6 +1687,21 @@ private fun SettingsFace(
                 }
             }
 
+            // THE ENGINE. It takes effect on the next start, because a map view cannot be
+            // exchanged under a running screen without dropping everything drawn on it.
+            SettingRow(
+                title = "map engine",
+                state = if (engine) "VTM, on the GPU" else "mapsforge, on the CPU",
+                onPress = {
+                    engine = !engine
+                    store.useVtm = engine
+                    Trail.say(
+                        if (engine) "VTM next time the app starts. It draws the offline map and " +
+                            "Thunderforest; Google stays on mapsforge."
+                        else "mapsforge next time the app starts."
+                    )
+                },
+            )
             SettingRow("choose a .map file for the offline layer", "picker", onChooseMapFile)
             SettingRow("check the offline map here", "ask it", {
                 Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")

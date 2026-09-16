@@ -118,6 +118,19 @@ dependencies {
     implementation("org.mapsforge:mapsforge-map:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
+
+    // VTM: MAPSFORGE'S OWN OPENGL RENDERER (16.9.2026). Same project, same version, and it reads
+    // the very same .map files — the difference is where the drawing happens. mapsforge
+    // rasterises tiles on the CPU and hands up bitmaps; VTM sends the geometry to the GPU, so a
+    // zoom or a turn is a matrix per frame rather than sixty tiles re-rendered. Same LGPL as
+    // mapsforge, which this app already carries.
+    implementation("org.mapsforge:vtm:0.25.0")
+    implementation("org.mapsforge:vtm-themes:0.25.0")
+    implementation("org.mapsforge:vtm-android:0.25.0")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-armeabi-v7a")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-arm64-v8a")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-x86")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-x86_64")
     // androidsvg is NOT declared here: mapsforge-map-android already brings the plain jar, and
     // declaring the aar as well put both on the path and every class in it twice
     // (checkReleaseDuplicateClasses, build 2). One copy, and it is the one mapsforge chose.

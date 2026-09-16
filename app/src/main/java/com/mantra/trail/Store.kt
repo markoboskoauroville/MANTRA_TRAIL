@@ -142,6 +142,16 @@ class Store(context: Context) {
         get() = prefs.getInt(KEY_NORTH_MODE, 1).coerceIn(0, 2)
         set(v) = prefs.edit().putInt(KEY_NORTH_MODE, v.coerceIn(0, 2)).apply()
 
+    /**
+     * WHICH ENGINE DRAWS THE MAP (16.9.2026). false is mapsforge, which rasterises on the CPU and
+     * is what every version until now used; true is VTM, the same project's OpenGL renderer,
+     * reading the same files. Both are carried until one of them has been walked with enough to
+     * delete the other.
+     */
+    var useVtm: Boolean
+        get() = prefs.getBoolean(KEY_USE_VTM, false)
+        set(v) = prefs.edit().putBoolean(KEY_USE_VTM, v).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -184,6 +194,7 @@ class Store(context: Context) {
         private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_NORTH_MODE = "northMode"
+        private const val KEY_USE_VTM = "useVtm"
         private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"
