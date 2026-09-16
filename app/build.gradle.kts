@@ -91,6 +91,11 @@ android {
     }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/DEPENDENCIES")
+        // BOTH THEME JARS CARRY THE SAME SYMBOLS. mapsforge-themes and vtm-themes are the same
+        // project's render themes for its two renderers, and they ship an identical set of map
+        // symbols — a laundrette is a laundrette. Take the first of each rather than failing the
+        // build over a file that is the same file twice.
+        resources.pickFirsts += setOf("assets/symbols/**", "assets/patterns/**")
     }
 }
 
