@@ -310,7 +310,7 @@ class VtmCanvas(private val context: Context, private val store: Store) : MapSur
 
     override fun diagnose(): String {
         val position = map.mapPosition
-        return "VTM · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
+        return "VTM (GPU) · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
             "${Geo.formatLon(position.getLongitude())} · layers ${map.layers().size}"
     }
 

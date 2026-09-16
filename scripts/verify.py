@@ -534,6 +534,18 @@ check("the position is a dot with the light in front of it",
 check("the light turns with the map as well as with the phone",
       "mapRotationDeg()" in canvas_src or "rotation?.degrees" in canvas_src,
       "or it would point the wrong way as soon as the map was turned")
+# 16.9.2026: he pressed "ask it" and saw nothing, because the answer went to the map's note line
+# behind the settings — the same fault export had. And the row showed the SETTING, so a phone
+# running mapsforge could read "VTM" and be telling the truth about the wrong thing.
+check("the diagnosis appears where it was asked for",
+      "answer = CanvasHolder.canvas?.diagnose()" in screens,
+      "not on a line behind the screen he is looking at")
+check("both engines name themselves in their answer",
+      "mapsforge (CPU tiles)" in canvas_src and "VTM (GPU)" in (MAIN / "VtmCanvas.kt").read_text(),
+      "an answer that does not say which engine gave it answers a different question")
+check("the engine row says what is running, not only what was chosen",
+      "is VtmCanvas -> " in screens and "after restart" in screens,
+      "the setting is a promise about next time; the object knows now")
 check("there are two engines and the screen does not know which it has",
       (MAIN / "MapSurface.kt").exists() and "VtmCanvas(context, store) else MapCanvas(context, store)" in screens,
       "one interface, two implementations, chosen when the view is built")

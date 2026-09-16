@@ -495,7 +495,10 @@ class MapCanvas(private val context: Context, private val store: Store) : MapSur
      * at this zoom, or a renderer that is failing. This asks the file and reports the counts.
      */
     override fun diagnose(): String {
-        val file = mapFile ?: return "No offline map file is open. Settings: download Croatia."
+        // The engine names itself first. Two engines and an answer that does not say which one
+        // gave it is an answer to a different question (16.9.2026).
+        val file = mapFile
+            ?: return "mapsforge (CPU tiles) · no offline map file is open"
         return try {
             val info = file.mapFileInfo
             val centre = view.model.mapViewPosition.center
@@ -511,7 +514,7 @@ class MapCanvas(private val context: Context, private val store: Store) : MapSur
             val metrics = context.resources.displayMetrics
             val size = view.model.displayModel.tileSize
             val perFrame = (metrics.widthPixels / size + 2) * (metrics.heightPixels / size + 2)
-            "z$z · here ${if (inside) "inside" else "OUTSIDE"} the map · " +
+            "mapsforge (CPU tiles) · z$z · here ${if (inside) "inside" else "OUTSIDE"} the map · " +
                 "tile: ${read?.ways?.size ?: -1} ways, ${read?.pois?.size ?: -1} points · " +
                 "cache ${tileCache?.capacityFirstLevel ?: -1} in memory of ${tileCache?.capacity ?: -1}, " +
                 "frame needs $perFrame"

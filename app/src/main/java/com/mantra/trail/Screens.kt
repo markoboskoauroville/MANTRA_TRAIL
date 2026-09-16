@@ -1508,6 +1508,16 @@ private fun SettingsFace(
     onClose: () -> Unit,
 ) {
     var engine by remember { mutableStateOf(store.useVtm) }
+    var answer by remember { mutableStateOf<String?>(null) }
+    // WHAT IS ACTUALLY DRAWING, asked of the live object rather than of the setting. The setting
+    // says what will run next time; only the object knows what is running now.
+    val running = remember(UiTick.n) {
+        when (CanvasHolder.canvas) {
+            is VtmCanvas -> "VTM, on the GPU"
+            is MapCanvas -> "mapsforge, on the CPU"
+            else -> "not up yet"
+        }
+    }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
@@ -1690,8 +1700,12 @@ private fun SettingsFace(
             // THE ENGINE. It takes effect on the next start, because a map view cannot be
             // exchanged under a running screen without dropping everything drawn on it.
             SettingRow(
-                title = "map engine",
-                state = if (engine) "VTM, on the GPU" else "mapsforge, on the CPU",
+                title = "map engine · now: $running",
+                state = if (engine == (running == "VTM, on the GPU")) {
+                    if (engine) "VTM" else "mapsforge"
+                } else {
+                    if (engine) "VTM after restart" else "mapsforge after restart"
+                },
                 onPress = {
                     engine = !engine
                     store.useVtm = engine
@@ -1703,9 +1717,23 @@ private fun SettingsFace(
                 },
             )
             SettingRow("choose a .map file for the offline layer", "picker", onChooseMapFile)
-            SettingRow("check the offline map here", "ask it", {
-                Trail.say(CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet")
+            // THE ANSWER APPEARS HERE, where the question was asked. It used to go to the map's
+            // note line, which is behind this screen — so pressing it looked like nothing
+            // happening at all, exactly as export did before it (16.9.2026).
+            SettingRow("what is the map doing", "ask it", {
+                answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet"
             })
+            if (answer != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Label(answer ?: "", Paint.Amber, size = 11, align = TextAlign.Start)
+                }
+            }
             SettingRow("folder the tracks live in", exportState, onChooseExportFolder)
             SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
             SettingRow("API keys, from a file", keyState, onImportKeys)
