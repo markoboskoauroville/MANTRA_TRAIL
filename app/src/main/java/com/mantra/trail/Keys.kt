@@ -20,6 +20,11 @@ package com.mantra.trail
  */
 object Keys {
 
+    /**
+     * THUNDERFOREST STAYS IN THIS LIST though its maps left the app on 16.9.2026: a key file he
+     * picks may still hold one, and "a Thunderforest key, which this app no longer uses" is a
+     * better answer than "unknown key".
+     */
     enum class Provider {
         /** Google Map Tiles: roadmap, satellite, terrain and hybrid, online only. */
         GOOGLE,

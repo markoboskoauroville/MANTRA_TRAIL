@@ -81,7 +81,8 @@ check("manifest does NOT ask for ACCESS_BACKGROUND_LOCATION",
       "ACCESS_BACKGROUND_LOCATION" not in mf, "absent")
 
 # 5 Google's tiles are never cached, and the rule is in the code rather than in a comment
-layers = code_only((MAIN / "Layers.kt").read_text())
+layers_src = (MAIN / "Layers.kt").read_text()
+layers = code_only(layers_src)
 # THE CPU RENDERER IS GONE (16.9.2026), and with it every check that examined it: the tile cache
 # sized from the screen, the persistent tile store, the square frame buffer, the scaled parent
 # tiles. Those were not wrong — they were true of a renderer this app no longer has, and a check
@@ -575,6 +576,22 @@ vtm_src = canvas_src
 # Thunderforest's key never reached Thunderforest and every tile came back a refusal.
 # 16.9.2026: his coast came back covered in petrol pumps, because the theme was fixed at
 # MOTORIDER — a motorcycle theme, where a filling station is the point.
+# 16.9.2026: Thunderforest and OpenStreetMap removed at his word, OpenAndroMaps added in their
+# place — the same file format the engine already reads, with contours in the data.
+check("the raster map services are gone from the code",
+      "thunderforest.com" not in code_only(layers_src).lower()
+      and "tile.openstreetmap.org" not in code_only(layers_src),
+      "the point of this app is the file on the phone; the comments keep the history")
+check("OpenAndroMaps can be fetched from inside the app",
+      (MAIN / "Oam.kt").exists() and (MAIN / "OamDownload.kt").exists()
+      and "onDownloadOam" in screens,
+      "named, measured and resumable, as every download here is")
+check("the size said includes the room unpacking needs",
+      "twice that free while it unpacks" in (MAIN / "Oam.kt").read_text(),
+      "1.2 GB of zip becomes 1.4 GB of map, and both are on the phone at once")
+check("only the map comes out of the archive",
+      "fun isTheMap" in (MAIN / "Oam.kt").read_text(),
+      "the .poi database is not ours to want")
 check("the theme is chosen, not fixed at a motorcycle one",
       "themeFor(store.themeName)" in canvas_src and "THEMES" in screens,
       "the plain one leads the list")

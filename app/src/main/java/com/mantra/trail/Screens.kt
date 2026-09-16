@@ -132,6 +132,7 @@ fun TrailApp(
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
     onTestTiles: () -> Unit,
+    onDownloadOam: (Oam.Region) -> Unit,
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
     onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
@@ -487,6 +488,7 @@ fun TrailApp(
                 },
                 trackCount = tracks().size,
                 onTestTiles = onTestTiles,
+                onDownloadOam = onDownloadOam,
                 onClose = { settings = false },
             )
         }
@@ -1510,6 +1512,7 @@ private fun SettingsFace(
     onTracks: () -> Unit,
     trackCount: Int,
     onTestTiles: () -> Unit,
+    onDownloadOam: (Oam.Region) -> Unit,
     onClose: () -> Unit,
 ) {
     var answer by remember { mutableStateOf<String?>(null) }
@@ -1724,6 +1727,15 @@ private fun SettingsFace(
                     }
                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
+            }
+
+            // OPENANDROMAPS: the hiking maps, with contour lines and waymarked routes in the data
+            // rather than painted over it (16.9.2026). They arrive as a zip and are unpacked here.
+            Label("openandromaps, for walking", Paint.Dim, size = 12, align = TextAlign.Start)
+            Oam.ALL.forEach { region ->
+                SettingRow(region.label, Oam.sizeLabel(region).substringBefore(","), {
+                    onDownloadOam(region)
+                })
             }
 
             SettingRow("ask this map's service for one tile", "test it", onTestTiles)

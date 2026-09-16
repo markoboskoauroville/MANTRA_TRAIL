@@ -468,38 +468,13 @@ class CoreTest {
 
     // --- the URL, split the way the GPU engine wants it ------------------------------------------
 
-    @Test fun theKeyStaysInThePatternHandedToTheEngine() {
-        // The fault this closes: a hard-coded path threw the query away and Thunderforest
-        // refused every tile (16.9.2026).
-        val key = "0123456789abcdef" + "0123456789abcdef"
-        val (base, path) = Layers.tilePattern(Layers.THUNDERFOREST, null, key)!!
-        assertTrue(base, base.startsWith("https://"))
-        assertFalse(base, base.contains("{Z}"))
-        assertTrue(path, path.startsWith("/{Z}/{X}/{Y}"))
-        assertTrue(path, path.contains(key))
-    }
 
-    @Test fun aMapThatNeedsNoKeyStillSplits() {
-        val (base, path) = Layers.tilePattern(Layers.OSM)!!
-        assertTrue(base.startsWith("https://"))
-        assertEquals("/{Z}/{X}/{Y}.png", path)
-    }
 
-    @Test fun aMapWithNoKeyYetHasNoPattern() {
-        assertNull(Layers.tilePattern(Layers.THUNDERFOREST, null, null))
-    }
 
     @Test fun theOfflineFileHasNoPatternBecauseItHasNoUrl() {
         assertNull(Layers.tilePattern(Layers.OFFLINE))
     }
 
-    @Test fun everyNumberTheEngineSubstitutesIsInThePath() {
-        val key = "0123456789abcdef" + "0123456789abcdef"
-        Layers.THUNDERFOREST_ALL.forEach { layer ->
-            val (_, path) = Layers.tilePattern(layer, null, key)!!
-            assertTrue(layer.name, path.contains("{Z}") && path.contains("{X}") && path.contains("{Y}"))
-        }
-    }
 
     // --- a route of more than two points ----------------------------------------------------------
 
@@ -596,37 +571,45 @@ class CoreTest {
 
     // --- The layers -----------------------------------------------------------------------------
 
+    @Test fun theRasterServicesAreGone() {
+        // Thunderforest and OpenStreetMap left at his word on 16.9.2026: this app is the file on
+        // the phone. What remains is the offline map and Google's four views.
+        assertTrue(Layers.ALL.none { it.id.startsWith("tf-") || it.id == "osm" })
+        assertEquals(setOf(MapLayer.Family.OFFLINE, MapLayer.Family.GOOGLE), Layers.ALL.map { it.family }.toSet())
+    }
+
+    @Test fun anOpenAndroMapsRegionKnowsItsUrlAndItsCost() {
+        val balkan = Oam.byName("balkan")!!
+        assertTrue(balkan.url, balkan.url.startsWith("https://ftp.gwdg.de/"))
+        assertTrue(balkan.url.endsWith("Balkan.zip"))
+        assertEquals("oam-balkan.map", balkan.fileName)
+        assertTrue(Oam.sizeLabel(balkan), Oam.sizeLabel(balkan).startsWith("1.1"))
+        assertTrue(Oam.sizeLabel(balkan).contains("twice"))
+    }
+
+    @Test fun onlyTheMapComesOutOfTheArchive() {
+        assertTrue(Oam.isTheMap("Balkan.map"))
+        assertFalse(Oam.isTheMap("Balkan.poi"))
+        assertFalse(Oam.isTheMap("readme.txt"))
+        assertFalse(Oam.isTheMap("__MACOSX/Balkan.map"))
+    }
+
+    @Test fun aRegionNobodyMeasuredSaysSoRatherThanClaimingZero() {
+        val slovenia = Oam.byName("slovenia")!!
+        assertTrue(Oam.sizeLabel(slovenia).contains("unknown"))
+    }
+
     @Test fun everyLayerHasItsOwnId() {
         // The count moves whenever a family is added; what must never move is that two maps
         // share an id, because the id is what the settings list and the memory both key on.
         assertEquals(Layers.ALL.size, Layers.ALL.map { it.id }.toSet().size)
-        assertTrue(Layers.ALL.size >= 16)
+        // Sixteen when Thunderforest and OpenStreetMap were here; five now that they are not.
+        assertTrue(Layers.ALL.size.toString(), Layers.ALL.size >= 5)
     }
 
 
 
-    @Test fun thunderforestContributesAllTenOfItsStyles() {
-        val styles = Layers.of(MapLayer.Family.THUNDERFOREST)
-        assertEquals(10, styles.size)
-        assertEquals(10, styles.map { it.url }.toSet().size)
-        styles.forEach {
-            assertEquals(it.id, Keys.Provider.THUNDERFOREST, it.provider)
-            assertTrue(it.id, it.url!!.startsWith("https://api.thunderforest.com/"))
-            assertTrue(it.id, it.url!!.contains("apikey={key}"))
-        }
-    }
 
-    @Test fun theOneButtonTurnsThroughEveryFamilyAndComesBack() {
-        // Starts where the list starts, which is Thunderforest now, not the offline map.
-        var layer = Layers.ALL.first()
-        val seen = ArrayList<MapLayer.Family>()
-        repeat(MapLayer.Family.entries.size) {
-            seen.add(layer.family)
-            layer = Layers.firstOf(Layers.nextFamily(layer))
-        }
-        assertEquals(MapLayer.Family.entries.toList(), seen)
-        assertEquals(Layers.ALL.first().family, layer.family)
-    }
 
     @Test fun everyFamilyHasAtLeastOneMap() {
         MapLayer.Family.entries.forEach { assertTrue(it.name, Layers.of(it).isNotEmpty()) }
@@ -635,8 +618,10 @@ class CoreTest {
     @Test fun theViewGoesFurtherThanTheTilesDo() {
         // The complaint this closes: OpenStreetMap stopped dead at 18 because that was where its
         // tiles stopped. Past the last real tile the map is scaled, not fetched.
-        assertTrue(Layers.OSM.viewMaxZoom > Layers.OSM.maxZoom)
+        // Was written for OpenStreetMap, which stopped dead at 18; it left with the raster
+        // services on 16.9.2026 and the rule it proved still holds for what remains.
         assertEquals(22, Layers.OFFLINE.viewMaxZoom)
+        Layers.GOOGLE_ALL.forEach { assertTrue(it.id, it.viewMaxZoom >= it.maxZoom) }
         Layers.ALL.forEach {
             assertTrue(it.id, it.viewMaxZoom >= it.maxZoom)
             // mapsforge only scales a parent four levels up; beyond that it has nothing to draw.
@@ -645,14 +630,6 @@ class CoreTest {
         }
     }
 
-    @Test fun everyThunderforestStyleIsCalledThunderforest() {
-        Layers.of(MapLayer.Family.THUNDERFOREST).forEach {
-            assertTrue(it.label, it.label.startsWith("Thunderforest"))
-            assertEquals(it.id, "THU", it.short)
-            // The name on the map line carries no family: the key beside it already says THU.
-            assertFalse(it.name, it.name.contains("Thunderforest"))
-        }
-    }
 
     @Test fun everyGoogleViewIsCalledGoogle() {
         Layers.of(MapLayer.Family.GOOGLE).forEach {
@@ -678,10 +655,6 @@ class CoreTest {
         Layers.ALL.forEach { assertTrue("${it.id}: ${it.name}", it.name.length <= 14) }
     }
 
-    @Test fun thunderforestLeadsTheSettingsList() {
-        assertEquals(MapLayer.Family.THUNDERFOREST, Layers.ALL.first().family)
-        assertEquals(MapLayer.Family.THUNDERFOREST, MapLayer.Family.entries.first())
-    }
 
     @Test fun noLayerCarriesAKeyOfItsOwn() {
         // The whole point of v7: the app ships no key. A URL template may have a {key} hole in
@@ -708,12 +681,6 @@ class CoreTest {
         assertTrue(url.contains("/12/2229/1460"))
     }
 
-    @Test fun theWalkingMapPutsTheKeyInItsAddress() {
-        val key = "a".repeat(32)
-        val url = Layers.tileUrl(Layers.THUNDERFOREST, 12, 2229, 1460, key = key)!!
-        assertTrue(url.contains("apikey=$key"))
-        assertTrue(url.startsWith("https://"))
-    }
 
     @Test fun hybridIsSatelliteWithTheRoadsOverIt() {
         assertEquals("satellite", MapLayer.GoogleView.HYBRID.mapType)
@@ -750,7 +717,7 @@ class CoreTest {
 
     @Test fun onlyGoogleLayersCarryAGoogleView() {
         assertNull(Layers.OFFLINE.googleView)
-        assertNull(Layers.OSM.googleView)
+        Layers.GOOGLE_ALL.forEach { assertNotNull(it.id, it.googleView) }
     }
 
     @Test fun aFamilyStillHasEveryStyleInIt() {
@@ -778,15 +745,18 @@ class CoreTest {
     }
 
     @Test fun theRasterUrlCarriesTheTileNumbers() {
-        val u = Layers.tileUrl(Layers.OSM, 12, 2229, 1460)!!
-        assertTrue(u.endsWith("/12/2229/1460.png"))
+        // Written for OpenStreetMap, which left on 16.9.2026; Google's tiles are the raster that
+        // remains, and the rule is the same one.
+        val u = Layers.tileUrl(Layers.GOOGLE, 12, 2229, 1460, auth = "session", key = "k")!!
+        assertTrue(u, u.contains("/12/2229/1460"))
         assertTrue(u.startsWith("https://"))
     }
 
 
     @Test fun anUnknownLayerIdFallsBackToTheOneThatWorksOffline() {
         assertEquals(Layers.OFFLINE.id, Layers.byId("something else").id)
-        assertEquals(Layers.OSM.id, Layers.byId("osm").id)
+        // A map that has been removed falls back to the offline file rather than to nothing.
+        assertEquals(Layers.OFFLINE.id, Layers.byId("osm").id)
     }
 
     @Test fun everyFetchedLayerHasAnAttributionAndAUrl() {
@@ -896,7 +866,10 @@ class CoreTest {
             assertTrue(it.id, it.attribution.isNotBlank())
         }
         val credits = Layers.ALL.map { it.attribution }.distinct()
-        assertTrue(credits.any { it.contains("Thunderforest") })
+        // Thunderforest's credit left with its maps on 16.9.2026. OpenStreetMap's stays, because
+        // the offline file is their data and that obligation does not end with a tile service.
+        assertTrue(credits.toString(), credits.any { it.contains("OpenStreetMap") })
+        assertTrue(credits.toString(), credits.any { it.contains("Google") })
         assertTrue(credits.any { it.contains("OpenStreetMap") })
         assertTrue(credits.any { it.contains("Google") })
     }

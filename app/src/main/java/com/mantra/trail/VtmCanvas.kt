@@ -84,13 +84,20 @@ class VtmCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun showVector(): String? {
-        val file = MapDownload.target(context)
-        if (!file.exists() || file.length() < 1_000_000) {
-            return "No offline map yet. Settings, choose a .map file."
+        // WHICH FILE, IN THE ORDER THEY ARE WORTH HAVING (16.9.2026): an OpenAndroMaps region if
+        // one has been fetched, because it carries contour lines and waymarked routes; then one
+        // he picked himself; then the plain extract this app can download.
+        // A file he picked with the file manager has no path at all, only a descriptor, so the
+        // stream is what both cases have in common.
+        val onDisk: File? = offlineFile()
+        val stream: FileInputStream = if (onDisk != null) {
+            FileInputStream(onDisk)
+        } else {
+            openOfflineFile()
+                ?: return "No offline map yet. Settings: download OpenAndroMaps, or pick a .map file."
         }
         return try {
             val source = MapFileTileSource()
-            val stream = FileInputStream(file)
             mapFileStream = stream
             source.setMapFileInputStream(stream)
             val base = map.setBaseMap(source)
@@ -108,6 +115,31 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         } catch (e: Exception) {
             "The offline map would not open: ${e.javaClass.simpleName}"
         }
+    }
+
+    /**
+     * The offline map this app should open, best first: an OpenAndroMaps region if one has been
+     * fetched, because it carries contour lines and waymarked routes in the data itself; then the
+     * plain extract this app can download.
+     */
+    private fun offlineFile(): File? {
+        OamDownload.installed(context).firstOrNull()?.let { return it }
+        val downloaded = MapDownload.target(context)
+        return if (downloaded.exists() && downloaded.length() > 1_000_000) downloaded else null
+    }
+
+    /**
+     * A map file he picked with the file manager. It has no path — only a descriptor — so it can
+     * only be handed over as a stream, which is why the engine is given a stream in both cases.
+     */
+    private fun openOfflineFile(): FileInputStream? {
+        val uri = store.mapFileUri ?: return null
+        return runCatching {
+            val descriptor = context.contentResolver
+                .openFileDescriptor(android.net.Uri.parse(uri), "r")
+                ?: return null
+            FileInputStream(descriptor.fileDescriptor)
+        }.getOrNull()
     }
 
     private fun showRaster(layer: MapLayer, session: String?, key: String?): String? {

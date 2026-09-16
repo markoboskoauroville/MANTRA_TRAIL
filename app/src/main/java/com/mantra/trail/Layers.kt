@@ -33,7 +33,7 @@ data class MapLayer(
     val label: String,
     /**
      * The name on the map screen, where it shares one line with the coordinates. The family is
-     * already on the key beside it, so "Thunderforest Landscape" would say Thunderforest twice.
+     * already on the key beside it, so the family name would be said twice.
      */
     val name: String,
     /** The word on the toggle: four letters at most, because the key is small. */
@@ -57,13 +57,13 @@ data class MapLayer(
     /**
      * SIXTEEN MAPS, FOUR FAMILIES, ONE BUTTON.
      *
-     * Thunderforest draw ten styles and Google four views, and a toggle that turned through all
+     * Google draws four views, and a toggle that turned through every one of them
      * sixteen would be sixteen presses to get back where you started. So the key on the map turns
      * through the FAMILIES, and which style of a family it shows is whichever one of that family
      * was last chosen in settings. Four presses to come full circle, and every style still one
      * press away in the list.
      */
-    enum class Family { THUNDERFOREST, OFFLINE, OSM, GOOGLE }
+    enum class Family { OFFLINE, GOOGLE }
 
     enum class GoogleView(val mapType: String, val overlayRoads: Boolean) {
         NORMAL("roadmap", false),
@@ -75,7 +75,7 @@ data class MapLayer(
     /**
      * EVERY CREDIT IS IN SETTINGS AND NONE IS ON THE MAP (15.9.2026, his decision). They are all
      * listed together at the bottom of the settings face rather than printed over the ground he
-     * is walking on. Worth knowing, once: Thunderforest's terms ask for their attribution and
+     * is walking on. Worth knowing, once: a tile service's terms ask for their attribution and
      * OpenStreetMap's to stay visible in an app, so if this ever leaves his own phone that line
      * has to come back.
      */
@@ -106,59 +106,6 @@ object Layers {
         attribution = "© OpenStreetMap contributors",
     )
 
-    val OSM = MapLayer(
-        family = MapLayer.Family.OSM,
-        id = "osm",
-        label = "OpenStreetMap",
-        name = "OpenStreetMap",
-        short = "OSM",
-        kind = LayerKind.RASTER_XYZ,
-        offline = MapLayer.Offline.CACHED_ONLY,
-        attribution = "© OpenStreetMap contributors",
-        url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        // OpenStreetMap publishes tiles to 19. The view goes to 22 and scales the rest.
-        maxZoom = 19,
-    )
-
-    /**
-     * THUNDERFOREST'S TEN STYLES, all of them, from his own dashboard. One account, one key, and
-     * the key goes in the address of every one of them.
-     *
-     * They are online maps. Tiles he actually looks at are cached and are then there without a
-     * signal; fetching a region he has not looked at is what their terms call bulk downloading,
-     * and that needs their Small Business plan, so this app has no button for it.
-     */
-    private fun thunderforest(style: String, name: String, short: String = "THU") = MapLayer(
-        family = MapLayer.Family.THUNDERFOREST,
-        id = "tf-$style",
-        label = "Thunderforest $name",
-        name = name,
-        short = short,
-        kind = LayerKind.RASTER_XYZ,
-        offline = MapLayer.Offline.CACHED_ONLY,
-        attribution = "Maps © Thunderforest, Data © OpenStreetMap contributors",
-        url = "https://api.thunderforest.com/$style/{z}/{x}/{y}.png?apikey={key}",
-        maxZoom = 22,
-        provider = Keys.Provider.THUNDERFOREST,
-    )
-
-    /** The walking one: contour lines, marked trails, the shape of a hill. */
-    val THUNDERFOREST = thunderforest("outdoors", "Outdoors")
-    val TF_CYCLE = thunderforest("cycle", "Cycle")
-    val TF_TRANSPORT = thunderforest("transport", "Transport")
-    val TF_LANDSCAPE = thunderforest("landscape", "Landscape")
-    val TF_TRANSPORT_DARK = thunderforest("transport-dark", "Transport dark")
-    val TF_SPINAL = thunderforest("spinal-map", "Spinal")
-    val TF_PIONEER = thunderforest("pioneer", "Pioneer")
-    val TF_MOBILE_ATLAS = thunderforest("mobile-atlas", "Mobile atlas")
-    val TF_NEIGHBOURHOOD = thunderforest("neighbourhood", "Neighbourhood")
-    val TF_ATLAS = thunderforest("atlas", "Atlas")
-
-    val THUNDERFOREST_ALL: List<MapLayer> = listOf(
-        THUNDERFOREST, TF_LANDSCAPE, TF_CYCLE, TF_TRANSPORT, TF_TRANSPORT_DARK,
-        TF_ATLAS, TF_PIONEER, TF_NEIGHBOURHOOD, TF_MOBILE_ATLAS, TF_SPINAL,
-    )
-
     private fun google(id: String, name: String, view: MapLayer.GoogleView) = MapLayer(
         family = MapLayer.Family.GOOGLE,
         id = id,
@@ -186,7 +133,12 @@ object Layers {
      * one he zooms furthest and reads best (15.9.2026); the families follow in the same order the
      * map key turns through them.
      */
-    val ALL: List<MapLayer> = THUNDERFOREST_ALL + listOf(OFFLINE, OSM) + GOOGLE_ALL
+    /**
+     * WHAT THIS APP DRAWS (16.9.2026). Thunderforest and OpenStreetMap were removed at his word:
+     * they are raster tiles from somebody else's service, and the point of this app is the file
+     * on the phone. Google stays because a satellite photograph answers a different question.
+     */
+    val ALL: List<MapLayer> = listOf(OFFLINE) + GOOGLE_ALL
 
     fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
 
@@ -243,8 +195,8 @@ object Layers {
         Keys.Provider.GOOGLE ->
             "Google needs your own key. Settings, API keys, pick the file it is in."
 
-        Keys.Provider.THUNDERFOREST ->
-            "Thunderforest needs your key. Settings, API keys, pick the file it is in."
+        // Thunderforest keys are still recognised by the key reader, but no layer here uses one.
+        Keys.Provider.THUNDERFOREST -> null
 
         null -> null
     }

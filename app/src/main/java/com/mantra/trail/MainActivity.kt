@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var routeOptions by mutableStateOf<List<Routing.Option>>(emptyList())
     private var routing = false
     private var pendingSegment: String? = null
+    private var pendingOam: String? = null
     private var tileAnswer: String? = null
 
     private val askLocation = registerForActivityResult(
@@ -274,6 +275,47 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * FETCH AN OPENANDROMAPS REGION: 1.2 GB of zip, unpacked to a map with contour lines in it.
+     * Named and measured before it starts, and the same press again carries on after a break.
+     */
+    private fun downloadOam(region: Oam.Region) {
+        if (downloading) {
+            Trail.say("Already fetching a map")
+            return
+        }
+        if (OamDownload.isPresent(this, region)) {
+            Trail.say("${region.label} is already on the phone")
+            return
+        }
+        if (pendingOam != region.name) {
+            pendingOam = region.name
+            Trail.say("${region.label}: ${Oam.sizeLabel(region)}. Press again to start.")
+            return
+        }
+        pendingOam = null
+        downloading = true
+        lifecycleScope.launch {
+            val problem = OamDownload.fetch(this@MainActivity, region) { p ->
+                Trail.say(
+                    if (p.unpacking) {
+                        "Unpacking ${region.label}…"
+                    } else {
+                        "${region.label} ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB"
+                    }
+                )
+            }
+            downloading = false
+            if (problem != null) {
+                Trail.say(problem)
+            } else {
+                Trail.say("${region.label} is on the phone. Choose the offline map to see it.")
+                canvas?.show(Layers.OFFLINE)
+            }
+            UiTick.bump()
+        }
+    }
+
     /** Fetch one tile of the chosen map and report exactly what the service said. */
     private fun testTiles() {
         val layer = Layers.byId(store.layerId)
@@ -326,6 +368,7 @@ class MainActivity : ComponentActivity() {
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
                 onTestTiles = ::testTiles,
+                onDownloadOam = ::downloadOam,
                 onSaveRoute = ::saveRoute,
                 onFindWays = ::findWays,
                 onSaveOption = ::saveOption,
