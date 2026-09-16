@@ -281,7 +281,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val googleKey = store.key(Keys.Provider.GOOGLE)
             val session = if (layer.kind == LayerKind.GOOGLE_TILES && googleKey != null) {
-                GoogleTiles.session(layer.googleView ?: MapLayer.GoogleView.ROADMAP, googleKey).token
+                GoogleTiles.session(layer.googleView ?: MapLayer.GoogleView.NORMAL, googleKey).token
             } else {
                 null
             }
