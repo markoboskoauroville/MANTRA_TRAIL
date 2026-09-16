@@ -573,6 +573,14 @@ vtm_src = canvas_src
 # the reader were both fine (235 elements at z17), so the fault was ours.
 # 16.9.2026: the raster path hard-coded "/{Z}/{X}/{Y}.png" and dropped everything after it, so
 # Thunderforest's key never reached Thunderforest and every tile came back a refusal.
+# 16.9.2026: his coast came back covered in petrol pumps, because the theme was fixed at
+# MOTORIDER — a motorcycle theme, where a filling station is the point.
+check("the theme is chosen, not fixed at a motorcycle one",
+      "themeFor(store.themeName)" in canvas_src and "THEMES" in screens,
+      "the plain one leads the list")
+check("a map that will not draw can be asked what the service said",
+      (MAIN / "TileTest.kt").exists() and "onTestTiles" in screens,
+      "401, 429, 404 and no network all look identical on a blank screen")
 check("the tile pattern keeps whatever follows the numbers",
       "fun tilePattern" in layers and 'tilePath(path)' in canvas_src
       and '"/{Z}/{X}/{Y}.png"' not in code_only(canvas_src),

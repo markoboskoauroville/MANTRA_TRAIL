@@ -97,6 +97,9 @@ private const val NORTH_UP = 1
 private const val NORTH_FOLLOW = 2
 
 /** The five a line can be drawn in: green, amber, red, blue, white. */
+/** VTM's own themes, in the order they are offered. The plain one leads because it is plainest. */
+private val THEMES = listOf("DEFAULT", "OSMARENDER", "NEWTRON", "BIKER", "MOTORIDER", "TRONRENDER")
+
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
 
 /** Bumped when a picker or a download changes something a row shows. */
@@ -128,6 +131,7 @@ fun TrailApp(
     onDeleteTrack: (Folder.Entry) -> Unit,
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
+    onTestTiles: () -> Unit,
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
     onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
@@ -482,6 +486,7 @@ fun TrailApp(
                     showTracks = true
                 },
                 trackCount = tracks().size,
+                onTestTiles = onTestTiles,
                 onClose = { settings = false },
             )
         }
@@ -1504,9 +1509,11 @@ private fun SettingsFace(
     recordingPaused: Boolean,
     onTracks: () -> Unit,
     trackCount: Int,
+    onTestTiles: () -> Unit,
     onClose: () -> Unit,
 ) {
     var answer by remember { mutableStateOf<String?>(null) }
+    var theme by remember { mutableStateOf(store.themeName) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
@@ -1690,6 +1697,36 @@ private fun SettingsFace(
             // THE ANSWER APPEARS HERE, where the question was asked. It used to go to the map's
             // note line, which is behind this screen — so pressing it looked like nothing
             // happening at all, exactly as export did before it (16.9.2026).
+            // THE THEME. It decides what the offline map SHOWS, which is why a coast came back
+            // covered in petrol pumps: it was fixed at a motorcycle theme (16.9.2026).
+            Label("offline map theme", Paint.Dim, size = 12, align = TextAlign.Start)
+            THEMES.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { name ->
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (name == theme) Paint.Amber else Paint.Veil)
+                                .clickable {
+                                    theme = name
+                                    CanvasHolder.canvas?.setTheme(name)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Label(
+                                text = name.lowercase(),
+                                colour = if (name == theme) Paint.Ground else Paint.Sand,
+                                size = 11,
+                            )
+                        }
+                    }
+                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+
+            SettingRow("ask this map's service for one tile", "test it", onTestTiles)
             SettingRow("what is the map doing", "ask it", {
                 answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet"
             })

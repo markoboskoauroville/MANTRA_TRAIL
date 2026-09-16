@@ -101,7 +101,7 @@ class VtmCanvas(private val context: Context, private val store: Store) {
             map.layers().add(labels)
             buildingLayer = buildings
             labelLayer = labels
-            map.setTheme(VtmThemes.MOTORIDER)
+            map.setTheme(themeFor(store.themeName))
             restoreOverlays()
             map.updateMap(true)
             null
@@ -291,6 +291,31 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         map.layers().add(layer)
         positionLayer = layer
         map.updateMap(false)
+    }
+
+    /**
+     * The theme by name, defaulting to the plain one. MOTORIDER was what this used to be fixed
+     * at, and it is a motorcycle theme: every petrol station in Croatia, drawn large, over a
+     * coast he was trying to read.
+     */
+    private fun themeFor(name: String): VtmThemes = when (name) {
+        "OSMARENDER" -> VtmThemes.OSMARENDER
+        "BIKER" -> VtmThemes.BIKER
+        "MOTORIDER" -> VtmThemes.MOTORIDER
+        "NEWTRON" -> VtmThemes.NEWTRON
+        "TRONRENDER" -> VtmThemes.TRONRENDER
+        "MAPZEN" -> VtmThemes.MAPZEN
+        else -> VtmThemes.DEFAULT
+    }
+
+    /** Draw the offline map again under a different theme, keeping everything on top of it. */
+    fun setTheme(name: String) {
+        store.themeName = name
+        if (baseLayer != null) {
+            map.setTheme(themeFor(name))
+            map.clearMap()
+            map.updateMap(true)
+        }
     }
 
     private fun symbolFor(letter: String): org.oscim.backend.canvas.Bitmap =

@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var routeOptions by mutableStateOf<List<Routing.Option>>(emptyList())
     private var routing = false
     private var pendingSegment: String? = null
+    private var tileAnswer: String? = null
 
     private val askLocation = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -273,6 +274,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Fetch one tile of the chosen map and report exactly what the service said. */
+    private fun testTiles() {
+        val layer = Layers.byId(store.layerId)
+        Trail.say("Asking ${layer.name} for one tile…")
+        lifecycleScope.launch {
+            val googleKey = store.key(Keys.Provider.GOOGLE)
+            val session = if (layer.kind == LayerKind.GOOGLE_TILES && googleKey != null) {
+                GoogleTiles.session(layer.googleView ?: MapLayer.GoogleView.ROADMAP, googleKey).token
+            } else {
+                null
+            }
+            tileAnswer = TileTest.check(layer, session, layer.provider?.let { store.key(it) })
+            Trail.say(tileAnswer)
+            UiTick.bump()
+        }
+    }
+
     private fun trackFolder(): java.io.File = java.io.File(filesDir, "tracks").apply { mkdirs() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -307,6 +325,7 @@ class MainActivity : ComponentActivity() {
                 onDeleteTrack = ::deleteTrack,
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
+                onTestTiles = ::testTiles,
                 onSaveRoute = ::saveRoute,
                 onFindWays = ::findWays,
                 onSaveOption = ::saveOption,

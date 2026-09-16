@@ -153,6 +153,14 @@ class Store(context: Context) {
         get() = prefs.getBoolean(KEY_USE_VTM, false)
         set(v) = prefs.edit().putBoolean(KEY_USE_VTM, v).apply()
 
+    /**
+     * Which of VTM's render themes draws the offline map. It was fixed at MOTORIDER, which is a
+     * motorcycle theme — hence a coast covered in petrol pumps (16.9.2026). Now his to choose.
+     */
+    var themeName: String
+        get() = prefs.getString(KEY_THEME, "DEFAULT") ?: "DEFAULT"
+        set(v) = prefs.edit().putString(KEY_THEME, v).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -193,6 +201,7 @@ class Store(context: Context) {
         private const val KEY_COMPASS = "compassMode"
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
         private const val KEY_ROUTE_PROFILE = "routeProfile"
+        private const val KEY_THEME = "themeName"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_NORTH_MODE = "northMode"
         private const val KEY_USE_VTM = "useVtm"
