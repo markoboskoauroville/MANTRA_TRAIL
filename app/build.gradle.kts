@@ -114,30 +114,30 @@ dependencies {
 
     // The map engine: offline vector .map files (OpenAndroMaps) and raster tile layers with a
     // file-backed cache, in one view. Pure Java, no native libraries, so CI builds it unchanged.
-    // VTM: mapsforge's own OpenGL sibling (16.9.2026). It reads the SAME .map files and draws
-    // them on the GPU, which is the whole reason it is here: zoom and rotation become a matrix
-    // per frame instead of sixty tiles rasterised on the CPU. Same LGPL as mapsforge, same
-    // version line, and raster tile sources too, so Thunderforest and Google still work.
+    // instead of rasterised tile by tile on the CPU — which is the whole of why Google's map
+    // turns and zooms smoothly and this one did not. LGPL-3.0, the same licence as mapsforge,
+    // which this app already carries.
+    // The GL tile decoder is native, one library per architecture. arm64 is his phone; the other
+    // two are here so an APK handed to somebody else still runs.
+
+    // VTM: MAPSFORGE'S OWN OPENGL RENDERER (16.9.2026). Same project, same version, and it reads
+    // the very same .map files — what differs is where the drawing happens. mapsforge rasterises
+    // tiles on the CPU and hands up bitmaps; VTM sends the geometry to the GPU, so a zoom or a
+    // turn is a matrix per frame rather than sixty tiles re-rendered. Same LGPL as mapsforge,
+    // which this app already carries. The natives are the tile decoder, one jar per architecture.
     implementation("org.mapsforge:vtm:0.25.0")
     implementation("org.mapsforge:vtm-android:0.25.0")
     implementation("org.mapsforge:vtm-themes:0.25.0")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-arm64-v8a")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-armeabi-v7a")
+    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-x86_64")
+
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
 
-    // VTM, THE SAME PROJECT'S OPENGL RENDERER (16.9.2026). It reads the same .map files as
-    // mapsforge, so the second engine costs no new data — only the GPU doing the drawing that the
-    // CPU was doing a tile at a time. The natives are the tile decoder; one jar per ABI, packaged
-    // from lib/<abi>/ inside them.
-    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-armeabi-v7a")
-    runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-arm64-v8a")
     implementation("org.mapsforge:mapsforge-map:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
 
-    // VTM: MAPSFORGE'S OWN OPENGL RENDERER (16.9.2026). Same project, same version, and it reads
-    // the very same .map files — the difference is where the drawing happens. mapsforge
-    // rasterises tiles on the CPU and hands up bitmaps; VTM sends the geometry to the GPU, so a
-    // zoom or a turn is a matrix per frame rather than sixty tiles re-rendered. Same LGPL as
-    // mapsforge, which this app already carries.
     // androidsvg is NOT declared here: mapsforge-map-android already brings the plain jar, and
     // declaring the aar as well put both on the path and every class in it twice
     // (checkReleaseDuplicateClasses, build 2). One copy, and it is the one mapsforge chose.

@@ -525,13 +525,21 @@ check("two fingers turn the map",
       "touchGestureHandler.setRotationEnabled(true)" in (MAIN / "MapCanvas.kt").read_text(),
       "mapsforge can do it and ships it off")
 # Replaced 16.9.2026: he asked for Google's mark instead — a dot with a cone of light in front.
+# The mark moved into Marks.kt when the second engine arrived (16.9.2026): both engines draw the
+# same dot, so it is drawn in one place and handed to whichever is running.
+marks_src = (MAIN / "Marks.kt").read_text()
 check("the position is a dot with the light in front of it",
-      "fun positionBitmap" in canvas_src and "RadialGradient" in canvas_src
-      and "drawArc" in canvas_src,
-      "the cone is the compass, drawn where the eye already is")
+      "RadialGradient" in marks_src and "drawArc" in marks_src,
+      "one drawing, used by both engines")
 check("the light turns with the map as well as with the phone",
-      "view.model.mapViewPosition.rotation?.degrees" in canvas_src,
+      "mapRotationDeg()" in canvas_src or "rotation?.degrees" in canvas_src,
       "or it would point the wrong way as soon as the map was turned")
+check("there are two engines and the screen does not know which it has",
+      (MAIN / "MapSurface.kt").exists() and "VtmCanvas(context, store) else MapCanvas(context, store)" in screens,
+      "one interface, two implementations, chosen when the view is built")
+check("the GPU engine reads the same offline files",
+      "MapFileTileSource" in (MAIN / "VtmCanvas.kt").read_text(),
+      "no new format and no second download")
 check("accuracy is drawn as a ring",
       "Circle(here, fix.accuracyM, null, paint(0x553B82F6, 1.5f, Style.STROKE))" in canvas_src,
       "filled, three metres of accuracy swallowed the map at z22")
