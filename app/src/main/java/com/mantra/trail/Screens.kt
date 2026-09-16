@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +92,10 @@ private const val COMPASS_DARK = 0
 private const val COMPASS_NIGHT = 1
 private const val COMPASS_OFF = 2
 
+/** What the little compass is doing: north at the top, or the way he is walking at the top. */
+private const val NORTH_UP = 1
+private const val NORTH_FOLLOW = 2
+
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
 
@@ -139,6 +144,9 @@ fun TrailApp(
     // LOCKED TO THE MIDDLE (15.9.2026). One press centres and holds; the next lets the map go.
     var follow by remember { mutableStateOf(false) }
     var lastCentreTap by remember { mutableLongStateOf(0L) }
+    // 0 free, 1 north up, 2 turning with the walk (16.9.2026, as Google's little compass does).
+    var northMode by remember { mutableIntStateOf(store.northMode) }
+    var mapTurn by remember { mutableFloatStateOf(0f) }
 
     val fix by Trail.fix.collectAsState()
     val stats by Trail.stats.collectAsState()
@@ -210,6 +218,26 @@ fun TrailApp(
             contentAlignment = Alignment.Center,
         ) {
             CentreCross()
+
+            // THE LITTLE COMPASS (16.9.2026), where Google keeps it. It shows which way the map
+            // is facing; one tap puts north up and centres him, the next turns the map so the
+            // way he is walking is up. Its needle is the map's own angle, so it never disagrees
+            // with what is under it.
+            Box(Modifier.fillMaxSize().safeDrawingPadding().padding(top = 44.dp, end = 8.dp)) {
+                LittleCompass(
+                    turn = mapTurn,
+                    following = northMode == NORTH_FOLLOW,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    onTap = {
+                        northMode = if (northMode == NORTH_FOLLOW) NORTH_UP else NORTH_FOLLOW
+                        store.northMode = northMode
+                        if (northMode == NORTH_UP) {
+                            CanvasHolder.canvas?.setMapRotation(0f)
+                            onWhereAmI()
+                        }
+                    },
+                )
+            }
         }
 
         if (!bare) {
@@ -348,7 +376,21 @@ fun TrailApp(
         // the canvas redraws only when the heading has really moved (bounded by the composition).
         LaunchedEffect(ready) {
             while (true) {
-                if (ready) CanvasHolder.canvas?.setHeading(sensors.heading())
+                if (ready) {
+                    val heading = sensors.heading()
+                    CanvasHolder.canvas?.setHeading(heading)
+                    // TURNING WITH THE WALK: the map is turned so that where he is going is up.
+                    // Only when he asked for it, and only when the needle has really moved, or
+                    // the map would shiver in the hand at every wobble of the magnetometer.
+                    if (northMode == NORTH_FOLLOW) {
+                        val wanted = (-heading).toFloat()
+                        val now = CanvasHolder.canvas?.mapRotationDeg() ?: 0f
+                        if (Math.abs(Geo.deltaDeg(now.toDouble(), wanted.toDouble())) > 2.0) {
+                            CanvasHolder.canvas?.setMapRotation(wanted)
+                        }
+                    }
+                    mapTurn = CanvasHolder.canvas?.mapRotationDeg() ?: 0f
+                }
                 delay(200)
             }
         }
@@ -605,6 +647,75 @@ object CanvasHolder {
  * wider, then the amber on top. That black edge is what makes it readable on snow and under
  * fir, and no single colour does that on its own.
  */
+
+/**
+ * THE LITTLE COMPASS. A needle in a dark disc: red half to the north, pale half the other way,
+ * turned by however much the map has been turned. When it is following the walk it gains an amber
+ * ring, so the two states are a colour and not a word.
+ *
+ * It is 44dp, which is a thumb, and it sits under the top bar at the right-hand edge.
+ */
+@Composable
+private fun LittleCompass(
+    turn: Float,
+    following: Boolean,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(Paint.Bar)
+            .clickable(onClick = onTap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(30.dp)) {
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val r = size.minDimension / 2f
+            if (following) drawCircle(Paint.Amber, radius = r, center = c, style = Stroke(1.5.dp.toPx()))
+            // The needle turns the other way from the map: the map turning east means north is
+            // now to the left, and the needle has to say so.
+            val angle = Math.toRadians(-turn.toDouble() - 90.0)
+            val tip = Offset(
+                c.x + (r * 0.78f * Math.cos(angle)).toFloat(),
+                c.y + (r * 0.78f * Math.sin(angle)).toFloat(),
+            )
+            val tail = Offset(
+                c.x - (r * 0.78f * Math.cos(angle)).toFloat(),
+                c.y - (r * 0.78f * Math.sin(angle)).toFloat(),
+            )
+            val side = Math.toRadians(-turn.toDouble())
+            val left = Offset(
+                c.x + (r * 0.26f * Math.cos(side)).toFloat(),
+                c.y + (r * 0.26f * Math.sin(side)).toFloat(),
+            )
+            val right = Offset(
+                c.x - (r * 0.26f * Math.cos(side)).toFloat(),
+                c.y - (r * 0.26f * Math.sin(side)).toFloat(),
+            )
+            drawPath(
+                androidx.compose.ui.graphics.Path().apply {
+                    moveTo(tip.x, tip.y)
+                    lineTo(left.x, left.y)
+                    lineTo(right.x, right.y)
+                    close()
+                },
+                Paint.Red,
+            )
+            drawPath(
+                androidx.compose.ui.graphics.Path().apply {
+                    moveTo(tail.x, tail.y)
+                    lineTo(left.x, left.y)
+                    lineTo(right.x, right.y)
+                    close()
+                },
+                Paint.Sand,
+            )
+        }
+    }
+}
+
 /**
  * THE CROSSHAIR IN THE MIDDLE OF THE MAP: four black hairlines, half transparent, and nothing in
  * the middle. Baba, 15.9.2026, and it is the whole specification.

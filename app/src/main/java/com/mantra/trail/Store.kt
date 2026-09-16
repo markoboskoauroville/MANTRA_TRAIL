@@ -137,6 +137,11 @@ class Store(context: Context) {
         get() = Route.decode(prefs.getString(KEY_ROUTE_POINTS, null))
         set(v) = prefs.edit().putString(KEY_ROUTE_POINTS, Route.encode(v)).apply()
 
+    /** 0 free, 1 north up, 2 turning with the walk. Which the little compass was left in. */
+    var northMode: Int
+        get() = prefs.getInt(KEY_NORTH_MODE, 1).coerceIn(0, 2)
+        set(v) = prefs.edit().putInt(KEY_NORTH_MODE, v.coerceIn(0, 2)).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -178,6 +183,7 @@ class Store(context: Context) {
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
         private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_ROUTE_POINTS = "routePoints"
+        private const val KEY_NORTH_MODE = "northMode"
         private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"

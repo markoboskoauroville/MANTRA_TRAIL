@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.ParcelFileDescriptor
 import org.mapsforge.core.graphics.Style
 import org.mapsforge.core.model.LatLong
+import org.mapsforge.core.model.Rotation
 import org.mapsforge.core.model.Tile
 import org.mapsforge.core.util.Parameters
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
@@ -403,6 +404,21 @@ class MapCanvas(private val context: Context, private val store: Store) {
         }
         canvas.drawText(letter, centre + gap + 2 * scale, centre - gap, text)
         return AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
+    }
+
+    /**
+     * WHICH WAY THE MAP IS FACING, and turning it. Zero is north up; the number grows the way the
+     * map has been turned, which is the number the little compass draws.
+     */
+    fun mapRotationDeg(): Float = view.model.mapViewPosition.rotation?.degrees ?: 0f
+
+    fun setMapRotation(degrees: Float) {
+        val px = view.width / 2f
+        val py = view.height / 2f
+        view.model.mapViewPosition.setRotation(Rotation(degrees, px, py))
+        // The light in front of the position is drawn against the map, so it is redrawn with it.
+        redrawPosition()
+        view.repaint()
     }
 
     /** Where the middle of the screen is, which is where a point is placed from. */

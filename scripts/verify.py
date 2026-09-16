@@ -512,6 +512,15 @@ check("the menu can add a point where the crosshair is",
 check("the engine is given every point as a waypoint",
       "points.forEachIndexed { index, at -> waypoints.add(" in (MAIN / "Routing.kt").read_text(),
       "one route through them all, not legs stitched together")
+# The little compass (16.9.2026), as Google has: one tap north up, the next turning with the walk.
+check("there is a compass that puts north up and centres him",
+      "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
+      "one tap, and it centres too")
+check("a second tap turns the map the way he is walking",
+      "if (northMode == NORTH_FOLLOW) {" in screens and "val wanted = (-heading).toFloat()" in screens,
+      "and which of the two it was left in is remembered")
+check("the map is not turned for every wobble of the magnetometer",
+      "> 2.0) {" in screens, "two degrees, or the map shivers in the hand")
 check("two fingers turn the map",
       "touchGestureHandler.setRotationEnabled(true)" in (MAIN / "MapCanvas.kt").read_text(),
       "mapsforge can do it and ships it off")
