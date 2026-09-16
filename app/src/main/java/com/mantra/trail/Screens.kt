@@ -591,7 +591,7 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
 }
 
 /** One attempt at one layer. Returns null when it drew, or the reason it did not. */
-private suspend fun attempt(canvas: MapCanvas, store: Store, layer: MapLayer): String? {
+private suspend fun attempt(canvas: MapSurface, store: Store, layer: MapLayer): String? {
     val key = layer.provider?.let { store.key(it) }
     if (layer.provider != null && key.isNullOrEmpty()) return Layers.missingKey(layer)
     if (layer.kind == LayerKind.GOOGLE_TILES) {
