@@ -466,6 +466,53 @@ class CoreTest {
 
 
 
+    // --- which square of the world a route needs ------------------------------------------------
+
+    @Test fun zagrebIsInTheSquareBRouterCallsE15N45() {
+        assertEquals("E15_N45.rd5", Segments.nameFor(45.815, 15.982))
+    }
+
+    @Test fun aurovilleIsInItsOwnSquare() {
+        // 12.0 N, 79.8 E → the square starting at 10 N, 75 E.
+        assertEquals("E75_N10.rd5", Segments.nameFor(12.0055, 79.8106))
+    }
+
+    @Test fun theSouthernAndWesternHemispheresAreNamedTheOtherWay() {
+        assertEquals("W75_S35.rd5", Segments.nameFor(-33.45, -70.66))
+        assertEquals("W5_N50.rd5", Segments.nameFor(51.5, -0.12))
+        assertEquals("E15_S35.rd5", Segments.nameFor(-33.9, 18.4))
+    }
+
+    @Test fun aPointExactlyOnABoundaryBelongsToTheSquareItStarts() {
+        assertEquals("E15_N45.rd5", Segments.nameFor(45.0, 15.0))
+        assertEquals("E20_N50.rd5", Segments.nameFor(50.0, 20.0))
+    }
+
+    @Test fun aWalkInsideOneSquareNeedsOneFile() {
+        val needed = Segments.namesFor(45.815, 15.982, 45.911, 15.969)
+        assertEquals(listOf("E15_N45.rd5"), needed)
+    }
+
+    @Test fun aWalkAcrossABoundaryNeedsBothSquares() {
+        // Over the 45th parallel: Zagreb to somewhere south of it.
+        val needed = Segments.namesFor(45.1, 15.9, 44.9, 15.9)
+        assertEquals(2, needed.size)
+        assertTrue(needed.contains("E15_N45.rd5"))
+        assertTrue(needed.contains("E15_N40.rd5"))
+    }
+
+    @Test fun aWalkNearACornerCanNeedFour() {
+        val needed = Segments.namesFor(45.1, 14.9, 44.9, 15.1)
+        assertEquals(4, needed.size)
+    }
+
+    @Test fun theUrlIsTheServersOwn() {
+        assertEquals(
+            "https://brouter.de/brouter/segments4/E15_N45.rd5",
+            Segments.urlFor(45.815, 15.982),
+        )
+    }
+
     // --- The layers -----------------------------------------------------------------------------
 
     @Test fun everyLayerHasItsOwnId() {

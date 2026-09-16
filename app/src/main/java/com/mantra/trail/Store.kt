@@ -146,7 +146,12 @@ class Store(context: Context) {
             .apply()
     }
 
-    /** How many route options to ask for when the routing is wired up. One to five. */
+    /** Which BRouter profile the ways are found for. */
+    var routeProfile: String
+        get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
+        set(v) = prefs.edit().putString(KEY_ROUTE_PROFILE, v).apply()
+
+    /** How many route options to ask for. One to five. */
     var routeOptions: Int
         get() = prefs.getInt(KEY_ROUTE_OPTIONS, 3).coerceIn(1, 5)
         set(v) = prefs.edit().putInt(KEY_ROUTE_OPTIONS, v.coerceIn(1, 5)).apply()
@@ -180,6 +185,7 @@ class Store(context: Context) {
         private const val KEY_TRACK_COLOUR = "trackColour"
         private const val KEY_COMPASS = "compassMode"
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
+        private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"
         private const val KEY_EXPORT_TREE = "exportTree"

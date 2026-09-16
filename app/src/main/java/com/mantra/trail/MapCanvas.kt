@@ -114,6 +114,7 @@ class MapCanvas(private val context: Context, private val store: Store) {
     private var trackLine: Polyline? = null
     private var shownLine: Polyline? = null
     private var routeLine: Polyline? = null
+    private val optionLines = ArrayList<Polyline>()
     private val routeMarkers = HashMap<String, Marker>()
     private var here: Circle? = null
     private var accuracyRing: Circle? = null
@@ -307,9 +308,33 @@ class MapCanvas(private val context: Context, private val store: Store) {
         view.repaint()
     }
 
+    /**
+     * THE WAYS BROUTER FOUND, each in its own colour, drawn under the A and B marks. Drawn thick
+     * and half transparent so the path beneath still reads: the line is an answer about the
+     * ground, not a replacement for it.
+     */
+    fun showRouteOptions(options: List<Routing.Option>) {
+        optionLines.forEach { view.layerManager.layers.remove(it) }
+        optionLines.clear()
+        options.forEach { option ->
+            val line = Polyline(paint(option.colour, 7f, Style.STROKE), factory)
+            option.points.forEach { line.addPoint(LatLong(it.lat, it.lon)) }
+            view.layerManager.layers.add(line)
+            optionLines.add(line)
+        }
+        view.repaint()
+    }
+
+    fun clearRouteOptions() {
+        optionLines.forEach { view.layerManager.layers.remove(it) }
+        optionLines.clear()
+        view.repaint()
+    }
+
     private fun drawRouteLine() {
         routeLine?.let { view.layerManager.layers.remove(it) }
         routeLine = null
+        if (optionLines.isNotEmpty()) return
         val a = routeMarkers["A"]?.latLong ?: return
         val b = routeMarkers["B"]?.latLong ?: return
         val line = Polyline(paint(0xFF60A5FA, 5f, Style.STROKE), factory)
@@ -390,10 +415,12 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun restoreOverlays() {
+        optionLines.forEach { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         routeMarkers.values.forEach {
             if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
         }
         routeLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
+        optionLines.forEach { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         routeMarkers.values.forEach {
             if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
         }

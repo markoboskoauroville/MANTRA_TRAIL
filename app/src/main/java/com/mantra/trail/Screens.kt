@@ -124,6 +124,9 @@ fun TrailApp(
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
     onSaveRoute: (Pair<Double, Double>?, Pair<Double, Double>?) -> Unit,
+    onFindWays: (Pair<Double, Double>?, Pair<Double, Double>?, String, Int) -> Unit,
+    onSaveOption: (Routing.Option) -> Unit,
+    routeOptions: List<Routing.Option>,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
     var settings by remember { mutableStateOf(false) }
@@ -364,6 +367,9 @@ fun TrailApp(
                     store.setPoint("B", pointB)
                     CanvasHolder.canvas?.setRoutePoint("B", pointB)
                 },
+                found = routeOptions,
+                onRoute = { profile, wanted -> onFindWays(pointA, pointB, profile, wanted) },
+                onSaveOption = { option -> onSaveOption(option) },
                 onSave = { onSaveRoute(pointA, pointB) },
                 onClose = { routeMenu = false },
             )
@@ -1124,13 +1130,17 @@ private fun RouteMenu(
     store: Store,
     a: Pair<Double, Double>?,
     b: Pair<Double, Double>?,
+    found: List<Routing.Option>,
     onA: (Boolean) -> Unit,
     onB: (Boolean) -> Unit,
+    onRoute: (String, Int) -> Unit,
+    onSaveOption: (Routing.Option) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
 ) {
     var options by remember { mutableIntStateOf(store.routeOptions) }
     var speed by remember { mutableStateOf(store.walkSpeedKmh) }
+    var profile by remember { mutableStateOf(store.routeProfile) }
     val both = a != null && b != null
     val metres = if (both) Geo.distance(a!!.first, a.second, b!!.first, b.second) else 0.0
 
@@ -1232,19 +1242,89 @@ private fun RouteMenu(
                 }
             }
 
+            // THE PROFILE: what kind of walking the ways are found for.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Routing.PROFILES.forEach { name ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (name == profile) Paint.Amber else Paint.Veil)
+                            .clickable {
+                                profile = name
+                                store.routeProfile = name
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Label(
+                            text = when (name) {
+                                "trekking" -> "trekking"
+                                "hiking-mountain" -> "mountain"
+                                else -> "shortest"
+                            },
+                            colour = if (name == profile) Paint.Ground else Paint.Sand,
+                            size = 11,
+                        )
+                    }
+                }
+            }
+
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(46.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Paint.Veil)
-                    .clickable { Trail.say("Route finding is not built yet. A, B and save are.") }
+                    .background(if (both) Paint.Amber else Paint.Veil)
+                    .clickable { if (both) onRoute(profile, options) }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Label("route between them", Paint.Dim, size = 13, align = TextAlign.Start)
-                    Label("not built yet", Paint.Dim, size = 11)
+                    Label(
+                        text = "find the ways",
+                        colour = if (both) Paint.Ground else Paint.Dim,
+                        size = 13,
+                        align = TextAlign.Start,
+                    )
+                    Label(
+                        text = if (both) "$options to look for" else "place both points",
+                        colour = if (both) Paint.Ground else Paint.Dim,
+                        size = 11,
+                    )
+                }
+            }
+
+            // Every way it found, with what it costs to walk it at the speed he chose. The
+            // colours are the colours on the map, so a row and a line are read together.
+            found.forEachIndexed { index, option ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable { onSaveOption(option) }
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(Color(option.colour)))
+                        Label(
+                            text = "  ${Geo.formatDistance(option.metres.toDouble())}  ↑${option.climbM}m",
+                            colour = Paint.Sand,
+                            size = 12,
+                            align = TextAlign.Start,
+                        )
+                    }
+                    Label(
+                        text = Geo.formatDuration(
+                            (option.metres / (speed * 1000.0 / 3600.0)).toLong() * 1000L
+                        ) + "  save",
+                        colour = Paint.Amber,
+                        size = 11,
+                    )
                 }
             }
 

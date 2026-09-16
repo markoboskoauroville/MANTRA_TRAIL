@@ -40,6 +40,9 @@ class MainActivity : ComponentActivity() {
     private var pendingRecord by mutableStateOf(false)
     private var downloading = false
     private var pendingSave: Pair<java.io.File, String>? = null
+    private var routeOptions by mutableStateOf<List<Routing.Option>>(emptyList())
+    private var routing = false
+    private var pendingSegment: String? = null
 
     private val askLocation = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -149,6 +152,87 @@ class MainActivity : ComponentActivity() {
 
 
     /**
+     * FIND THE WAYS BETWEEN A AND B, offline, with the engine in this APK.
+     *
+     * The square of the world it needs is 130 MB, so it is not fetched behind his back: if it is
+     * missing the app says which file and how big, and the same press again starts the download.
+     */
+    private fun findWays(
+        a: Pair<Double, Double>?,
+        b: Pair<Double, Double>?,
+        profile: String,
+        wanted: Int,
+    ) {
+        if (a == null || b == null) {
+            Trail.say("Place both points first")
+            return
+        }
+        if (routing) {
+            Trail.say("Still looking")
+            return
+        }
+        val missing = Segments.namesFor(a.first, a.second, b.first, b.second)
+            .filterNot { java.io.File(Routing.segmentDir(this), it).exists() }
+        if (missing.isNotEmpty()) {
+            val name = missing.first()
+            if (pendingSegment != name) {
+                pendingSegment = name
+                Trail.say("Routing needs $name, about ${Segments.sizeHint(name)}. Press again to fetch it.")
+                return
+            }
+            fetchSegment(name)
+            return
+        }
+        routing = true
+        Trail.say("Looking for ways…")
+        lifecycleScope.launch {
+            val (options, problem) = Routing.between(this@MainActivity, a, b, profile, wanted) {
+                Trail.say(it)
+            }
+            routing = false
+            routeOptions = options
+            canvas?.showRouteOptions(options)
+            Trail.say(
+                problem ?: when (options.size) {
+                    1 -> "One way found"
+                    else -> "${options.size} ways found"
+                }
+            )
+        }
+    }
+
+    private fun fetchSegment(name: String) {
+        if (routing) return
+        routing = true
+        Trail.say("Fetching $name…")
+        lifecycleScope.launch {
+            val problem = SegmentDownload.fetch(this@MainActivity, name) { p ->
+                Trail.say("$name ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB")
+            }
+            routing = false
+            pendingSegment = null
+            Trail.say(problem ?: "$name is on the phone. Press find the ways again.")
+        }
+    }
+
+    /** Keep one of the ways it found as a track, like anything else in the folder. */
+    private fun saveOption(option: Routing.Option) {
+        val now = System.currentTimeMillis()
+        val name = "${Tracks.defaultName(now).removeSuffix(" Track")} (AB ${option.metres / 1000}km)"
+        lifecycleScope.launch {
+            val problem = withContext(Dispatchers.IO) {
+                val temp = java.io.File(cacheDir, Tracks.safeFileName(name))
+                temp.writeText(Gpx.whole(name, option.points, now))
+                val answer = Folder.save(this@MainActivity, store, temp, name)
+                temp.delete()
+                answer
+            }
+            report(problem ?: "Saved $name")
+            UiTick.bump()
+        }
+    }
+
+    /**
      * SAVE A AND B AS A ROUTE, in the same drawer as a recorded walk and in the same format, with
      * (AB) in its name so it can be told from one that was walked (16.9.2026). Nothing about it
      * is a special case downstream: the manager renames it, shows it and deletes it like any
@@ -206,6 +290,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         AndroidGraphicFactory.createInstance(application)
         store = Store(this)
+        Routing.prepare(this)
         locator = Locator(this)
         sensors = Sensors(this)
 
@@ -231,6 +316,9 @@ class MainActivity : ComponentActivity() {
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
                 onSaveRoute = ::saveRoute,
+                onFindWays = ::findWays,
+                onSaveOption = ::saveOption,
+                routeOptions = routeOptions,
             )
         }
 

@@ -501,8 +501,25 @@ check("unticking a point deletes it from the map",
 check("a saved route is an ordinary track with (AB) in its name",
       '(AB)"' in activity and "Gpx.whole(name, points, now)" in activity,
       "the manager renames, shows and deletes it like any other GPX")
-check("the key for routing says it is not built",
-      "not built yet" in screens, "a key that lies about being ready is worse than a missing key")
+# It is built now (16.9.2026): BRouter, MIT, vendored under btools/ and proved on a desk first.
+routing_src = (MAIN / "Routing.kt").read_text()
+check("the routing engine is in the APK and runs offline",
+      (ROOT / "app/src/main/java/btools/router/RoutingEngine.java").exists()
+      and "btools.router.RoutingEngine(" in routing_src,
+      "no second app to install, no server to reach")
+check("BRouter's licence travels with its code",
+      (ROOT / "LICENSE-BROUTER").exists() and "abrensch/brouter" in routing_src,
+      "MIT, and the notice is at the root of this repository")
+check("the desk run that proved it is kept",
+      (ROOT / "tools/RouteProbe.java").exists(), "3.8 km over Medvednica in 400 ms")
+check("every wait in the router is bounded",
+      "doRun(25_000L)" in routing_src, "a route that cannot be found gives up")
+check("a 130 MB download is never started behind his back",
+      "Press again to fetch it" in activity and "sizeHint" in (MAIN / "Segments.kt").read_text(),
+      "the file is named and its size said first")
+check("identical alternatives are dropped rather than coloured differently",
+      "if (!seen.add(fingerprint)) continue" in routing_src,
+      "two identical lines in two colours is a lie about there being a choice")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed")
 if failures:

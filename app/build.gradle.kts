@@ -59,6 +59,11 @@ android {
 
     // G3: Lint blocking from the first build. Narrow it in the session it cries wolf, never carry it.
     lint {
+        // THE VENDORED ENGINE IS NOT OURS TO RESTYLE (btools/, MIT, abrensch/brouter). Lint still
+        // judges every line we wrote; it simply does not fail the build over the house style of a
+        // library that has been routing people around mountains since 2014.
+        ignore += listOf("btools")
+
         warningsAsErrors = true
         abortOnError = true
         checkReleaseBuilds = true
