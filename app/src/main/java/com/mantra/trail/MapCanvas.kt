@@ -289,6 +289,84 @@ class MapCanvas(private val context: Context, private val store: Store) {
         view.repaint()
     }
 
+    /**
+     * THE TWO POINTS OF A ROUTE AND THE LINE BETWEEN THEM (16.9.2026).
+     *
+     * A where the walk starts, B where it ends. Each is the same hairline cross that marks the
+     * centre of the screen, with its letter beside it, so a placed point and the place it was
+     * taken from look like each other. The line appears when both exist and goes when either does.
+     */
+    fun setRoutePoint(letter: String, at: Pair<Double, Double>?) {
+        routeMarkers.remove(letter)?.let { view.layerManager.layers.remove(it) }
+        if (at != null) {
+            val marker = Marker(LatLong(at.first, at.second), markerBitmap(letter), 0, 0)
+            view.layerManager.layers.add(marker)
+            routeMarkers[letter] = marker
+        }
+        drawRouteLine()
+        view.repaint()
+    }
+
+    private fun drawRouteLine() {
+        routeLine?.let { view.layerManager.layers.remove(it) }
+        routeLine = null
+        val a = routeMarkers["A"]?.latLong ?: return
+        val b = routeMarkers["B"]?.latLong ?: return
+        val line = Polyline(paint(0xFF60A5FA, 5f, Style.STROKE), factory)
+        line.addPoint(a)
+        line.addPoint(b)
+        view.layerManager.layers.add(line)
+        routeLine = line
+    }
+
+    /**
+     * The marker, drawn rather than shipped as an image: a hairline cross in near-black under the
+     * colour so it reads on a satellite photograph and on a street map, with its letter beside it.
+     */
+    private fun markerBitmap(letter: String): org.mapsforge.core.graphics.Bitmap {
+        val scale = context.resources.displayMetrics.density
+        val side = (44 * scale).toInt()
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            side,
+            side,
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = AndroidCanvas(bitmap)
+        val centre = side / 2f
+        val arm = side / 2f - 2 * scale
+        val gap = arm * 0.36f
+
+        fun cross(colour: Int, width: Float) {
+            val p = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                this.color = colour
+                strokeWidth = width
+                style = AndroidPaint.Style.STROKE
+            }
+            canvas.drawLine(centre - arm, centre, centre - gap, centre, p)
+            canvas.drawLine(centre + gap, centre, centre + arm, centre, p)
+            canvas.drawLine(centre, centre - arm, centre, centre - gap, p)
+            canvas.drawLine(centre, centre + gap, centre, centre + arm, p)
+            canvas.drawCircle(centre, centre, gap, p)
+        }
+        cross(AndroidColour.argb(200, 11, 13, 16), 3f * scale)
+        cross(AndroidColour.argb(255, 96, 165, 250), 1.4f * scale)
+
+        val text = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColour.argb(255, 96, 165, 250)
+            textSize = 13f * scale
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setShadowLayer(3f * scale, 0f, 0f, AndroidColour.argb(220, 11, 13, 16))
+        }
+        canvas.drawText(letter, centre + gap + 2 * scale, centre - gap, text)
+        return AndroidGraphicFactory.convertToBitmap(BitmapDrawable(context.resources, bitmap))
+    }
+
+    /** Where the middle of the screen is, which is where a point is placed from. */
+    fun centre(): Pair<Double, Double> {
+        val c = view.model.mapViewPosition.center
+        return c.latitude to c.longitude
+    }
+
     fun drawPosition(fix: Fix?) {
         here?.let { view.layerManager.layers.remove(it) }
         accuracyRing?.let { view.layerManager.layers.remove(it) }
@@ -312,6 +390,10 @@ class MapCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun restoreOverlays() {
+        routeMarkers.values.forEach {
+            if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
+        }
+        routeLine?.let { if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it) }
         routeMarkers.values.forEach {
             if (!view.layerManager.layers.contains(it)) view.layerManager.layers.add(it)
         }
