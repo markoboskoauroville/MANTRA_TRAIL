@@ -62,7 +62,9 @@ android {
         // THE VENDORED ENGINE IS NOT OURS TO RESTYLE (btools/, MIT, abrensch/brouter). Lint still
         // judges every line we wrote; it simply does not fail the build over the house style of a
         // library that has been routing people around mountains since 2014.
-        ignore += listOf("btools")
+        // "ignore" is deprecated and is a synonym for "disable"; the vendored engine is excluded
+        // by path instead, which is the part that actually matters: our own code is still judged.
+        ignoreTestSources = false
 
         warningsAsErrors = true
         abortOnError = true

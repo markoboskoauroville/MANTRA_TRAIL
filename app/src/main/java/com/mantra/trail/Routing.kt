@@ -1,6 +1,9 @@
 package com.mantra.trail
 
 import android.content.Context
+import btools.router.OsmNodeNamed
+import btools.router.RoutingContext
+import btools.router.RoutingEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -107,15 +110,15 @@ object Routing {
         profileFile: File,
         alternative: Int,
     ): Option? {
-        val rc = btools.router.RoutingContext()
+        val rc = RoutingContext()
         rc.localFunction = profileFile.absolutePath
         rc.setAlternativeIdx(alternative)
 
-        val waypoints = ArrayList<btools.router.OsmNodeNamed>()
+        val waypoints = ArrayList<OsmNodeNamed>()
         waypoints.add(node("from", from.first, from.second))
         waypoints.add(node("to", to.first, to.second))
 
-        val engine = btools.router.RoutingEngine(
+        val engine = RoutingEngine(
             null,
             null,
             segmentDir(context),
@@ -131,8 +134,11 @@ object Routing {
 
         val points = track.nodes.map { node ->
             Fix(
-                lat = node.getILat() / 1_000_000.0 - 90.0,
-                lon = node.getILon() / 1_000_000.0 - 180.0,
+                // The engine keeps coordinates as microdegrees with the poles and the meridian
+                // added in, which is what makes them fit in an int. Kotlin sees the interface's
+                // getters as these properties.
+                lat = node.iLat / 1_000_000.0 - 90.0,
+                lon = node.iLon / 1_000_000.0 - 180.0,
                 ele = null,
                 timeMs = 0L,
                 accuracyM = null,
@@ -141,8 +147,8 @@ object Routing {
         return Option(points, track.distance, track.ascend, COLOURS.first())
     }
 
-    private fun node(name: String, lat: Double, lon: Double): btools.router.OsmNodeNamed {
-        val n = btools.router.OsmNodeNamed()
+    private fun node(name: String, lat: Double, lon: Double): OsmNodeNamed {
+        val n = OsmNodeNamed()
         n.name = name
         n.ilat = ((lat + 90.0) * 1_000_000.0 + 0.5).toInt()
         n.ilon = ((lon + 180.0) * 1_000_000.0 + 0.5).toInt()
