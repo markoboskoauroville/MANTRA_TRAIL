@@ -18,8 +18,14 @@ interface MapSurface {
     /** The Android view to put on the screen. */
     val view: View
 
-    /** Put a layer on the map; null when it worked, or a sentence saying why not. */
-    fun show(layer: MapLayer, session: String?, key: String?): String?
+    /**
+     * Put a layer on the map; null when it worked, or a sentence saying why not.
+     *
+     * The session and the key belong to the layers that need them — Google's tiles want both,
+     * Thunderforest's want a key, the offline file wants neither — so they default to nothing and
+     * the callers that have none say nothing.
+     */
+    fun show(layer: MapLayer, session: String? = null, key: String? = null): String?
 
     fun zoomIn()
 
