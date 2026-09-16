@@ -49,6 +49,8 @@ class VtmCanvas(private val context: Context, private val store: Store) {
 
     private var baseLayer: VectorTileLayer? = null
     private var bitmapLayer: BitmapTileLayer? = null
+    private var buildingLayer: BuildingLayer? = null
+    private var labelLayer: LabelLayer? = null
     private var recordingPath: PathLayer? = null
     private var shownPath: PathLayer? = null
     private val optionPaths = ArrayList<PathLayer>()
@@ -93,8 +95,12 @@ class VtmCanvas(private val context: Context, private val store: Store) {
             source.setMapFileInputStream(stream)
             val base = map.setBaseMap(source)
             baseLayer = base
-            map.layers().add(BuildingLayer(map, base))
-            map.layers().add(LabelLayer(map, base))
+            val buildings = BuildingLayer(map, base)
+            val labels = LabelLayer(map, base)
+            map.layers().add(buildings)
+            map.layers().add(labels)
+            buildingLayer = buildings
+            labelLayer = labels
             map.setTheme(VtmThemes.MOTORIDER)
             restoreOverlays()
             map.updateMap(true)
@@ -128,13 +134,32 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         }
     }
 
+    /**
+     * THE BUG THAT MADE EVERY MAP BLANK (16.9.2026, from his screenshot).
+     *
+     * This used to finish with map.layers().clear(), which looks like tidying up and is not:
+     * VTM keeps its OWN layers in that list, the gesture handler among them at the front. Clearing
+     * it threw those away too, and the next thing that inserted a layer at a fixed position threw
+     * IndexOutOfBoundsException — which the app caught, reported as "the offline map would not
+     * open", and fell back to OpenStreetMap, where the very same clear had already broken the
+     * raster path. One line, two blank screens, and a message that blamed the file.
+     *
+     * Proved on a desk first: VTM's own reader opens his croatia.map by path and by stream alike
+     * and returns 235 elements at z17, so nothing was ever wrong with the file or the library.
+     *
+     * Only what this class added is removed now, by reference, one at a time.
+     */
     private fun clearBaseLayers() {
         bitmapLayer?.let { map.layers().remove(it) }
         bitmapLayer = null
+        buildingLayer?.let { map.layers().remove(it) }
+        buildingLayer = null
+        labelLayer?.let { map.layers().remove(it) }
+        labelLayer = null
+        baseLayer?.let { map.layers().remove(it) }
         baseLayer = null
         mapFileStream?.let { runCatching { it.close() } }
         mapFileStream = null
-        map.layers().clear()
     }
 
     // --- what is drawn over the map ---------------------------------------------------------
