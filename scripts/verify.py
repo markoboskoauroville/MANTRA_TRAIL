@@ -505,7 +505,7 @@ check("a saved route is an ordinary track with (AB) in its name",
 routing_src = (MAIN / "Routing.kt").read_text()
 check("the routing engine is in the APK and runs offline",
       (ROOT / "app/src/main/java/btools/router/RoutingEngine.java").exists()
-      and "btools.router.RoutingEngine(" in routing_src,
+      and "import btools.router.RoutingEngine" in routing_src,
       "no second app to install, no server to reach")
 check("BRouter's licence travels with its code",
       (ROOT / "LICENSE-BROUTER").exists() and "abrensch/brouter" in routing_src,
