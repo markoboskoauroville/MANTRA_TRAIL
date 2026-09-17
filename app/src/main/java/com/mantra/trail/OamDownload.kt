@@ -104,11 +104,16 @@ object OamDownload {
 
     fun remove(file: File): String? = if (file.delete()) null else "That map could not be deleted"
 
-    /** Every OpenAndroMaps file already on the phone. */
+    /**
+     * EVERY MAP FILE ON THE PHONE, not only the ones this feature fetched (17.9.2026). His
+     * screenshot said "0 here" while a map was plainly drawing, because this looked for names
+     * beginning with oam- and the file he had did not begin with that. A list of maps that omits
+     * a map is worse than no list.
+     */
     fun installed(context: Context): List<File> =
         folder(context).listFiles()
-            ?.filter { it.isFile && it.name.startsWith("oam-") && it.name.endsWith(".map") }
-            ?.sortedBy { it.name }
+            ?.filter { it.isFile && it.name.endsWith(".map", ignoreCase = true) }
+            ?.sortedByDescending { it.length() }
             ?: emptyList()
 
     suspend fun fetch(

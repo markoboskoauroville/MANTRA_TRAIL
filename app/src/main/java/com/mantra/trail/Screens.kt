@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -212,6 +213,33 @@ fun TrailApp(
             onReady = { ready = true },
         )
 
+
+        // THE LITTLE COMPASS, at the top right where Google keeps it.
+        //
+        // It was written on 16.9.2026 and he never saw it, because it was nested INSIDE the 72dp
+        // target in the middle of the screen: fillMaxSize inside a 72dp box is 72dp, so the thing
+        // was drawn behind the crosshair, thumb-sized, in the centre. It sits on the screen now.
+        //
+        // One tap puts north at the top and centres him; the next turns the map so the way he is
+        // walking is up, and it wears an amber ring while it does.
+        if (!bare) {
+            Box(Modifier.fillMaxSize().safeDrawingPadding().padding(top = 52.dp, end = 10.dp)) {
+                LittleCompass(
+                    turn = mapTurn,
+                    following = northMode == NORTH_FOLLOW,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    onTap = {
+                        northMode = if (northMode == NORTH_FOLLOW) NORTH_UP else NORTH_FOLLOW
+                        store.northMode = northMode
+                        if (northMode == NORTH_UP) {
+                            CanvasHolder.canvas?.setMapRotation(0f)
+                            onWhereAmI()
+                        }
+                    },
+                )
+            }
+        }
+
         // THE TAP IN THE MIDDLE. A small target, so panning the map anywhere else is untouched,
         // and the mark that says where the centre is sits inside it.
         Box(
@@ -229,23 +257,7 @@ fun TrailApp(
         ) {
             CentreCross()
 
-            // THE LITTLE COMPASS (16.9.2026), where Google keeps it. It shows which way the map
-            // is facing; one tap puts north up and centres him, the next turns the map so the
-            // way he is walking is up. Its needle is the map's own angle, so it never disagrees
-            // with what is under it.
-            Box(Modifier.fillMaxSize().safeDrawingPadding().padding(top = 44.dp, end = 8.dp)) {
-                LittleCompass(
-                    turn = mapTurn,
-                    following = northMode == NORTH_FOLLOW,
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    onTap = {
-                        northMode = if (northMode == NORTH_FOLLOW) NORTH_UP else NORTH_FOLLOW
-                        store.northMode = northMode
-                        if (northMode == NORTH_UP) {
-                            CanvasHolder.canvas?.setMapRotation(0f)
-                            onWhereAmI()
-                        }
-                    },
+        },
                 )
             }
         }
@@ -1729,6 +1741,7 @@ private fun SettingsFace(
 ) {
     var answer by remember { mutableStateOf<String?>(null) }
     var theme by remember { mutableStateOf(store.themeName) }
+    var googleOpen by remember { mutableStateOf(false) }
     val mapState = remember(UiTick.n) { store.offlineMapState }
     // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
     val exportState = remember(UiTick.n) {
@@ -1763,143 +1776,75 @@ private fun SettingsFace(
             }
 
             // TRACKS FIRST, because it is the thing he opens the settings for most (15.9.2026).
-            SettingRow("tracks (gpx)", "$trackCount", onTracks)
-
-            // THE MAPS: A GROUP AND THE MAPS INSIDE IT, and they are told apart by more than
-            // position (15.9.2026). The group is in capitals, in the amber, flush to the edge;
-            // its maps are in title case, in the sand, pushed in. A tick decides whether a thing
-            // is in the switcher; a tick on the group takes all of its maps out at once and
-            // remembers which of them were ticked for when it comes back.
-            MapLayer.Family.entries.forEach { family ->
-                val maps = Layers.of(family)
-                val key = family.name.lowercase()
-
-                // A GROUP OF ONE IS NOT A GROUP (15.9.2026). Offline file and OpenStreetMap have
-                // one map each, so a triangle that folds away a single child with the same name
-                // as its parent is a thing to press for nothing. They are one row: the name, and
-                // one tick that means both the map and the group, because here they are the same.
-                if (maps.size == 1) {
-                    val layer = maps.first()
-                    val chosen = layer.id == current.id
-                    val needsKey = layer.provider != null && store.key(layer.provider) == null
-                    var on by remember(key, UiTick.n) {
-                        mutableStateOf(store.familyInToggle(family) && store.inToggle(layer.id))
-                    }
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (chosen) Paint.Amber else Paint.Veil),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .alpha(if (needsKey) 0.55f else 1f)
-                                .clickable { onPick(layer) }
-                                .padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            Label(
-                                text = familyLabel(family).uppercase() +
-                                    if (needsKey) "  · needs a key" else "",
-                                colour = if (chosen) Paint.Ground else Paint.Amber,
-                                size = 13,
-                                align = TextAlign.Start,
-                            )
-                        }
+            Section("maps") {
+                Row2(
+                    title = "map",
+                    value = current.label,
+                    onPress = { onPick(Layers.OFFLINE) },
+                )
+                Divider()
+                Row2(
+                    title = "maps on this phone",
+                    value = if (installedCount == 0) {
+                        "none yet — fetch one"
+                    } else {
+                        "$installedCount here · fetch any region"
+                    },
+                    onPress = onMaps,
+                )
+                Divider()
+                Row2(
+                    title = "how the map is drawn",
+                    value = when (theme) {
+                        "MANTRA" -> "walking — contours, path difficulty, waymarks"
+                        else -> theme.lowercase()
+                    },
+                    onPress = {
+                        val next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.size]
+                        theme = next
+                        Trail.say(CanvasHolder.canvas?.setTheme(next))
+                    },
+                )
+                Divider()
+                Row2(title = "add a .map file from the phone", value = "file picker", onPress = onChooseMapFile)
+                Divider()
+                Row2(
+                    title = "Google's views",
+                    value = if (keyState.contains("google")) "key set" else "needs your own key",
+                    onPress = { googleOpen = !googleOpen },
+                    trailing = {
                         Tick(
-                            checked = on,
-                            onChange = {
-                                on = it
-                                store.setFamilyInToggle(family, it)
-                                store.setInToggle(layer.id, it)
-                            },
+                            checked = store.familyInToggle(MapLayer.Family.GOOGLE),
+                            onChange = { store.setFamilyInToggle(MapLayer.Family.GOOGLE, it) },
                         )
-                    }
-                    return@forEach
-                }
-
-                var folded by remember(key) { mutableStateOf(store.collapsed(key)) }
-                var familyOn by remember(key, UiTick.n) { mutableStateOf(store.familyInToggle(family)) }
-
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .clickable {
-                                folded = !folded
-                                store.setCollapsed(key, folded)
-                            }
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Label(if (folded) "▸" else "▾", Paint.Amber, size = 12)
-                            Label(
-                                text = "  " + familyLabel(family).uppercase(),
-                                colour = Paint.Amber,
-                                size = 13,
-                                align = TextAlign.Start,
-                            )
-                        }
-                    }
-                    Tick(
-                        checked = familyOn,
-                        onChange = {
-                            familyOn = it
-                            store.setFamilyInToggle(family, it)
-                        },
-                    )
-                }
-
-                if (!folded) {
-                    maps.forEach { layer ->
-                        val chosen = layer.id == current.id
-                        val needsKey = layer.provider != null && store.key(layer.provider) == null
-                        var included by remember(layer.id, UiTick.n) {
-                            mutableStateOf(store.inToggle(layer.id))
-                        }
+                    },
+                )
+                if (googleOpen) {
+                    Layers.GOOGLE_ALL.forEach { layer ->
+                        var on by remember(layer.id, UiTick.n) { mutableStateOf(store.inToggle(layer.id)) }
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(start = 22.dp)
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (chosen) Paint.Amber else Color.Transparent),
+                                .heightIn(min = 48.dp)
+                                .padding(start = 32.dp, end = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .alpha(if (needsKey) 0.55f else 1f)
-                                    .clickable { onPick(layer) }
-                                    .padding(horizontal = 12.dp),
+                                Modifier.weight(1f).fillMaxWidth().clickable { onPick(layer) },
                                 contentAlignment = Alignment.CenterStart,
                             ) {
                                 Label(
-                                    text = layer.name + if (needsKey) "  · needs a key" else "",
-                                    colour = if (chosen) Paint.Ground else Paint.Sand,
+                                    text = layer.name,
+                                    colour = if (layer.id == current.id) Paint.Amber else Paint.Sand,
                                     size = 13,
                                     align = TextAlign.Start,
                                 )
                             }
                             Tick(
-                                checked = included,
-                                dimmed = !familyOn,
+                                checked = on,
                                 onChange = {
-                                    included = it
+                                    on = it
                                     store.setInToggle(layer.id, it)
                                 },
                             )
@@ -1908,70 +1853,44 @@ private fun SettingsFace(
                 }
             }
 
-            SettingRow("choose a .map file for the offline layer", "picker", onChooseMapFile)
-            // THE ANSWER APPEARS HERE, where the question was asked. It used to go to the map's
-            // note line, which is behind this screen — so pressing it looked like nothing
-            // happening at all, exactly as export did before it (16.9.2026).
-            // THE THEME. It decides what the offline map SHOWS, which is why a coast came back
-            // covered in petrol pumps: it was fixed at a motorcycle theme (16.9.2026).
-            Label("offline map theme", Paint.Dim, size = 12, align = TextAlign.Start)
-            THEMES.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { name ->
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (name == theme) Paint.Amber else Paint.Veil)
-                                .clickable {
-                                    theme = name
-                                    Trail.say(CanvasHolder.canvas?.setTheme(name))
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Label(
-                                // Ours is named for what it is for, not for what it is called.
-                                text = if (name == "MANTRA") "walking" else name.lowercase(),
-                                colour = if (name == theme) Paint.Ground else Paint.Sand,
-                                size = 11,
-                            )
-                        }
-                    }
-                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                }
+            Section("tracks") {
+                Row2(title = "tracks (gpx)", value = "$trackCount in the folder", onPress = onTracks)
+                Divider()
+                Row2(title = "folder they live in", value = exportState, onPress = onChooseExportFolder)
+                Divider()
+                Row2(
+                    title = "recording",
+                    value = if (recordingPaused) "paused" else "running",
+                    onPress = onPause,
+                )
             }
 
-            // ONE ROW INTO THE MAPS (16.9.2026). The four regions that used to sit here were a
-            // list somebody typed; behind this row is the mirror's own, continent by continent.
-            SettingRow("maps: what is here, and every region there is", "$installedCount here", onMaps)
-
-            SettingRow("test the Google Maps API key", "test it", onTestTiles)
-            SettingRow("what is the map doing", "ask it", {
-                answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet"
-            })
-            if (answer != null) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Label(answer ?: "", Paint.Amber, size = 11, align = TextAlign.Start)
-                }
+            Section("keys") {
+                Row2(
+                    title = "Google Maps API key",
+                    value = if (keyState.contains("google")) "set — from a file you picked" else "not set",
+                    onPress = onPickKeys,
+                )
+                Divider()
+                Row2(title = "test the Google Maps API key", value = "asks for one tile", onPress = onTestTiles)
             }
-            SettingRow("folder the tracks live in", exportState, onChooseExportFolder)
-            SettingRow("pause or resume the recording", if (recordingPaused) "paused" else "running", onPause)
-            SettingRow("API keys, from a file", keyState, onImportKeys)
-            Label(
-                text = "No key is built into this app. Google's four views and Outdoors each need " +
-                    "your own key, picked from a file here; the offline map and OpenStreetMap need none.",
-                colour = Paint.Dim,
-                size = 10,
-                align = TextAlign.Start,
-            )
-            Label("Mantra Trail v$version", Paint.Dim, size = 10)
+
+            Section("about") {
+                Row2(
+                    title = "what is the map doing",
+                    value = answer ?: "ask it",
+                    onPress = { answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet" },
+                )
+                Divider()
+                Row2(title = "Mantra Trail", value = "v$version")
+                Divider()
+                Row2(
+                    title = "map credits",
+                    value = "© OpenStreetMap contributors · OpenAndroMaps · BRouter (MIT) · Google",
+                )
+            }
+
+            Label("", Paint.Dim, size = 10)
 
             // EVERY CREDIT, IN ONE PLACE, AT THE VERY BOTTOM. Off the map, where they were in the
             // way of the ground he is walking on, and here where they can be read once.
@@ -1980,6 +1899,73 @@ private fun SettingsFace(
                 Label(it, Paint.Dim, size = 9, align = TextAlign.Start)
             }
         }
+    }
+}
+
+
+/**
+ * A SETTINGS SECTION, built the way the phone's own Settings app builds one (17.9.2026).
+ *
+ * He said it looked amateurish beside Android's, and he was right: a flat list of rows with long
+ * sentences in them and no grouping is a list you read word by word. Android's has a quiet title,
+ * then a rounded card, then rows inside it with a title and a second line underneath — so the eye
+ * lands on the title and takes the rest only if it needs to.
+ */
+@Composable
+private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Label(
+            text = title.uppercase(),
+            colour = Paint.Dim,
+            size = 11,
+            align = TextAlign.Start,
+            modifier = Modifier.padding(start = 16.dp, top = 10.dp),
+        )
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Paint.Card),
+            content = content,
+        )
+    }
+}
+
+/** A row inside a section: what it is, and underneath, what it says. */
+/** The hairline between two rows of one card, inset like the phone's own. */
+@Composable
+private fun Divider() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp)
+            .height(1.dp)
+            .background(Paint.Rule),
+    )
+}
+
+@Composable
+private fun Row2(
+    title: String,
+    value: String? = null,
+    tint: Color = Paint.Amber,
+    onPress: (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 58.dp)
+            .then(if (onPress != null) Modifier.clickable(onClick = onPress) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Label(title, Paint.Sand, size = 14, align = TextAlign.Start)
+            if (value != null) Label(value, tint, size = 11, align = TextAlign.Start)
+        }
+        if (trailing != null) trailing()
     }
 }
 

@@ -437,6 +437,17 @@ check("the position can be locked to the middle of the screen",
 # centring again, not somebody asking for a lock.
 check("two taps in a row are what lock it",
       "now - lastCentreTap < 1_000L" in screens, "a second inside a second")
+# THE SETTINGS WERE REBUILT ON 17.9.2026 as grouped cards, the way the phone's own Settings app
+# builds them: a quiet title, a rounded card, rows with a second line under the title. The three
+# checks that described the old flat list — folding families, capitals for a group, a family of
+# one — went with the list they described. With two families left there was nothing left to fold.
+check("the settings are grouped into cards with titles",
+      "private fun Section(" in screens and "private fun Row2(" in screens
+      and 'Section("maps")' in screens and 'Section("tracks")' in screens,
+      "maps, tracks, keys, about")
+check("a row says what it is and what it is set to",
+      "Label(title, Paint.Sand, size = 14" in screens and "if (value != null) Label(value" in screens,
+      "the title first, its state underneath, as Android does it")
 check("a map can be taken out of the toggle and still be in the list",
       "store.inToggle" in screens and "fun inToggle" in (MAIN / "Store.kt").read_text(),
       "excluding a map from the toggle is not the same as not having it")
@@ -453,15 +464,9 @@ check("a group can be taken out without forgetting what was ticked inside it",
 check("the toggle is a tick, not two words",
       "private fun Tick(" in screens and '"not in toggle"' not in screens,
       "a checkbox, drawn rather than typed")
-check("a family with one map is one row, with no triangle to press for nothing",
-      "if (maps.size == 1) {" in screens and "store.setFamilyInToggle(family, it)\n                                store.setInToggle(layer.id, it)" in screens,
-      "the map and the group are the same thing there, so they are one tick")
-check("a group is told from its maps by more than position",
-      "familyLabel(family).uppercase()" in screens and "padding(start = 22.dp)" in screens,
-      "capitals and amber for the group, title case and sand for its maps, pushed in")
-check("the map families fold, and the fold is remembered",
-      "store.collapsed(key)" in screens and "store.setCollapsed(key, folded)" in screens,
-      "between sessions, so nothing has to be folded away twice")
+
+
+
 check("a saved walk can be drawn on the map in a chosen colour",
       "showSavedTrack" in canvas_src and "TRACK_COLOURS" in screens,
       "five colours, and the shown line is separate from the recording line")
@@ -494,6 +499,11 @@ check("the engine is given every point as a waypoint",
       "points.forEachIndexed { index, at -> waypoints.add(" in (MAIN / "Routing.kt").read_text(),
       "one route through them all, not legs stitched together")
 # The little compass (16.9.2026), as Google has: one tap north up, the next turning with the walk.
+# 17.9.2026: it was written on the 16th and he never saw it, because it was nested inside the
+# 72dp centre target — fillMaxSize inside 72dp is 72dp, so it drew behind the crosshair.
+check("the compass is on the screen, not inside the centre target",
+      screens.index("THE LITTLE COMPASS, at the top right") < screens.index("THE TAP IN THE MIDDLE"),
+      "top right, where Google keeps it")
 check("there is a compass that puts north up and centres him",
       "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
       "one tap, and it centres too")
@@ -590,6 +600,11 @@ check("OpenAndroMaps can be fetched from inside the app",
       "every region the mirror keeps, read from its own listing")
 # 16.9.2026: he started a 1.2 GB download and could not tell it was running, where it went, or
 # which map was being drawn afterwards.
+# His screenshot said "0 here" while a map was plainly drawing: the list only counted files this
+# feature had fetched itself.
+check("the maps list counts every map file, not only its own downloads",
+      'endsWith(".map", ignoreCase = true)' in (MAIN / "OamDownload.kt").read_text(),
+      "a list of maps that omits a map is worse than no list")
 check("a download in progress is visible from the maps face",
       "OamDownload.state.collectAsState()" in screens and "fun line(" in (MAIN / "OamDownload.kt").read_text(),
       "percent, megabytes, speed and time left")

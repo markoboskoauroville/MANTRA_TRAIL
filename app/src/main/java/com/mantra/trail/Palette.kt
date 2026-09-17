@@ -33,6 +33,15 @@ object Paint {
      */
     val Bar = Color(0x590B0D10)
 
+    /**
+     * The face of a settings card: one step up from the ground, the way the phone's own Settings
+     * lifts its groups off the background rather than drawing a box around them (17.9.2026).
+     */
+    val Card = Color(0xFF16191D)
+
+    /** The hairline between two rows inside one card. */
+    val Rule = Color(0xFF23272C)
+
     /** Ink for something present but not usable yet. The same ink, quieter. */
     val Dim = Color(0x8CF2DDB4)
 }
