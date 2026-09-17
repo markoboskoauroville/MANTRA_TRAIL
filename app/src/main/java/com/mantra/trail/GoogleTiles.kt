@@ -61,15 +61,30 @@ object GoogleTiles {
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                // The reason is said in plain words and the key is never in it. 403 here almost
-                // always means the Map Tiles API is not switched on for that key's project, which
-                // is a thing he can fix in a minute if somebody tells him which thing it is.
+                // GOOGLE'S OWN WORDS, NOT MINE (17.9.2026).
+                //
+                // Tested against his real key on a desk: the key was valid and the refusal was
+                // "Map Tiles API has not been used in project 342783832558 before or it is
+                // disabled", with the exact console link to switch it on. My sentence said to
+                // enable the API but not WHICH PROJECT, and he spent half a day making a second
+                // key that was refused for the same reason. Google says it better; pass it on.
+                //
+                // The key is never in this text: the message quotes the project, not the key, and
+                // the URL that carries the key is never shown.
+                val said = runCatching {
+                    connection.errorStream?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
                 connection.disconnect()
+                val googleSays = runCatching {
+                    JSONObject(said ?: "").getJSONObject("error").optString("message", "")
+                }.getOrNull()?.takeIf { it.isNotBlank() }
                 return@withContext Result(
                     null,
-                    when (code) {
-                        401, 403 -> "Google refused the key ($code). In Cloud Console: enable the Map Tiles API for it."
-                        429 -> "Google is rate limiting this key. Try again shortly."
+                    when {
+                        googleSays != null -> "Google: $googleSays"
+                        code == 429 -> "Google is rate limiting this key. Try again shortly."
+                        code == 401 || code == 403 ->
+                            "Google refused the key ($code). In Cloud Console, enable the Map Tiles API for its project."
                         else -> "Google answered $code"
                     },
                 )

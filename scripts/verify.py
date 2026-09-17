@@ -726,6 +726,13 @@ check("a theme that will not load says so rather than drawing nothing",
 check("the theme is chosen, not fixed at a motorcycle one",
       "applyTheme(store.themeName)" in canvas_src and "THEMES" in screens,
       "ours leads the list, and five of VTM's are behind it")
+# 17.9.2026, tested against his real key on this desk: the key was valid and Google's refusal
+# named the project and the exact console link. My own sentence said "enable the Map Tiles API"
+# without saying for WHICH project, and he spent half a day making a second key for nothing.
+check("Google's own words are passed on, not summarised",
+      "googleSays" in (MAIN / "GoogleTiles.kt").read_text()
+      and "googleSays" in (MAIN / "TileTest.kt").read_text(),
+      "their message names the project and the link that switches it on")
 check("a map that will not draw can be asked what the service said",
       (MAIN / "TileTest.kt").exists() and "onTestTiles" in screens,
       "401, 429, 404 and no network all look identical on a blank screen")

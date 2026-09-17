@@ -37,8 +37,18 @@ object TileTest {
                         "${layer.name}: the service answered with a $bytes byte image. The map data is fine."
                     code == 200 ->
                         "${layer.name}: answered 200 but sent $type, $bytes bytes — not a tile."
-                    code == 401 || code == 403 ->
-                        "${layer.name}: refused ($code). The key is wrong, expired, or not allowed for this style."
+                    code == 401 || code == 403 -> {
+                        // Google's own sentence when there is one: it names the project and the
+                        // API to switch on, which is what he actually needs (17.9.2026).
+                        val said = runCatching {
+                            connection.errorStream?.bufferedReader()?.use { it.readText() }
+                        }.getOrNull()
+                        val googleSays = runCatching {
+                            org.json.JSONObject(said ?: "").getJSONObject("error").optString("message", "")
+                        }.getOrNull()?.takeIf { it.isNotBlank() }
+                        googleSays?.let { "${layer.name}: $it" }
+                            ?: "${layer.name}: refused ($code). The key is wrong, expired, or not allowed here."
+                    }
                     code == 429 ->
                         "${layer.name}: too many requests (429). The key's quota is used up."
                     code == 404 ->
