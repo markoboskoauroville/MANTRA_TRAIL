@@ -212,7 +212,8 @@ sdk_lines = [l for l in gradle_kts.splitlines()
 # Reversed with the same reason, 17.9.2026: the SDK is back, deliberately, because it is the only
 # way to have Google's own vector map at Google's own speed, which is what he asked for.
 check("Google's own renderer is here for the online half",
-      len(sdk_lines) == 1 and (MAIN / "GoogleCanvas.kt").exists(),
+      len(sdk_lines) == 1 and (MAIN / "GoogleCanvas.kt").exists()
+      and "GoogleCanvas(context, store)" in screens,
       "beside VTM, never over it: the offline file still needs no signal and no key")
 keys_src = (MAIN / "Keys.kt").read_text()
 check("keys are sorted by shape, not by asking him which is which",

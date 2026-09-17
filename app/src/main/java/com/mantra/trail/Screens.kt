@@ -206,6 +206,8 @@ fun TrailApp(
 
         MapSurface(
             store = store,
+            layer = layer,
+            points = points,
             fix = fix,
             line = Trail.line.collectAsState().value,
             follow = follow,
@@ -587,15 +589,39 @@ fun TrailApp(
 @Composable
 private fun MapSurface(
     store: Store,
+    layer: MapLayer,
+    points: List<Pair<Double, Double>>,
     fix: Fix?,
     line: List<Fix>,
     follow: Boolean,
     onCanvas: (VtmCanvas) -> Unit,
     onReady: () -> Unit,
 ) {
-    // ONE SURFACE FOR EVERY MAP. Google's own SDK is gone with the key that was compiled in:
-    // its tiles now come through the Map Tiles API with the key from the picker, which makes it
-    // the same kind of layer as the others and leaves nothing to switch between.
+    // TWO ENGINES, ONE SCREEN (17.9.2026), which reverses the note that stood here — that Google's
+    // SDK was gone with the key that was compiled in. It is back with a key that is locked to this
+    // package and this signing certificate, because he asked for their vector map at their speed
+    // and the Map Tiles API serves pictures of a map rather than the map.
+    //
+    // Google's renderer draws the Google views; VTM draws the file on the phone. Whichever is not
+    // in use is not in the tree at all, so a walk with no signal carries nothing waiting to fail.
+    if (layer.family == MapLayer.Family.GOOGLE) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                val made = GoogleCanvas(context, store)
+                GoogleHolder.canvas = made
+                made.onCreate()
+                made.onResume()
+                made.show(layer)
+                made.showPosition(true)
+                made.setRoutePoints(points)
+                made.view
+            },
+            update = { GoogleHolder.canvas?.show(layer) },
+        )
+        return
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
