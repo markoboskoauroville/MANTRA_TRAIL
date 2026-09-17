@@ -32,6 +32,11 @@ android {
         targetSdk = 35
         versionCode = appVersion
         versionName = appVersion.toString()
+        // THE KEY IS NEVER IN THE SOURCE. It arrives from a repository secret at build time, and
+        // it is safe in the APK only because it is locked to this package name and to the
+        // fingerprint of the key that signs it: 4A:2A:FC:93:E8:D8:AC:A3:F1:DB:12:0F:25:12:EB:B9:
+        // 25:D0:48:AB. Extracted from the APK it does nothing for anybody.
+        manifestPlaceholders["MAPS_API_KEY"] = System.getenv("MAPS_API_KEY") ?: ""
     }
 
     signingConfigs {
@@ -135,6 +140,11 @@ dependencies {
     // comments — "no https, full header parsing or other stuff" — so every raster tile from
     // Google came back as nothing at all while the routing, which uses Android's own HTTP, worked
     // perfectly. This is the engine VTM ships for exactly that, and OkHttp is what it needs.
+    // GOOGLE'S OWN RENDERER (17.9.2026). The Map Tiles API serves pictures of a map; this is the
+    // map — their vector engine, the one their app is built on, with their labels, their roads and
+    // their speed. It is the only way to have what he asked for, and it is why the key has to be
+    // in the APK: the SDK reads it from the manifest and offers no way to hand it one at runtime.
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
     implementation("org.mapsforge:vtm-http:0.25.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-arm64-v8a")

@@ -8,7 +8,11 @@ done leaves this file; anything he refuses leaves it with a line saying so.
 He walks half in signal and half out of it (17.9.2026), so the signal half should be worth having
 and the other half must never depend on it.
 
-0. **Whether Google's tiles now draw** (v63's https engine) — still unseen from this side.
+0. **Whether Google's own renderer draws** (v68). If the map is blank and the log says the key is
+   refused, the restriction needs five minutes, or the fingerprint in Cloud Console does not match
+   4A:2A:FC:93:E8:D8:AC:A3:F1:DB:12:0F:25:12:EB:B9:25:D0:48:AB.
+0b. **The overlays on the Google canvas**: his position, the route line and the lettered points are
+   wired; the recorded track and the compass reading from that canvas are not.
 
 1. **The height graph for a SAVED TRACK** — v64 put it under a found route; a walk already
    recorded should be able to show the same thing.

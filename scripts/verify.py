@@ -189,13 +189,31 @@ gradle_kts = (ROOT / "app/build.gradle.kts").read_text()
 check("the build takes no service key",
       "googleMapsKey" not in gradle_kts and "HAS_GOOGLE_KEY" not in gradle_kts,
       "no placeholder, no BuildConfig field")
-check("the manifest holds no key of any kind",
-      "API_KEY" not in mf and "${" not in mf.split("<application")[1],
-      "no meta-data key, no placeholder")
+# REVERSED 17.9.2026, WITH THE REASON, and the old rule kept in words.
+#
+# It said: the manifest holds no key of any kind. It was written after a Google key was compiled
+# into public APKs v4 to v6 and had to be revoked, and it is still the right rule for a key that
+# is not locked down.
+#
+# He asked for Google's own vector renderer — their engine, their speed — and the Maps SDK reads
+# its key from the manifest with no runtime way to hand it one. So the manifest carries ONE
+# placeholder, filled at build time from a repository secret, holding a key restricted in Cloud
+# Console to this package name and to the fingerprint of the certificate that signs these builds.
+# Proved the same day: that key, used from anywhere else, is answered
+# "Requests from this Android client application are blocked".
+check("the manifest carries one placeholder and no key",
+      "${MAPS_API_KEY}" in mf and "AIza" not in mf,
+      "filled from a secret at build time, never written down here")
+check("the key is restricted to this app, and the gate knows it",
+      "MAPS_API_KEY" in wf and "an unexpected Google key is in the APK" in wf,
+      "one key may be in the APK: that one, and nothing else key-shaped")
 sdk_lines = [l for l in gradle_kts.splitlines()
              if ("play-services-maps" in l or "maps-compose" in l) and "implementation" in l]
-check("the Google Maps SDK is gone, because it can only read a key from the installed app",
-      not sdk_lines, f"{len(sdk_lines)} dependency lines on it")
+# Reversed with the same reason, 17.9.2026: the SDK is back, deliberately, because it is the only
+# way to have Google's own vector map at Google's own speed, which is what he asked for.
+check("Google's own renderer is here for the online half",
+      len(sdk_lines) == 1 and (MAIN / "GoogleCanvas.kt").exists(),
+      "beside VTM, never over it: the offline file still needs no signal and no key")
 keys_src = (MAIN / "Keys.kt").read_text()
 check("keys are sorted by shape, not by asking him which is which",
       "fun providerOf" in keys_src, "one function decides the service from the shape")

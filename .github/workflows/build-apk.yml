@@ -124,13 +124,28 @@ jobs:
           sys.exit(1 if (fails or errors) else 0)
           EOF
 
-      - name: "Gate G2 — no service key may enter the build"
+      - name: "Gate G2 — only the one key that is locked to this app"
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
           set -euo pipefail
-          echo "repository secrets used by this build: the signing keystore and its password, and nothing else"
-          grep -q 'googleMapsKey' app/build.gradle.kts && { echo "a build-time key placeholder came back"; exit 1; } || true
-          grep -q 'googleMapsKey' app/src/main/AndroidManifest.xml && { echo "the manifest still takes a key"; exit 1; } || true
-          echo "manifest placeholders for a service key: 0"
+          # REVERSED ON 17.9.2026, WITH THE REASON, and the old rule kept in words.
+          #
+          # The rule was: no service key may enter the build, written after a Google key was
+          # compiled into public APKs v4 to v6 and had to be revoked. It stands for every key
+          # that is not locked down.
+          #
+          # What changed: he asked for Google's own renderer, which is the only way to have their
+          # vector map at their speed, and the Maps SDK reads its key from the manifest — there is
+          # no runtime way to hand it one. So exactly one key may be in the APK, it must be the
+          # one from the repository secret, and that key is restricted in Cloud Console to this
+          # package name and to the fingerprint of the certificate that signs these builds. Pulled
+          # out of the APK it is refused everywhere else; proved on 17.9.2026, when the same key
+          # was answered with 403 "Requests from this Android client application are blocked".
+          #
+          # Anything else key-shaped is still a failure, and the key must never be in the source.
+          grep -rn 'AIza[0-9A-Za-z_-]\{35\}' app/src --include=* && { echo "a key is written in the source"; exit 1; } || true
+          echo "keys in the source: 0; in the manifest: one placeholder, filled from the secret"
 
       - name: Restore the signing key
         env:
@@ -143,9 +158,16 @@ jobs:
           printf 'storeFile=trail.p12\nstorePassword=%s\nkeyAlias=trail\nkeyPassword=%s\n' "$KS_PW" "$KS_PW" > keystore.properties
 
       - name: Build the release APK
+        env:
+          # The key Google's own renderer reads from the manifest. It is restricted to this
+          # package and to the signing fingerprint, so what ends up in the APK is useless
+          # anywhere else (17.9.2026).
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: "Gate G2 — scan the built APK"
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
@@ -153,9 +175,16 @@ jobs:
           # NOTHING IS EXCLUDED FROM THIS SCAN ANY MORE. It used to except the Maps key, which
           # was "in the artefact by design" — and that design is what put a live key inside a
           # public APK on 14.9.2026. Zero means zero.
-          HITS=$(strings -a "$APK" | grep -acE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
-          echo "key-shaped strings in the artefact: ${HITS:-0}"
-          [ "${HITS:-0}" = "0" ]
+          # ONE KEY IS EXPECTED NOW (17.9.2026): the Maps SDK's, locked to this package and this
+          # signing certificate. Every other key shape is still a failure, and so is any Google
+          # key that is not the one from the secret.
+          FOUND=$(strings -a "$APK" | grep -oE 'AIza[0-9A-Za-z_-]{35}' | sort -u || true)
+          for K in $FOUND; do
+            if [ "$K" != "$MAPS_API_KEY" ]; then echo "an unexpected Google key is in the APK"; exit 1; fi
+          done
+          echo "Google keys in the APK: $(echo "$FOUND" | grep -c . || true) (the restricted one)"
+          OTHERS=$(strings -a "$APK" | grep -acE '(gsk_|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
+          [ "$OTHERS" = "0" ] || { echo "a key of another shape is in the APK"; exit 1; }
 
       - name: "Gate G1 — the three numbers agree"
         env:
