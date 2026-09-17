@@ -169,6 +169,11 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_GOOGLE_VIEW, Layers.GOOGLE.id) ?: Layers.GOOGLE.id
         set(v) = prefs.edit().putString(KEY_GOOGLE_VIEW, v).apply()
 
+    /** The keyring, as one line per key. */
+    var keyring: List<Keyring.Key>
+        get() = Keyring.decode(prefs.getString(KEY_RING, null))
+        set(v) = prefs.edit().putString(KEY_RING, Keyring.encode(v)).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -211,6 +216,7 @@ class Store(context: Context) {
         private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_THEME = "themeName"
         private const val KEY_GOOGLE_VIEW = "googleView"
+        private const val KEY_RING = "keyring"
         private const val KEY_OFFLINE_MAP = "offlineMapName"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_USE_VTM = "useVtm"

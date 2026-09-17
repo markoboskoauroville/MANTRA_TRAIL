@@ -688,6 +688,79 @@ class CoreTest {
         assertFalse(MapLayer.GoogleView.SATELLITE.overlayRoads)
     }
 
+    // --- the keyring: several keys, tried in order ------------------------------------------------
+
+    private fun aKey(tail: String) = "AIza" + "B".repeat(31) + tail
+
+    @Test fun keysAreAddedWithoutLosingWhatIsKnownAboutTheOldOnes() {
+        val first = Keyring.add(emptyList(), listOf(aKey("aaaa")))
+        val tested = Keyring.withVerdict(first, aKey("aaaa"), Keyring.Verdict.GOOD, "works", 5L)
+        val both = Keyring.add(tested, listOf(aKey("bbbb")))
+        assertEquals(2, both.size)
+        assertEquals(Keyring.Verdict.GOOD, both[0].verdict)
+        assertEquals(Keyring.Verdict.UNTRIED, both[1].verdict)
+    }
+
+    @Test fun theSameKeyIsNotAddedTwice() {
+        val once = Keyring.add(emptyList(), listOf(aKey("aaaa")))
+        assertEquals(1, Keyring.add(once, listOf(aKey("aaaa"))).size)
+        assertEquals(1, Keyring.add(emptyList(), listOf(aKey("aaaa"), aKey("aaaa"))).size)
+    }
+
+    @Test fun onlyGoogleShapedKeysGetOntoTheRing() {
+        assertTrue(Keyring.add(emptyList(), listOf("not a key", "0123456789abcdef")).isEmpty())
+    }
+
+    @Test fun theRingSurvivesBeingWrittenDownAndReadBack() {
+        val ring = Keyring.withVerdict(
+            Keyring.add(emptyList(), listOf(aKey("aaaa"), aKey("bbbb"))),
+            aKey("aaaa"),
+            Keyring.Verdict.REFUSED,
+            "Google: Map Tiles API has not been used in project 1234",
+            99L,
+        )
+        val read = Keyring.decode(Keyring.encode(ring))
+        assertEquals(2, read.size)
+        assertEquals(Keyring.Verdict.REFUSED, read[0].verdict)
+        assertTrue(read[0].said.contains("Map Tiles API"))
+        assertEquals(99L, read[0].testedMs)
+    }
+
+    @Test fun aCorruptedRingYieldsWhatItCanRatherThanThrowing() {
+        assertTrue(Keyring.decode(null).isEmpty())
+        assertTrue(Keyring.decode("rubbish").isEmpty())
+        assertEquals(1, Keyring.decode("${aKey("aaaa")}\tkey 1\tGOOD\tworks\t1\nbroken line").size)
+    }
+
+    @Test fun theOneThatWorksIsTriedFirstAndTheRefusedOneLast() {
+        var ring = Keyring.add(emptyList(), listOf(aKey("aaaa"), aKey("bbbb"), aKey("cccc")))
+        ring = Keyring.withVerdict(ring, aKey("aaaa"), Keyring.Verdict.REFUSED, "no", 1L)
+        ring = Keyring.withVerdict(ring, aKey("cccc"), Keyring.Verdict.GOOD, "yes", 2L)
+        val order = Keyring.order(ring).map { it.value }
+        assertEquals(aKey("cccc"), order[0])
+        assertEquals(aKey("bbbb"), order[1])
+        assertEquals(aKey("aaaa"), order[2])
+        assertEquals(aKey("cccc"), Keyring.best(ring)!!.value)
+    }
+
+    @Test fun anEmptyRingHasNoBestKey() {
+        assertNull(Keyring.best(emptyList()))
+    }
+
+    @Test fun aKeyIsShownMaskedAndNeverWhole() {
+        val key = Keyring.add(emptyList(), listOf(aKey("aaaa"))).first()
+        assertFalse(key.masked.contains(key.value.substring(10, 20)))
+        assertTrue(key.masked.startsWith("AIza"))
+        assertTrue(Keyring.describe(key).contains("not tested"))
+    }
+
+    @Test fun removingOneLeavesTheRest() {
+        val ring = Keyring.add(emptyList(), listOf(aKey("aaaa"), aKey("bbbb")))
+        val left = Keyring.remove(ring, aKey("aaaa"))
+        assertEquals(1, left.size)
+        assertEquals(aKey("bbbb"), left[0].value)
+    }
+
     @Test fun aKeyIsSortedByItsShapeRatherThanByBeingAsked() {
         assertEquals(Keys.Provider.GOOGLE, Keys.providerOf("AIza" + "B".repeat(35)))
         assertNull(Keys.providerOf("cafeteria"))
@@ -715,6 +788,16 @@ class CoreTest {
             assertEquals(it.id, MapLayer.Offline.NONE, it.offline)
             assertNull(it.id, Layers.tileUrl(it, 12, 2229, 1460))
         }
+    }
+
+    @Test fun terrainIsAskedForWithARoadmapLayer() {
+        // Google refuses a terrain session without one: "The terrain map type must always contain
+        // a roadmap layer" (400), proved against the real key on 17.9.2026.
+        val terrain = Layers.GOOGLE_ALL.first { it.googleView?.mapType == "terrain" }
+        assertEquals("terrain", terrain.googleView!!.mapType)
+        // Hybrid asks for the same layer for a different reason: roads over a photograph.
+        val hybrid = Layers.GOOGLE_ALL.first { it.googleView?.overlayRoads == true }
+        assertEquals("satellite", hybrid.googleView!!.mapType)
     }
 
     @Test fun onlyGoogleLayersCarryAGoogleView() {

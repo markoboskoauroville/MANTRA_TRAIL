@@ -38,6 +38,11 @@ object Keys {
     data class Found(val key: String, val provider: Provider, val label: String?)
 
     /** The provider a key belongs to, or null when the shape is one nobody here knows. */
+    /** Whether a string has the shape Google gives its keys: AIza and thirty-five more. */
+    fun looksLikeGoogle(candidate: String): Boolean =
+        candidate.length == 39 && candidate.startsWith("AIza") &&
+            candidate.drop(4).all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
     fun providerOf(candidate: String): Provider? = when {
         GOOGLE.matches(candidate) || GOOGLE_AQ.matches(candidate) -> Provider.GOOGLE
         else -> null

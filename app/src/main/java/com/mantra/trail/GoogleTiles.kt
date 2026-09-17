@@ -26,6 +26,38 @@ import java.net.URL
  */
 object GoogleTiles {
 
+    /**
+     * TRY THE KEYS IN TURN (17.9.2026). One key that stops working used to mean no Google map at
+     * all; with a ring, the app walks it in order — the one that worked last first — and the
+     * verdict of each attempt is written back, so the next walk starts with the one that answered.
+     */
+    suspend fun sessionFromRing(
+        view: MapLayer.GoogleView,
+        store: Store,
+    ): Result {
+        val ring = Keyring.order(store.keyring)
+        if (ring.isEmpty()) return Result(null, "No Google key yet. Settings: Google maps, add a key file.")
+        var last: Result? = null
+        ring.forEach { key ->
+            val answer = session(view, key.value)
+            val verdict = when {
+                answer.token != null -> Keyring.Verdict.GOOD
+                answer.problem?.contains("could not be reached") == true -> Keyring.Verdict.UNREACHABLE
+                else -> Keyring.Verdict.REFUSED
+            }
+            store.keyring = Keyring.withVerdict(
+                store.keyring,
+                key.value,
+                verdict,
+                answer.problem ?: "works",
+                System.currentTimeMillis(),
+            )
+            if (answer.token != null) return answer
+            last = answer
+        }
+        return last ?: Result(null, "No key on the ring was accepted")
+    }
+
     private const val CREATE = "https://tile.googleapis.com/v1/createSession"
 
     private data class Session(val token: String, val madeMs: Long)
@@ -49,7 +81,11 @@ object GoogleTiles {
                 .put("mapType", view.mapType)
                 .put("language", "en-GB")
                 .put("region", "HR")
-            if (view.overlayRoads) {
+            // TERRAIN IS REFUSED WITHOUT A ROADMAP LAYER (17.9.2026, tested against his key
+            // once the API was switched on): "The terrain map type must always contain a roadmap
+            // layer", 400. Hybrid asks for the same layer to draw roads over the photograph, so
+            // the two cases are one line.
+            if (view.overlayRoads || view.mapType == "terrain") {
                 body.put("layerTypes", JSONArray().put("layerRoadmap"))
             }
             val connection = URL("$CREATE?key=$key").openConnection() as HttpURLConnection

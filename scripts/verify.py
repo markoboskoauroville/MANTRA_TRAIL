@@ -729,6 +729,23 @@ check("the theme is chosen, not fixed at a motorcycle one",
 # 17.9.2026, tested against his real key on this desk: the key was valid and Google's refusal
 # named the project and the exact console link. My own sentence said "enable the Map Tiles API"
 # without saying for WHICH project, and he spent half a day making a second key for nothing.
+# THE KEYRING (17.9.2026), as in his own KEY_RING_TESTER: several keys, each testable, and the app
+# walks them in order rather than dying with the first one that stops working.
+ring_src = (MAIN / "Keyring.kt").read_text()
+check("the keys are a ring, not one key",
+      "fun order(" in ring_src and "sessionFromRing" in (MAIN / "GoogleTiles.kt").read_text(),
+      "the one that worked last is tried first, the refused one last")
+check("each key can be tested from its own row",
+      'Words("test", Paint.Amber' in settings_src and "onTestKey" in settings_src,
+      "and what Google said sits under that key, not somewhere else")
+check("a key is shown masked and kept whole",
+      "val masked: String" in ring_src and "value.take(8)" in ring_src,
+      "enough to tell two apart, never enough to use one")
+check("a key can be taken off the ring",
+      "onRemoveKey" in settings_src and "fun remove(" in ring_src, "one press")
+check("terrain is asked for with a roadmap layer",
+      'view.mapType == "terrain"' in (MAIN / "GoogleTiles.kt").read_text(),
+      "Google refuses a terrain session without one, proved against the real key")
 check("Google's own words are passed on, not summarised",
       "googleSays" in (MAIN / "GoogleTiles.kt").read_text()
       and "googleSays" in (MAIN / "TileTest.kt").read_text(),

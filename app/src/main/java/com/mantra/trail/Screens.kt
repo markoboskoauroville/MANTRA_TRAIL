@@ -130,6 +130,8 @@ fun TrailApp(
     onShowTrack: (Folder.Entry) -> Unit,
     onTestTiles: () -> Unit,
     onFetchRegion: (OamIndex.Entry) -> Unit,
+    onTestKey: (Keyring.Key) -> Unit,
+    onRemoveKey: (Keyring.Key) -> Unit,
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
     onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
@@ -491,6 +493,9 @@ fun TrailApp(
                 version = version,
                 installedMaps = installedMaps,
                 unfinishedMaps = unfinishedMaps,
+                keyring = remember(UiTick.n, settings) { store.keyring },
+                onTestKey = onTestKey,
+                onRemoveKey = onRemoveKey,
                 onFetchOffer = { entry ->
                     settings = false
                     showMaps = true
@@ -651,14 +656,18 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
 
 /** One attempt at one layer. Returns null when it drew, or the reason it did not. */
 private suspend fun attempt(canvas: VtmCanvas, store: Store, layer: MapLayer): String? {
-    val key = layer.provider?.let { store.key(it) }
-    if (layer.provider != null && key.isNullOrEmpty()) return Layers.missingKey(layer)
     if (layer.kind == LayerKind.GOOGLE_TILES) {
+        // THE RING, IN ORDER (17.9.2026): the key that worked last is tried first, and if it has
+        // stopped working the next is tried before anybody is told the map is unavailable.
+        if (store.keyring.isEmpty()) return Layers.missingKey(layer)
         val view = layer.googleView ?: MapLayer.GoogleView.NORMAL
         Trail.say("Asking Google for a session…")
-        val result = GoogleTiles.session(view, key!!)
-        return result.token?.let { canvas.show(layer, session = it, key = key) } ?: result.problem
+        val result = GoogleTiles.sessionFromRing(view, store)
+        val used = Keyring.best(store.keyring)?.value
+        return result.token?.let { canvas.show(layer, session = it, key = used) } ?: result.problem
     }
+    val key = layer.provider?.let { store.key(it) }
+    if (layer.provider != null && key.isNullOrEmpty()) return Layers.missingKey(layer)
     return canvas.show(layer, key = key)
 }
 

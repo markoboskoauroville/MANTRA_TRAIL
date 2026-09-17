@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 private class SettingsState(val store: Store) {
     var theme by mutableStateOf(store.themeName)
     var googleOpen by mutableStateOf(false)
+    var keysOpen by mutableStateOf(false)
     var offlineOpen by mutableStateOf(false)
     var answer by mutableStateOf<String?>(null)
     fun cycleTheme(): String? {
@@ -75,6 +76,9 @@ fun SettingsFace(
     installedMaps: List<java.io.File>,
     unfinishedMaps: List<java.io.File>,
     onFetchOffer: (OamIndex.Entry) -> Unit,
+    keyring: List<Keyring.Key>,
+    onTestKey: (Keyring.Key) -> Unit,
+    onRemoveKey: (Keyring.Key) -> Unit,
     drawingMapName: String,
     offlineUnder: String,
     onUseMap: (java.io.File) -> Unit,
@@ -232,22 +236,62 @@ fun SettingsFace(
                             onPress = { onPick(layer) },
                         )
                     }
+                    // THE KEYRING (17.9.2026, as in his own KEY_RING_TESTER): every key he has
+                    // added, what it last answered, a square that tests it and writes the result
+                    // beside it, and a cross that takes it off. The app walks them in order when
+                    // it needs one, so a key that stops working is not a dead map.
                     Rule()
                     Line(
-                        title = "Google Maps API key",
-                    opens = true,
-                        under = if (hasGoogleKey) "set — from a file you picked" else "not set",
+                        title = "keys",
+                        under = if (keyring.isEmpty()) {
+                            "none yet · add a file with a key in it"
+                        } else {
+                            "${keyring.size} on the ring · tried in order"
+                        },
                         inset = true,
-                        onPress = onImportKeys,
+                        onPress = { state.keysOpen = !state.keysOpen },
+                        trailing = { Caret(open = state.keysOpen) { state.keysOpen = !state.keysOpen } },
                     )
-                    Rule()
-                    Line(
-                        title = "test the key",
-                    opens = true,
-                        under = "asks the service for one tile",
-                        inset = true,
-                        onPress = onTestTiles,
-                    )
+                    if (state.keysOpen) {
+                        keyring.forEach { key ->
+                            Rule()
+                            Line(
+                                title = key.label,
+                                under = if (key.said.isNotBlank() && key.verdict != Keyring.Verdict.GOOD) {
+                                    "${key.masked} · ${key.said}"
+                                } else {
+                                    Keyring.describe(key)
+                                },
+                                inset = true,
+                                trailing = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier
+                                                .size(width = 52.dp, height = 34.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(1.2.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                                .clickable { onTestKey(key) },
+                                            contentAlignment = Alignment.Center,
+                                        ) { Words("test", Paint.Amber, 12) }
+                                        Box(
+                                            Modifier
+                                                .size(width = 40.dp, height = 34.dp)
+                                                .clickable { onRemoveKey(key) },
+                                            contentAlignment = Alignment.Center,
+                                        ) { Words("✕", Paint.Red, 14) }
+                                    }
+                                },
+                            )
+                        }
+                        Rule()
+                        Line(
+                            title = "add keys from a file",
+                            under = "every Google key in it goes on the ring and is tested",
+                            inset = true,
+                            opens = true,
+                            onPress = onImportKeys,
+                        )
+                    }
                 }
             }
 

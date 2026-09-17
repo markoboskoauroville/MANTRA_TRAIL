@@ -88,12 +88,14 @@ class MainActivity : ComponentActivity() {
                 Trail.say("No key-shaped string in that file. If the format is new, say so and it gets added.")
                 return@registerForActivityResult
             }
-            // One key per service, the newest winning, so re-importing a file after rotating a
-            // key replaces the dead one instead of leaving two and a guess about which is live.
+            // ONTO THE RING, NOT OVER THE OLD ONE (17.9.2026). A key per service, newest wins,
+            // meant that importing a second key threw the first away — and when the new one was
+            // refused there was nothing left to fall back to. Every Google key in the file joins
+            // the ring and is tested at once; the old single-key store is kept in step so the
+            // rest of the app, which asks it, still works.
             store.keys = store.keys + found.associate { it.provider to it.key }
             GoogleTiles.forget()
-            UiTick.bump()
-            Trail.say("Held for: ${store.keyState}")
+            addKeysFrom(found.filter { it.provider == Keys.Provider.GOOGLE }.map { it.key })
         } catch (e: Exception) {
             Trail.say("Import failed: ${e.javaClass.simpleName}")
         }
@@ -310,6 +312,49 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Fetch one tile of the chosen map and report exactly what the service said. */
+    /** Put every Google key in the file on the ring, then ask Google about each of them. */
+    private fun addKeysFrom(found: List<String>) {
+        val before = store.keyring
+        store.keyring = Keyring.add(before, found)
+        val added = store.keyring.size - before.size
+        Trail.say(
+            when {
+                added == 0 && found.isEmpty() -> "No Google key in that file"
+                added == 0 -> "That key is already on the ring"
+                else -> "$added added. Testing…"
+            }
+        )
+        UiTick.bump()
+        store.keyring.filter { it.verdict == Keyring.Verdict.UNTRIED }.forEach { testKey(it) }
+    }
+
+    /** Ask Google about one key and write what it said beside it. */
+    private fun testKey(key: Keyring.Key) {
+        lifecycleScope.launch {
+            val answer = GoogleTiles.session(MapLayer.GoogleView.NORMAL, key.value)
+            val verdict = when {
+                answer.token != null -> Keyring.Verdict.GOOD
+                answer.problem?.contains("could not be reached") == true -> Keyring.Verdict.UNREACHABLE
+                else -> Keyring.Verdict.REFUSED
+            }
+            store.keyring = Keyring.withVerdict(
+                store.keyring,
+                key.value,
+                verdict,
+                answer.problem ?: "works",
+                System.currentTimeMillis(),
+            )
+            Trail.say("${key.label}: ${answer.problem ?: "works"}")
+            UiTick.bump()
+        }
+    }
+
+    private fun removeKey(key: Keyring.Key) {
+        store.keyring = Keyring.remove(store.keyring, key.value)
+        Trail.say("${key.label} taken off the ring")
+        UiTick.bump()
+    }
+
     private fun testTiles() {
         val layer = Layers.byId(store.layerId)
         Trail.say("Asking ${layer.name} for one tile…")
@@ -360,6 +405,8 @@ class MainActivity : ComponentActivity() {
                 onShowTrack = ::showTrack,
                 onTestTiles = ::testTiles,
                 onFetchRegion = ::fetchRegion,
+                onTestKey = ::testKey,
+                onRemoveKey = ::removeKey,
                 onSaveRoute = ::saveRoute,
                 onFindWays = ::findWays,
                 onSaveOption = ::saveOption,
