@@ -32,10 +32,27 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
     val view: MapView = MapView(context)
 
     private var map: GoogleMap? = null
+
+    // WHAT WAS ASKED FOR BEFORE THE MAP EXISTED (17.9.2026).
+    //
+    // getMapAsync hands the GoogleMap over some frames after the view is made, and every method
+    // here began "val ready = map ?: return" — so a route drawn, a point placed or a centring
+    // asked for in those frames was thrown away in silence. That is both bugs he reported: the
+    // centre key did nothing on Google's map, and a way found on the offline file never appeared
+    // when he switched. Nothing is dropped now; it waits here and is applied the moment the map
+    // arrives.
+    private var pendingCentre: Fix? = null
+    private var pendingPoints: List<Pair<Double, Double>>? = null
+    private var pendingTrack: Pair<List<Fix>, Long>? = null
+    private var pendingPosition: Boolean? = null
+    private var pendingBearing: Float? = null
     private var routeLine: Polyline? = null
     private var trackLine: Polyline? = null
     private val marks = ArrayList<Marker>()
     private var wanted: MapLayer.GoogleView = MapLayer.GoogleView.NORMAL
+
+    /** Told when the map is real, so the screen can draw what belongs on it. */
+    var onReady: (() -> Unit)? = null
 
     fun onCreate() {
         view.onCreate(null)
@@ -59,6 +76,19 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
                         .build()
                 )
             )
+            // Everything he asked for while the map was on its way.
+            pendingPoints?.let { setRoutePoints(it) }
+            pendingTrack?.let { showTrack(it.first, it.second) }
+            pendingPosition?.let { showPosition(it) }
+            pendingBearing?.let { setMapRotation(it) }
+            pendingCentre?.let { centreOn(it) }
+            pendingPoints = null
+            pendingTrack = null
+            pendingPosition = null
+            pendingBearing = null
+            pendingCentre = null
+            onReady?.invoke()
+
             ready.setOnCameraIdleListener {
                 val at = ready.cameraPosition
                 store.lastLat = at.target.latitude
@@ -85,12 +115,21 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
 
     /** Where he is, drawn by Google's own blue dot, which is the one he knows. */
     fun showPosition(allowed: Boolean) {
-        val ready = map ?: return
+        val ready = map
+        if (ready == null) {
+            pendingPosition = allowed
+            return
+        }
         runCatching { ready.isMyLocationEnabled = allowed }
     }
 
     fun centreOn(fix: Fix) {
-        map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(fix.lat, fix.lon)))
+        val ready = map
+        if (ready == null) {
+            pendingCentre = fix
+            return
+        }
+        ready.animateCamera(CameraUpdateFactory.newLatLng(LatLng(fix.lat, fix.lon)))
     }
 
     fun zoomBy(steps: Float) {
@@ -98,7 +137,11 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
     }
 
     fun setMapRotation(degrees: Float) {
-        val ready = map ?: return
+        val ready = map
+        if (ready == null) {
+            pendingBearing = degrees
+            return
+        }
         val at = ready.cameraPosition
         ready.animateCamera(
             CameraUpdateFactory.newCameraPosition(
@@ -115,7 +158,11 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
 
     /** The lettered points, drawn as the same red crosshair the other map uses. */
     fun setRoutePoints(points: List<Pair<Double, Double>>) {
-        val ready = map ?: return
+        val ready = map
+        if (ready == null) {
+            pendingPoints = points
+            return
+        }
         marks.forEach { it.remove() }
         marks.clear()
         points.forEachIndexed { index, at ->
@@ -144,7 +191,11 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
 
     /** A found way or a saved walk, in its own colour. */
     fun showTrack(points: List<Fix>, colour: Long) {
-        val ready = map ?: return
+        val ready = map
+        if (ready == null) {
+            pendingTrack = points to colour
+            return
+        }
         trackLine?.remove()
         trackLine = if (points.size >= 2) {
             ready.addPolyline(

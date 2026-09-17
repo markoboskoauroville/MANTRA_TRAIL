@@ -625,6 +625,10 @@ private fun MapSurface(
             factory = { context ->
                 val made = GoogleCanvas(context, store)
                 GoogleHolder.canvas = made
+                // AS THE OTHER ENGINE DOES (17.9.2026): say when the map is real, and the screen
+                // puts his points and his route on it. Before this, whatever was drawn while
+                // Google's map was still arriving went nowhere.
+                made.onReady = { onReady() }
                 made.onCreate()
                 made.onResume()
                 made.show(layer)
@@ -1746,7 +1750,7 @@ private fun RouteMenu(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Label("route", Paint.Dim, size = 12, align = TextAlign.Start)
                 Label(
-                    text = if (enough) "${points.size} points · ${Geo.formatDistance(straight)} straight" else "place at least two",
+                    text = if (enough) "${points.size} of ${Route.MAX_POINTS} points · ${Geo.formatDistance(straight)} straight" else "place at least two",
                     colour = if (enough) Paint.Sand else Paint.Dim,
                     size = 11,
                 )

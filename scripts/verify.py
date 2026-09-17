@@ -797,6 +797,13 @@ check("the turns are fetched and not shown",
 check("save is not beside close",
       screens.index("save these points as a track") < screens.index('Label("close"'),
       "they were the same size in the same corner and one of them threw work away")
+# 17.9.2026: Google's map arrives some frames after its view, and every method began by returning
+# when it was not there yet — so a centring, a point or a route asked for in those frames was
+# dropped in silence. Both bugs he reported were that.
+check("nothing asked of Google's map before it exists is dropped",
+      "pendingCentre" in (MAIN / "GoogleCanvas.kt").read_text()
+      and "made.onReady = { onReady() }" in screens,
+      "it waits and is applied when the map arrives")
 check("a line drawn survives a change of engine",
       "object Shown" in (MAIN / "Canvases.kt").read_text() and "Shown.route?.let" in screens,
       "the routers never cared which map was up; the answer was being lost with the canvas")
