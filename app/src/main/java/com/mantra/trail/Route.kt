@@ -51,6 +51,38 @@ object Route {
         return total
     }
 
+    /**
+     * EVENLY SPACED POINTS ALONG A LINE (17.9.2026), for asking a service about a route without
+     * asking it about every one of six hundred points: one request, a fixed number of samples,
+     * spaced by DISTANCE rather than by index, so a straight kilometre and a hairpin get their
+     * share in proportion to the ground and not to how finely each was drawn.
+     */
+    fun sample(points: List<Pair<Double, Double>>, wanted: Int): List<Pair<Double, Double>> {
+        if (points.size <= 2 || wanted < 2) return points
+        if (points.size <= wanted) return points
+        val total = straightMetres(points)
+        if (total <= 0.0) return points.take(wanted)
+        val step = total / (wanted - 1)
+        val taken = ArrayList<Pair<Double, Double>>(wanted)
+        taken.add(points.first())
+        var walked = 0.0
+        var next = step
+        for (i in 1 until points.size) {
+            walked += Geo.distance(
+                points[i - 1].first,
+                points[i - 1].second,
+                points[i].first,
+                points[i].second,
+            )
+            while (walked >= next && taken.size < wanted - 1) {
+                taken.add(points[i])
+                next += step
+            }
+        }
+        taken.add(points.last())
+        return taken
+    }
+
     /** What a saved route is called: the day, the time, and the letters it ran through. */
     fun nameFor(startedMs: Long, count: Int): String {
         val stamp = Tracks.defaultName(startedMs).removeSuffix(" Track")

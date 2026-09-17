@@ -31,6 +31,10 @@ object Routing {
         val metres: Int,
         val climbM: Int,
         val colour: Long,
+        /** Google's turn instructions when they came with the route; empty for BRouter's. */
+        val turns: List<String> = emptyList(),
+        /** The height along it, once he has asked for it. */
+        val profile: Elevation.Profile? = null,
     )
 
     /** The five colours the options are drawn in, in the order they are given out. */

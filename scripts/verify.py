@@ -736,6 +736,17 @@ ring_src = (MAIN / "Keyring.kt").read_text()
 # with a toggle, because the two answer different questions and both are worth having.
 # 17.9.2026: routing answered and not one tile drew. VTM's own HTTP client says in its comments
 # that it does not do https, and every tile service is https.
+# 17.9.2026: half his walking is in signal and half is not, so the signal half should be worth
+# having. Heights along a route, and the turns Google was already sending and I was discarding.
+check("the ground under a route can be asked for",
+      (MAIN / "Elevation.kt").exists() and "onHeights" in screens,
+      "one billed request, forty samples spaced by ground")
+check("the heights are sampled by ground, not by index",
+      "fun sample(" in (MAIN / "Route.kt").read_text() and "Route.sample(points, samples)" in (MAIN / "Elevation.kt").read_text(),
+      "a hairpin must not eat the budget a ridge needs")
+check("Google's turn instructions are kept, not thrown away",
+      "fun turnsOf(" in (MAIN / "GoogleRoutes.kt").read_text() and "option.turns" in screens,
+      "they were already in the answer being paid for")
 check("the raster layer uses an engine that speaks https",
       "OkHttpEngine.OkHttpFactory()" in canvas_src and "vtm-http" in (ROOT / "app/build.gradle.kts").read_text(),
       "VTM's own client cannot, and every tile service is https")

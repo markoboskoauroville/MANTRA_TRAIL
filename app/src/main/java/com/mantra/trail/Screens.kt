@@ -135,6 +135,7 @@ fun TrailApp(
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
     onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
+    onHeights: (Int) -> Unit,
     routeOptions: List<Routing.Option>,
 ) {
     var layer by remember { mutableStateOf(Layers.byId(store.layerId)) }
@@ -436,6 +437,7 @@ fun TrailApp(
                 },
                 onRoute = { profile, wanted -> onFindWays(points, profile, wanted) },
                 onSaveOption = { option -> onSaveOption(option) },
+                onHeights = onHeights,
                 onSave = { onSaveRoute(points) },
                 onClose = { routeMenu = false },
             )
@@ -1659,6 +1661,7 @@ private fun RouteMenu(
     onRemove: (Int) -> Unit,
     onRoute: (String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
+    onHeights: (Int) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -1904,7 +1907,41 @@ private fun RouteMenu(
                 }
             }
 
-            found.forEach { option ->
+            found.forEachIndexed { index, option ->
+                if (option.profile != null) {
+                    // THE GROUND UNDER THE ROUTE (17.9.2026). Distance says how far; this says what
+                    // it costs. Drawn from the heights themselves, so the shape is the hill.
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Paint.Card)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Label(option.profile.line(), Paint.Amber, size = 11, align = TextAlign.Start)
+                        Canvas(Modifier.fillMaxWidth().height(56.dp)) {
+                            val heights = option.profile.metres
+                            if (heights.size < 2) return@Canvas
+                            val low = heights.min()
+                            val high = heights.max()
+                            val span = (high - low).coerceAtLeast(1.0)
+                            val step = size.width / (heights.size - 1)
+                            val path = androidx.compose.ui.graphics.Path()
+                            heights.forEachIndexed { i, metres ->
+                                val x = i * step
+                                val y = size.height - ((metres - low) / span * size.height).toFloat()
+                                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            drawPath(path, Color(option.colour), style = Stroke(2.dp.toPx()))
+                        }
+                    }
+                }
+                if (option.turns.isNotEmpty()) {
+                    option.turns.take(8).forEach { turn ->
+                        Label("· $turn", Paint.Dim, size = 11, align = TextAlign.Start)
+                    }
+                }
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -1932,6 +1969,20 @@ private fun RouteMenu(
                         colour = Paint.Amber,
                         size = 11,
                     )
+                }
+                if (option.profile == null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Paint.Card)
+                            .clickable { onHeights(index) }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Label("what the ground does along it", Paint.Amber, size = 11, align = TextAlign.Start)
+                    }
                 }
             }
 

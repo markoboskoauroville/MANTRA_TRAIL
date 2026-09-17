@@ -5,17 +5,15 @@ done leaves this file; anything he refuses leaves it with a line saying so.
 
 ## Next, in the order I would do them
 
-0. **Nothing has been seen drawing.** The https engine (v63) is the reason no Google tile appeared;
-   whether tiles now draw is the first thing to check on the phone.
+He walks half in signal and half out of it (17.9.2026), so the signal half should be worth having
+and the other half must never depend on it.
 
-1. **Elevation profile** — a height graph under a found route and under a saved track. Google's
-   Elevation API answered on a desk (975, 980, 954, 951, 868 m along the Sljeme line) and BRouter
-   already returns the climb, so an offline profile is possible from the route's own points.
-   One billed request per route when Google is the source.
+0. **Whether Google's tiles now draw** (v63's https engine) — still unseen from this side.
+
+1. **The height graph for a SAVED TRACK** — v64 put it under a found route; a walk already
+   recorded should be able to show the same thing.
 2. **Street View at a point** — one photograph at A or B, to see a trailhead before driving to it.
    One billed image per press.
-3. **Turn instructions** — Google's Routes answer already carries them; they are fetched and
-   thrown away. Useful on a road, useless on a path, so they would be shown only for a Google route.
 4. **The map screen's state**, rewritten the way the settings were — it is the last big file where
    state is read during drawing, which is what made the settings slow and the ticks dead.
 

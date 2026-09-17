@@ -516,6 +516,33 @@ class CoreTest {
         assertEquals(0.0, Route.straightMetres(emptyList()), 0.001)
     }
 
+    @Test fun samplingTakesTheEndsAndSpacesTheRestByGround() {
+        // A line of eleven points a tenth of a degree apart: sampling five must keep both ends.
+        val line = (0..10).map { 45.0 + it * 0.01 to 15.0 }
+        val five = Route.sample(line, 5)
+        assertEquals(5, five.size)
+        assertEquals(line.first(), five.first())
+        assertEquals(line.last(), five.last())
+        // And they climb in order, none repeated.
+        assertEquals(five.map { it.first }.sorted(), five.map { it.first })
+    }
+
+    @Test fun samplingAShortLineChangesNothing() {
+        val two = listOf(45.0 to 15.0, 45.1 to 15.0)
+        assertEquals(two, Route.sample(two, 20))
+        assertEquals(two, Route.sample(two, 2))
+    }
+
+    @Test fun samplingRespectsGroundRatherThanHowFinelyItWasDrawn() {
+        // Ten points crowded into the first hundred metres, then one far away. Sampling three
+        // must not spend two of them on the crowd.
+        val crowded = (0..9).map { 45.0 + it * 0.0001 to 15.0 } + listOf(45.5 to 15.0)
+        val three = Route.sample(crowded, 3)
+        assertEquals(3, three.size)
+        assertEquals(45.5, three.last().first, 1e-9)
+        assertTrue(three[1].first.toString(), three[1].first > 45.0)
+    }
+
     @Test fun aSavedRouteIsNamedForTheLettersItRanThrough() {
         val name = Route.nameFor(1_789_387_200_000L, 4)
         assertTrue(name, name.endsWith("(AD)"))

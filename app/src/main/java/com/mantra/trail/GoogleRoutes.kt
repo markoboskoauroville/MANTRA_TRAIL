@@ -90,9 +90,14 @@ object GoogleRoutes {
                     Routing.Option(
                         points = line.map { Fix(it.first, it.second, null, 0L, null) },
                         metres = route.optInt("distanceMeters"),
-                        // Google gives the time, not the climb; the climb is BRouter's to know.
+                        // Google gives the time, not the climb; the climb is BRouter's to know,
+                        // or Google's Elevation API's when he asks for it.
                         climbM = 0,
                         colour = Routing.COLOURS[found.size % Routing.COLOURS.size],
+                        // THE TURNS WERE ALREADY IN THE ANSWER and were being thrown away
+                        // (17.9.2026). On a road they are the difference between a line and
+                        // directions; on a path they are usually silence, which is honest too.
+                        turns = turnsOf(route),
                     )
                 )
             }
@@ -104,6 +109,23 @@ object GoogleRoutes {
         } catch (e: Exception) {
             emptyList<Routing.Option>() to "Google could not be reached: ${e.javaClass.simpleName}"
         }
+    }
+
+    /** Every instruction in the answer, in order, as sentences. */
+    private fun turnsOf(route: JSONObject): List<String> {
+        val legs = route.optJSONArray("legs") ?: return emptyList()
+        val said = ArrayList<String>()
+        for (l in 0 until legs.length()) {
+            val steps = legs.getJSONObject(l).optJSONArray("steps") ?: continue
+            for (s in 0 until steps.length()) {
+                val instruction = steps.getJSONObject(s)
+                    .optJSONObject("navigationInstruction")
+                    ?.optString("instructions")
+                    .orEmpty()
+                if (instruction.isNotBlank()) said.add(instruction)
+            }
+        }
+        return said
     }
 
     private fun place(at: Pair<Double, Double>): JSONObject = JSONObject().put(

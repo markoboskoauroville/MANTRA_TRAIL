@@ -222,6 +222,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Ask Google what the ground does along one of the ways it found. One request, forty samples. */
+    private fun heightsFor(index: Int) {
+        val option = routeOptions.getOrNull(index) ?: return
+        Trail.say("Asking for the heights…")
+        lifecycleScope.launch {
+            val (profile, problem) = Elevation.along(
+                option.points.map { it.lat to it.lon },
+                store,
+            )
+            if (profile == null) {
+                Trail.say(problem)
+                return@launch
+            }
+            routeOptions = routeOptions.mapIndexed { i, o ->
+                if (i == index) o.copy(profile = profile) else o
+            }
+            Trail.say(profile.line())
+        }
+    }
+
     /** Keep one of the ways it found as a track, like anything else in the folder. */
     private fun saveOption(option: Routing.Option) {
         val now = System.currentTimeMillis()
@@ -417,6 +437,7 @@ class MainActivity : ComponentActivity() {
                 onSaveRoute = ::saveRoute,
                 onFindWays = ::findWays,
                 onSaveOption = ::saveOption,
+                onHeights = ::heightsFor,
                 routeOptions = routeOptions,
             )
         }
