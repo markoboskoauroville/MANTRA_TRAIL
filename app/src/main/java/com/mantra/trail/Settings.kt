@@ -60,6 +60,23 @@ private class SettingsState(val store: Store) {
     var keysOpen by mutableStateOf(store.opened("keys"))
     var offlineOpen by mutableStateOf(store.opened("offline"))
     var answer by mutableStateOf<String?>(null)
+
+    /** Opening one is a decision, so it is written down as well as held. */
+    fun setOfflineopen(open: Boolean) {
+        offlineOpen = open
+        store.setOpened("offline", open)
+    }
+
+    fun setGoogleopen(open: Boolean) {
+        googleOpen = open
+        store.setOpened("google", open)
+    }
+
+    fun setKeysopen(open: Boolean) {
+        keysOpen = open
+        store.setOpened("keys", open)
+    }
+
     fun cycleTheme(): String? {
         val next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.size]
         theme = next
