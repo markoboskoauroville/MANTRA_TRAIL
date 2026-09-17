@@ -60,6 +60,17 @@ jobs:
           echo "key-shaped strings in history: ${HITS:-0}"
           [ "${HITS:-0}" = "0" ]
 
+      - name: "Gate G4 — the walking theme against VTM's own schema"
+        run: |
+          # The theme is XML that somebody else's parser reads on a hillside. xmllint knows VTM's
+          # schema, and it caught two real faults the first time it ran (16.9.2026): a caption key
+          # that is not in the allowed set, and a circle attribute that does not exist. Neither
+          # would have shown up before the map failed to draw.
+          sudo apt-get install -y libxml2-utils >/dev/null 2>&1
+          curl -sL -o /tmp/rendertheme.xsd https://raw.githubusercontent.com/mapsforge/vtm/0.25.0/resources/rendertheme.xsd
+          xmllint --noout --schema /tmp/rendertheme.xsd app/src/main/assets/themes/mantra-walk.xml
+          echo "the walking theme validates against VTM 0.25.0's schema"
+
       - name: "Gate G3 — the structural checks"
         run: python3 scripts/verify.py
 

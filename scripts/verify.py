@@ -594,9 +594,23 @@ check("the size said includes the room unpacking needs",
 check("only the map comes out of the archive",
       "fun isTheMap" in (MAIN / "Oam.kt").read_text(),
       "the .poi database is not ours to want")
+# OUR OWN THEME FOR OPENANDROMAPS (16.9.2026). Every tag in it was read out of a real
+# OpenAndroMaps file with tools, not remembered, and the file is validated against VTM's own
+# schema before it ships — which caught two errors that would have been a blank map on a hill.
+theme_path = ROOT / "app/src/main/assets/themes/mantra-walk.xml"
+theme_src = theme_path.read_text() if theme_path.exists() else ""
+check("the walking theme ships with the app", theme_path.exists(), f"{len(theme_src)} bytes")
+check("it draws what makes these maps worth having",
+      all(tag in theme_src for tag in ["contour_ext", "sac_scale", "hknetwork", "natural\" v=\"peak"]),
+      "contour lines, path difficulty, waymarked routes, summits")
+check("it is the theme the app opens with",
+      'KEY_THEME, "MANTRA"' in (MAIN / "Store.kt").read_text() and '"MANTRA"' in screens,
+      "the maps it is for are the ones the app fetches")
+check("a theme that will not load says so rather than drawing nothing",
+      "The walking theme would not load" in canvas_src, "and the plain one is used meanwhile")
 check("the theme is chosen, not fixed at a motorcycle one",
-      "themeFor(store.themeName)" in canvas_src and "THEMES" in screens,
-      "the plain one leads the list")
+      "applyTheme(store.themeName)" in canvas_src and "THEMES" in screens,
+      "ours leads the list, and five of VTM's are behind it")
 check("a map that will not draw can be asked what the service said",
       (MAIN / "TileTest.kt").exists() and "onTestTiles" in screens,
       "401, 429, 404 and no network all look identical on a blank screen")

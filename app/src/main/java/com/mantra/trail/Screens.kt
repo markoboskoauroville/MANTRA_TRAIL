@@ -98,7 +98,7 @@ private const val NORTH_FOLLOW = 2
 
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 /** VTM's own themes, in the order they are offered. The plain one leads because it is plainest. */
-private val THEMES = listOf("DEFAULT", "OSMARENDER", "NEWTRON", "BIKER", "MOTORIDER", "TRONRENDER")
+private val THEMES = listOf("MANTRA", "DEFAULT", "OSMARENDER", "NEWTRON", "BIKER", "TRONRENDER")
 
 private val TRACK_COLOURS = listOf(0xFF34D399L, 0xFFE8A64BL, 0xFFEF4444L, 0xFF60A5FAL, 0xFFF2DDB4L)
 
@@ -1713,12 +1713,13 @@ private fun SettingsFace(
                                 .background(if (name == theme) Paint.Amber else Paint.Veil)
                                 .clickable {
                                     theme = name
-                                    CanvasHolder.canvas?.setTheme(name)
+                                    Trail.say(CanvasHolder.canvas?.setTheme(name))
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
                             Label(
-                                text = name.lowercase(),
+                                // Ours is named for what it is for, not for what it is called.
+                                text = if (name == "MANTRA") "walking" else name.lowercase(),
                                 colour = if (name == theme) Paint.Ground else Paint.Sand,
                                 size = 11,
                             )

@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MANTRA WALK — a VTM render theme for OpenAndroMaps.
+
+  Written 16.9.2026 because OpenAndroMaps' own theme, Elevate, is in mapsforge's XML dialect and
+  VTM's is a different one. Every tag styled here was READ OUT OF A REAL OPENANDROMAPS FILE rather
+  than remembered: contour_ext with its three weights, sac_scale T1 to T6, hknetwork and
+  osmc_color for waymarked routes, mtb_scale, natural=peak and saddle, tourism=wilderness_hut.
+  That is what makes these maps worth 1.2 GB, and none of VTM's own themes draw any of it.
+
+  THE PRINCIPLE: a walking map answers three questions. Where does the ground rise, where can I
+  walk, and how hard is it. Everything else is background, drawn quietly so those three read at a
+  glance in daylight, on a phone, by somebody with low vision.
+-->
+<rendertheme xmlns="http://opensciencemap.org/rendertheme"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://opensciencemap.org/rendertheme https://raw.githubusercontent.com/mapsforge/vtm/master/resources/rendertheme.xsd"
+    map-background="#f6f3ec" version="1" base-stroke-width="1.1" base-text-scale="1.15">
+
+    <!--###### TEXT ######-->
+    <style-text id="place-big" k="name" size="20" fill="#2b2b2b" stroke="#ffffff" stroke-width="2.6" caption="true" />
+    <style-text id="place" k="name" size="16" fill="#3a3a3a" stroke="#ffffff" stroke-width="2.4" caption="true" />
+    <style-text id="peak-name" k="name" size="15" fill="#6b3b10" stroke="#ffffff" stroke-width="2.4" caption="true" dy="-16" />
+    <style-text id="peak-ele" k="ele" size="14" fill="#6b3b10" stroke="#ffffff" stroke-width="2.4" caption="true" dy="16" />
+    <style-text id="water-name" k="name" size="14" fill="#2f6f9f" stroke="#ffffff" stroke-width="2.0" caption="true" />
+    <style-text id="path-name" k="name" size="13" fill="#7a3b00" stroke="#ffffff" stroke-width="2.4" />
+    <!-- The waymark number would be better than the name here, but VTM's schema allows a caption
+         to read only name, ref, ele and the house-number keys, and OpenAndroMaps keeps the walking
+         number in ref_hike. So the route is drawn and named; its number waits for a theme dialect
+         that can reach it. -->
+    <style-text id="route-ref" k="ref" size="15" fill="#b3261e" stroke="#ffffff" stroke-width="2.8" caption="true" dy="-14" />
+    <style-text id="contour-ele" k="ele" size="11" fill="#9a6b3f" stroke="#f6f3ec" stroke-width="2.0" />
+
+    <!--###### LINES ######-->
+    <!-- The ground itself. Three weights, as the data has them: every fifth line heavier, so a
+         slope can be counted without reading a number. -->
+    <style-line id="contour-minor" stroke="#c8ab8a" width="0.55" />
+    <style-line id="contour-medium" stroke="#bd9a71" width="0.8" />
+    <style-line id="contour-major" stroke="#a87f50" width="1.2" />
+
+    <!-- Paths, by how hard they are to walk. The colour is the difficulty and nothing else. -->
+    <style-line id="path-easy" stroke="#8a4b12" width="1.5" stipple="14" stipple-stroke="#8a4b12" stipple-width="0.9" cap="butt" />
+    <style-line id="path-hard" stroke="#b3261e" width="1.7" stipple="10" stipple-stroke="#b3261e" stipple-width="1.0" cap="butt" />
+    <style-line id="path-alpine" stroke="#7b1fa2" width="1.9" stipple="8" stipple-stroke="#7b1fa2" stipple-width="1.1" cap="butt" />
+    <style-line id="track" stroke="#9c6b3f" width="2.0" stipple="20" stipple-stroke="#9c6b3f" stipple-width="1.2" />
+    <style-line id="waymarked" stroke="#e53935" width="3.4" cap="butt" />
+
+    <style-line id="road-major" stroke="#f2b64c" width="3.2" outline="#c98f2a" />
+    <style-line id="road" stroke="#ffffff" width="2.4" outline="#b9b2a4" />
+    <style-line id="water-line" stroke="#7fb2d9" width="1.6" />
+    <style-line id="cliff" stroke="#6f6f6f" width="1.4" stipple="6" stipple-stroke="#6f6f6f" stipple-width="1.4" />
+
+    <!--###### AREAS ######-->
+    <style-area id="forest" fill="#cfe0c0" />
+    <style-area id="scrub" fill="#dbe4c4" />
+    <style-area id="rock" fill="#e2ded6" />
+    <style-area id="water" fill="#aed3ec" />
+    <style-area id="built" fill="#eae5da" />
+    <style-area id="building" fill="#ddd4c6" />
+
+    <!--###### THE GROUND ######-->
+    <m e="way" k="landuse" v="forest|wood">
+        <area use="forest" />
+    </m>
+    <m e="way" k="natural" v="wood">
+        <area use="forest" />
+    </m>
+    <m e="way" k="natural" v="scrub|heath|grassland">
+        <area use="scrub" />
+    </m>
+    <m e="way" k="natural" v="scree|rock|bare_rock|shingle">
+        <area use="rock" />
+    </m>
+    <m e="way" k="landuse" v="residential|industrial|retail|commercial">
+        <area use="built" />
+    </m>
+    <m e="way" k="natural" v="water|issea|sea">
+        <area use="water" />
+    </m>
+    <m e="way" k="waterway" v="riverbank">
+        <area use="water" />
+    </m>
+    <m e="way" k="building">
+        <m zoom-min="16">
+            <area use="building" />
+        </m>
+    </m>
+
+    <!--###### CONTOUR LINES — the reason these maps exist ######-->
+    <m e="way" k="contour_ext">
+        <m v="elevation_minor">
+            <m zoom-min="14">
+                <line use="contour-minor" />
+            </m>
+        </m>
+        <m v="elevation_medium">
+            <m zoom-min="13">
+                <line use="contour-medium" />
+            </m>
+        </m>
+        <m v="elevation_major">
+            <m zoom-min="11">
+                <line use="contour-major" />
+                <m zoom-min="14">
+                    <text use="contour-ele" />
+                </m>
+            </m>
+        </m>
+    </m>
+
+    <!--###### WATER ######-->
+    <m e="way" k="waterway" v="river|stream|canal">
+        <m zoom-min="12">
+            <line use="water-line" />
+        </m>
+    </m>
+    <m e="way" k="natural" v="cliff">
+        <m zoom-min="14">
+            <line use="cliff" />
+        </m>
+    </m>
+
+    <!--###### ROADS, quietly ######-->
+    <m e="way" k="highway">
+        <m v="motorway|trunk|primary|secondary" zoom-min="8">
+            <line use="road-major" />
+        </m>
+        <m v="tertiary|unclassified|residential|living_street|service|pedestrian" zoom-min="13">
+            <line use="road" />
+        </m>
+        <m v="track" zoom-min="13">
+            <line use="track" />
+        </m>
+    </m>
+
+    <!--###### PATHS, BY DIFFICULTY ######-->
+    <!-- The colour says how hard it is: brown for a walk, red for hands-out-of-pockets, purple
+         for T4 and above, where a slip has consequences. -->
+    <m e="way" k="highway" v="path|footway|bridleway|steps">
+        <m zoom-min="13">
+            <m k="sac_scale" v="T4|T5|T6">
+                <line use="path-alpine" />
+            </m>
+            <m k="sac_scale" v="T3">
+                <line use="path-hard" />
+            </m>
+            <m k="sac_scale" v="~|T1|T2">
+                <line use="path-easy" />
+            </m>
+            <m zoom-min="15">
+                <text use="path-name" />
+            </m>
+        </m>
+    </m>
+
+    <!--###### WAYMARKED ROUTES ######-->
+    <!-- hknetwork is OpenAndroMaps' own: a path that belongs to a marked network, drawn under the
+         path itself so both read, with its number beside it. -->
+    <m e="way" k="hknetwork" v="iwn|nwn|rwn|lwn">
+        <m zoom-min="12">
+            <line use="waymarked" />
+            <m zoom-min="14">
+                <text use="route-ref" />
+            </m>
+        </m>
+    </m>
+
+    <!--###### WHAT IS WORTH WALKING TO ######-->
+    <m e="node" k="natural" v="peak">
+        <m zoom-min="11">
+            <circle radius="3.0" fill="#6b3b10" stroke="#ffffff" stroke-width="1.2" />
+            <text use="peak-name" />
+            <m zoom-min="13">
+                <text use="peak-ele" />
+            </m>
+        </m>
+    </m>
+    <m e="node" k="natural" v="saddle">
+        <m zoom-min="13">
+            <circle radius="2.4" fill="#8a6a3a" stroke="#ffffff" stroke-width="1.0" />
+            <text use="peak-name" />
+        </m>
+    </m>
+    <m e="node" k="tourism" v="wilderness_hut|alpine_hut|camp_site|shelter">
+        <m zoom-min="12">
+            <circle radius="3.4" fill="#2e7d32" stroke="#ffffff" stroke-width="1.2" />
+            <text use="place" />
+        </m>
+    </m>
+    <m e="node" k="amenity" v="drinking_water|shelter">
+        <m zoom-min="15">
+            <circle radius="2.6" fill="#2f6f9f" stroke="#ffffff" stroke-width="1.0" />
+        </m>
+    </m>
+    <m e="node" k="natural" v="spring">
+        <m zoom-min="14">
+            <circle radius="2.6" fill="#2f6f9f" stroke="#ffffff" stroke-width="1.0" />
+            <text use="water-name" />
+        </m>
+    </m>
+
+    <!--###### NAMES ######-->
+    <m e="node" k="place" v="city|town">
+        <m zoom-min="8">
+            <text use="place-big" />
+        </m>
+    </m>
+    <m e="node" k="place" v="village|hamlet|suburb|locality">
+        <m zoom-min="12">
+            <text use="place" />
+        </m>
+    </m>
+    <m e="way" k="natural" v="water">
+        <m zoom-min="12">
+            <text use="water-name" />
+        </m>
+    </m>
+</rendertheme>

@@ -158,7 +158,7 @@ class Store(context: Context) {
      * motorcycle theme — hence a coast covered in petrol pumps (16.9.2026). Now his to choose.
      */
     var themeName: String
-        get() = prefs.getString(KEY_THEME, "DEFAULT") ?: "DEFAULT"
+        get() = prefs.getString(KEY_THEME, "MANTRA") ?: "MANTRA"
         set(v) = prefs.edit().putString(KEY_THEME, v).apply()
 
     /** Which BRouter profile the ways are found for. */

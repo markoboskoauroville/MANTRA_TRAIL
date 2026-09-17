@@ -109,7 +109,7 @@ class VtmCanvas(private val context: Context, private val store: Store) {
             map.layers().add(labels)
             buildingLayer = buildings
             labelLayer = labels
-            map.setTheme(themeFor(store.themeName))
+            applyTheme(store.themeName)
             restoreOverlays()
             map.updateMap(true)
             null
@@ -331,6 +331,17 @@ class VtmCanvas(private val context: Context, private val store: Store) {
      * at, and it is a motorcycle theme: every petrol station in Croatia, drawn large, over a
      * coast he was trying to read.
      */
+    /**
+     * OUR OWN THEME, for OpenAndroMaps. Loaded from the APK's assets rather than from VTM's, and
+     * it is the only one that draws contour lines, path difficulty and waymarked routes, because
+     * those are OpenAndroMaps' own tags and no general theme knows them.
+     */
+    private fun mantraTheme(): org.oscim.theme.IRenderTheme? = runCatching {
+        org.oscim.theme.ThemeLoader.load(
+            org.oscim.android.theme.AssetsRenderTheme(context.assets, "", "themes/mantra-walk.xml")
+        )
+    }.getOrNull()
+
     private fun themeFor(name: String): VtmThemes = when (name) {
         "OSMARENDER" -> VtmThemes.OSMARENDER
         "BIKER" -> VtmThemes.BIKER
@@ -341,14 +352,32 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         else -> VtmThemes.DEFAULT
     }
 
-    /** Draw the offline map again under a different theme, keeping everything on top of it. */
-    fun setTheme(name: String) {
-        store.themeName = name
-        if (baseLayer != null) {
-            map.setTheme(themeFor(name))
-            map.clearMap()
-            map.updateMap(true)
+    /**
+     * Apply a theme by name. MANTRA is ours, from the assets; the rest are VTM's own. A theme
+     * that will not load says so and the plain one is used, rather than a map that draws nothing.
+     */
+    private fun applyTheme(name: String): String? {
+        if (name == "MANTRA") {
+            val theme = mantraTheme()
+            if (theme != null) {
+                map.setTheme(theme)
+                return null
+            }
+            map.setTheme(VtmThemes.DEFAULT)
+            return "The walking theme would not load; using the plain one"
         }
+        map.setTheme(themeFor(name))
+        return null
+    }
+
+    /** Draw the offline map again under a different theme, keeping everything on top of it. */
+    fun setTheme(name: String): String? {
+        store.themeName = name
+        if (baseLayer == null) return null
+        val problem = applyTheme(name)
+        map.clearMap()
+        map.updateMap(true)
+        return problem
     }
 
     private fun symbolFor(letter: String): org.oscim.backend.canvas.Bitmap =
