@@ -314,6 +314,17 @@ check("the first draw is triggered by the view existing, not by a bare effect",
 # empty; his screenshot showed the cost — the top line said Satellite, Google had refused the key,
 # and the offline map was drawn underneath. A name that disagrees with the ground is worse than
 # nothing, because only the name is legible at a glance.
+# 17.9.2026: two engines, so no key names one of them. Canvases sends each press to whichever map
+# is on the screen; before this the keys asked the offline canvas and were told, truthfully and
+# uselessly, that it was not up.
+check("every key speaks to whichever map is up",
+      (MAIN / "Canvases.kt").exists() and "Canvases.googleIsUp" in screens
+      and "CanvasHolder.canvas?.zoomIn" not in screens,
+      "not to the offline one by name")
+check("a restricted key says which app is asking",
+      (MAIN / "AndroidCaller.kt").exists() and "X-Android-Package" in (MAIN / "AndroidCaller.kt").read_text()
+      and "identify(connection)" in (MAIN / "GoogleRoutes.kt").read_text(),
+      "without it Google answers: application <empty> are blocked")
 check("a map that cannot be drawn draws nothing",
       "CanvasHolder.canvas?.blank()" in screens and "fun blank()" in canvas_src,
       "and the reason is on the screen with it")
@@ -465,7 +476,7 @@ check("renaming goes to the provider, not through a wrapper that cannot do it",
 check("deleting goes the same way",
       "DocumentsContract.deleteDocument" in folder_src, "one lesson, applied twice")
 check("the position can be locked to the middle of the screen",
-      "if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)" in screens,
+      "if (follow && fix != null) Canvases.centreOn(fix)" in screens,
       "one press holds it, the next lets the map go")
 # Refined 15.9.2026: one tap centres, TWO IN A ROW lock. A second tap a minute later is somebody
 # centring again, not somebody asking for a lock.
@@ -586,15 +597,15 @@ check("the compass is one white ring and a needle inside it",
       and "* 0.58f" in screens,
       "nothing drawn twice, nothing reaching past the ring, no letter")
 check("one tap rights the map and that is all it does",
-      "onTap = { CanvasHolder.canvas?.setMapRotation(0f) }" in screens
+      "onTap = { Canvases.setMapRotation(0f) }" in screens
       and "NORTH_FOLLOW" not in screens,
       "no second state to be in by accident")
 check("there is a compass that puts north up",
-      "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
+      "private fun LittleCompass" in screens and "Canvases.setMapRotation(0f)" in screens,
       "one tap")
 # Removed with the second tap, 17.9.2026: he asked for a control that does one thing.
 check("the compass reports the map's own angle",
-      "mapTurn = CanvasHolder.canvas?.mapRotationDeg()" in screens,
+      "mapTurn = Canvases.mapRotationDeg()" in screens,
       "so it cannot disagree with what is under it")
 
 check("the map can be turned and the turn can be read back",
@@ -638,7 +649,7 @@ check("a long press on the point key opens the manager",
       "one key, one long press, one menu")
 check("removing a point takes it off the map",
       "points = points.filterIndexed { i, _ -> i != index }" in screens
-      and "CanvasHolder.canvas?.setRoutePoints(points)" in screens,
+      and "Canvases.setRoutePoints(points)" in screens,
       "the row's own way out, one per point")
 check("a saved route is an ordinary track named for the letters it ran through",
       "Route.nameFor(now, points.size)" in activity and "Gpx.whole(name, fixes, now)" in activity,

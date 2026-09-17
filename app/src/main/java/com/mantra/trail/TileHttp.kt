@@ -34,6 +34,11 @@ class TileHttp(private val source: UrlTileSource) : HttpEngine {
             connectTimeout = 15_000
             readTimeout = 20_000
             setRequestProperty("User-Agent", "MantraTrail/1")
+            // The same two headers the SDK sends: an Android-restricted key is refused without
+            // them, and every tile came back "application <empty> are blocked" (17.9.2026).
+            GoogleTiles.context?.let { ctx ->
+                AndroidCaller.headers(ctx).forEach { (k, v) -> setRequestProperty(k, v) }
+            }
             instanceFollowRedirects = true
         }
         connection = open

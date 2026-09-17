@@ -107,6 +107,8 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
         )
     }
 
+    fun zoomLevel(): Int = map?.cameraPosition?.zoom?.toInt() ?: 0
+
     fun mapRotationDeg(): Float = map?.cameraPosition?.bearing ?: 0f
 
     fun centre(): Fix? = map?.cameraPosition?.target?.let { Fix(it.latitude, it.longitude, null, 0L, null) }

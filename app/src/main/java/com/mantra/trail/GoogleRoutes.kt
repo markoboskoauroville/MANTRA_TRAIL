@@ -24,6 +24,15 @@ import java.net.URL
  */
 object GoogleRoutes {
 
+    /** Set once by the activity; without it an Android-restricted key is refused. */
+    @Volatile
+    var context: android.content.Context? = null
+
+    private fun identify(connection: java.net.HttpURLConnection) {
+        val ctx = context ?: return
+        AndroidCaller.headers(ctx).forEach { (k, v) -> connection.setRequestProperty(k, v) }
+    }
+
     private const val URL_BASE = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
     /** The fields asked for. Asking for fewer is cheaper, and these are all that is drawn. */
@@ -60,6 +69,7 @@ object GoogleRoutes {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("X-Goog-Api-Key", key)
             connection.setRequestProperty("X-Goog-FieldMask", FIELDS)
+            identify(connection)
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = connection.responseCode

@@ -21,6 +21,15 @@ import java.net.URL
  */
 object Elevation {
 
+    /** Set once by the activity; without it an Android-restricted key is refused. */
+    @Volatile
+    var context: android.content.Context? = null
+
+    private fun identify(connection: java.net.HttpURLConnection) {
+        val ctx = context ?: return
+        AndroidCaller.headers(ctx).forEach { (k, v) -> connection.setRequestProperty(k, v) }
+    }
+
     private const val API = "https://maps.googleapis.com/maps/api/elevation/json"
 
     /** The height at each sample, in metres, in the order they were given. */
@@ -55,6 +64,7 @@ object Elevation {
                 .openConnection() as HttpURLConnection
             connection.connectTimeout = 15_000
             connection.readTimeout = 20_000
+            identify(connection)
             val code = connection.responseCode
             val text = if (code == HttpURLConnection.HTTP_OK) {
                 connection.inputStream.bufferedReader().use { it.readText() }

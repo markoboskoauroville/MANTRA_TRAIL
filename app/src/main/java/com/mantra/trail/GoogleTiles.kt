@@ -27,6 +27,18 @@ import java.net.URL
 object GoogleTiles {
 
     /**
+     * WHO IS ASKING. Without this an Android-restricted key is refused with
+     * "Requests from this Android client application <empty> are blocked" (17.9.2026).
+     */
+    @Volatile
+    var context: android.content.Context? = null
+
+    private fun identify(connection: java.net.HttpURLConnection) {
+        val ctx = context ?: return
+        AndroidCaller.headers(ctx).forEach { (k, v) -> connection.setRequestProperty(k, v) }
+    }
+
+    /**
      * TRY THE KEYS IN TURN (17.9.2026). One key that stops working used to mean no Google map at
      * all; with a ring, the app walks it in order — the one that worked last first — and the
      * verdict of each attempt is written back, so the next walk starts with the one that answered.
@@ -94,6 +106,7 @@ object GoogleTiles {
             connection.connectTimeout = 15_000
             connection.readTimeout = 15_000
             connection.setRequestProperty("Content-Type", "application/json")
+            identify(connection)
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) {

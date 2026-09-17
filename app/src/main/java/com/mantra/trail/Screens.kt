@@ -188,13 +188,13 @@ fun TrailApp(
     // enough for a number that changes when a thumb moves, and it stops with the composition.
     LaunchedEffect(Unit) {
         while (true) {
-            CanvasHolder.canvas?.currentZoom()?.let {
+            Canvases.currentZoom()?.let {
                 if (it != zoom) {
                     zoom = it
                     // A blank offline map at a zoom explains itself now, rather than waiting to
                     // be photographed: the file is asked what it holds under the crosshair.
                     if (layer.kind == LayerKind.VECTOR_FILE) {
-                        Trail.say(CanvasHolder.canvas?.emptyHere())
+                        Trail.say(Canvases.emptyHere())
                     }
                 }
             }
@@ -229,7 +229,7 @@ fun TrailApp(
                 LittleCompass(
                     turn = mapTurn,
                     modifier = Modifier.align(Alignment.TopEnd),
-                    onTap = { CanvasHolder.canvas?.setMapRotation(0f) },
+                    onTap = { Canvases.setMapRotation(0f) },
                 )
             }
         }
@@ -286,7 +286,7 @@ fun TrailApp(
                     Modifier.fillMaxWidth().background(Paint.Bar).padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Key(glyph = "−", lit = false, onClick = { CanvasHolder.canvas?.zoomOut() })
+                    Key(glyph = "−", lit = false, onClick = { Canvases.zoomOut() })
                     // T CYCLES THE COMPASS: dark, night, off. Dark ink for a light map, light ink
                     // for a dark one, and off for neither — three presses to come round.
                     Key(
@@ -343,18 +343,18 @@ fun TrailApp(
                         letter = Route.letterFor(points.size),
                         placed = points.isNotEmpty(),
                         onTap = {
-                            val at = CanvasHolder.canvas?.centre() ?: return@PointKey
+                            val at = Canvases.centre() ?: return@PointKey
                             if (points.size >= Route.MAX_POINTS) {
                                 Trail.say("That is as many points as one route holds")
                                 return@PointKey
                             }
                             points = points + at
                             store.routePoints = points
-                            CanvasHolder.canvas?.setRoutePoints(points)
+                            Canvases.setRoutePoints(points)
                         },
                         onLongPress = { routeMenu = true },
                     )
-                    Key(glyph = "+", lit = false, onClick = { CanvasHolder.canvas?.zoomIn() })
+                    Key(glyph = "+", lit = false, onClick = { Canvases.zoomIn() })
                 }
             }
         }
@@ -380,7 +380,7 @@ fun TrailApp(
         }
 
         LaunchedEffect(ready) {
-            if (ready) CanvasHolder.canvas?.setRoutePoints(points)
+            if (ready) Canvases.setRoutePoints(points)
         }
 
         // THE LIGHT IN FRONT OF THE DOT NEEDS THE HEADING, whether or not the compass overlay is
@@ -389,9 +389,9 @@ fun TrailApp(
         LaunchedEffect(ready) {
             while (true) {
                 if (ready) {
-                    CanvasHolder.canvas?.setHeading(sensors.heading())
+                    Canvases.setHeading(sensors.heading())
                     // The compass reports the map's own angle, so it is read where the heading is.
-                    mapTurn = CanvasHolder.canvas?.mapRotationDeg() ?: 0f
+                    mapTurn = Canvases.mapRotationDeg() ?: 0f
                 }
                 delay(200)
             }
@@ -405,8 +405,8 @@ fun TrailApp(
                     if (points.size < Route.MAX_POINTS) {
                         points = points + (place.lat to place.lon)
                         store.routePoints = points
-                        CanvasHolder.canvas?.setRoutePoints(points)
-                        CanvasHolder.canvas?.centreOn(Fix(place.lat, place.lon, null, 0L, null))
+                        Canvases.setRoutePoints(points)
+                        Canvases.centreOn(Fix(place.lat, place.lon, null, 0L, null))
                     }
                     showPlaces = false
                     Trail.say("${place.name} added as ${Route.letterFor(points.size - 1)}")
@@ -425,17 +425,17 @@ fun TrailApp(
                     showPlaces = true
                 },
                 onAdd = {
-                    val at = CanvasHolder.canvas?.centre()
+                    val at = Canvases.centre()
                     if (at != null && points.size < Route.MAX_POINTS) {
                         points = points + at
                         store.routePoints = points
-                        CanvasHolder.canvas?.setRoutePoints(points)
+                        Canvases.setRoutePoints(points)
                     }
                 },
                 onRemove = { index ->
                     points = points.filterIndexed { i, _ -> i != index }
                     store.routePoints = points
-                    CanvasHolder.canvas?.setRoutePoints(points)
+                    Canvases.setRoutePoints(points)
                 },
                 onRoute = { profile, wanted -> onFindWays(points, profile, wanted) },
                 onSaveOption = { option -> onSaveOption(option) },
@@ -505,7 +505,7 @@ fun TrailApp(
                 },
                 onRename = onRenameTrack,
                 onHide = {
-                    CanvasHolder.canvas?.clearSavedTrack()
+                    Canvases.clearSavedTrack()
                     Trail.say(null)
                 },
                 onDelete = onDeleteTrack,
@@ -604,6 +604,7 @@ private fun MapSurface(
     //
     // Google's renderer draws the Google views; VTM draws the file on the phone. Whichever is not
     // in use is not in the tree at all, so a walk with no signal carries nothing waiting to fail.
+    Canvases.googleIsUp = layer.family == MapLayer.Family.GOOGLE
     if (layer.family == MapLayer.Family.GOOGLE) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -642,9 +643,9 @@ private fun MapSurface(
     )
 
     LaunchedEffect(line.size, fix?.timeMs, follow) {
-        CanvasHolder.canvas?.drawTrack(line)
-        CanvasHolder.canvas?.drawPosition(fix)
-        if (follow && fix != null) CanvasHolder.canvas?.centreOn(fix)
+        Canvases.drawTrack(line)
+        Canvases.drawPosition(fix)
+        if (follow && fix != null) Canvases.centreOn(fix)
     }
 }
 

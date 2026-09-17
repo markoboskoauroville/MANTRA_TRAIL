@@ -21,6 +21,15 @@ import java.net.URL
  */
 object Places {
 
+    /** Set once by the activity; without it an Android-restricted key is refused. */
+    @Volatile
+    var context: android.content.Context? = null
+
+    private fun identify(connection: java.net.HttpURLConnection) {
+        val ctx = context ?: return
+        AndroidCaller.headers(ctx).forEach { (k, v) -> connection.setRequestProperty(k, v) }
+    }
+
     private const val SEARCH = "https://places.googleapis.com/v1/places:searchText"
     private const val FIELDS = "places.displayName,places.formattedAddress,places.location"
 
@@ -64,6 +73,7 @@ object Places {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("X-Goog-Api-Key", key)
             connection.setRequestProperty("X-Goog-FieldMask", FIELDS)
+            identify(connection)
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
 
             val code = connection.responseCode

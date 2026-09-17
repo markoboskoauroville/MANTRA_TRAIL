@@ -402,6 +402,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // WHO IS ASKING, told once (17.9.2026). The key is restricted to this package and this
+        // signing certificate; a web call that does not say so is refused.
+        GoogleTiles.context = applicationContext
+        GoogleRoutes.context = applicationContext
+        Places.context = applicationContext
+        Elevation.context = applicationContext
         // From targetSdk 35 Android draws every app edge to edge and insets nothing for us, so
         // the window is the whole glass and the bars are painted over whatever is under them.
         // The screen applies safeDrawingPadding; this line is the other half of the same fact.
