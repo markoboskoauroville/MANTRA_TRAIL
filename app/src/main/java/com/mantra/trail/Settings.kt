@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -55,22 +56,7 @@ private class SettingsState(val store: Store) {
     var theme by mutableStateOf(store.themeName)
     var googleOpen by mutableStateOf(false)
     var offlineOpen by mutableStateOf(false)
-    var googleFamily by mutableStateOf(store.familyInToggle(MapLayer.Family.GOOGLE))
     var answer by mutableStateOf<String?>(null)
-    val googleViews = mutableStateListOf<Boolean>().apply {
-        Layers.GOOGLE_ALL.forEach { add(store.inToggle(it.id)) }
-    }
-
-    fun chooseGoogleFamily(on: Boolean) {
-        googleFamily = on
-        store.setFamilyInToggle(MapLayer.Family.GOOGLE, on)
-    }
-
-    fun chooseGoogleView(index: Int, on: Boolean) {
-        googleViews[index] = on
-        store.setInToggle(Layers.GOOGLE_ALL[index].id, on)
-    }
-
     fun cycleTheme(): String? {
         val next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.size]
         theme = next
@@ -90,6 +76,8 @@ fun SettingsFace(
     drawingMapName: String,
     offlineUnder: String,
     onUseMap: (java.io.File) -> Unit,
+    onOfflineView: (Layers.OfflineView) -> Unit,
+    chosenGoogleId: String,
     version: String,
     onPick: (MapLayer) -> Unit,
     onChooseMapFile: () -> Unit,
@@ -143,6 +131,12 @@ fun SettingsFace(
                 )
             }
 
+            // TWO MAPS, AND EACH HAS VIEWS YOU CHOOSE ONE OF (17.9.2026).
+            //
+            // The ticks are gone. A tick said "this view is allowed in the switcher", which is a
+            // question nobody asked: he wants to pick a view and see it. So each view is a radio —
+            // one at a time, the chosen one marked — and choosing closes the settings and draws it.
+            // The key on the map screen turns between the two MAPS, not through eight views.
             Group("maps") {
                 Line(
                     title = "offline map",
@@ -153,22 +147,14 @@ fun SettingsFace(
                     },
                 )
                 if (state.offlineOpen) {
-                    if (installedMaps.isEmpty()) {
+                    Layers.OFFLINE_VIEWS.forEach { view ->
                         Rule()
                         Line(
-                            title = "no map on the phone yet",
-                            under = "open this row to fetch one",
+                            title = view.label,
+                            under = view.about,
                             inset = true,
-                            onPress = onMaps,
-                        )
-                    }
-                    installedMaps.forEach { file ->
-                        Rule()
-                        Line(
-                            title = file.name.removePrefix("oam-").removeSuffix(".map"),
-                            under = if (file.name == drawingMapName) "drawing now" else "${file.length() / 1_000_000} MB",
-                            inset = true,
-                            onPress = { onUseMap(file) },
+                            onPress = { onOfflineView(view) },
+                            trailing = { Dot(chosen = view.theme == state.theme) },
                         )
                     }
                 }
@@ -176,26 +162,20 @@ fun SettingsFace(
                 Rule()
                 Line(
                     title = "Google map",
-                    under = if (hasGoogleKey) "key set · four views" else "needs your own key",
-                    // Google has no screen of its own: its views and its key are few enough to
-                    // live under the row itself, so the arrow and the row do the same thing here
-                    // and neither pretends otherwise (17.9.2026).
+                    under = if (hasGoogleKey) "key set" else "needs your own key",
                     onPress = { state.googleOpen = !state.googleOpen },
                     trailing = {
                         Caret(open = state.googleOpen) { state.googleOpen = !state.googleOpen }
                     },
                 )
                 if (state.googleOpen) {
-                    Layers.GOOGLE_ALL.forEachIndexed { index, layer ->
+                    Layers.GOOGLE_ALL.forEach { layer ->
                         Rule()
                         Line(
                             title = layer.name,
-                            under = if (layer.id == current.id) "drawing now" else null,
                             inset = true,
                             onPress = { onPick(layer) },
-                            trailing = {
-                                Box2(state.googleViews[index]) { state.chooseGoogleView(index, it) }
-                            },
+                            trailing = { Dot(chosen = layer.id == chosenGoogleId) },
                         )
                     }
                     Rule()
@@ -292,6 +272,27 @@ private fun Line(
  * to point down when its list is open, and it is a hit area of its own — the row's own tap opens
  * that map's options, and this opens its views.
  */
+/**
+ * A RADIO MARK: one of these is filled and the rest are rings. Not a tick — a tick is a question
+ * about permission, and the question here is which one he wants to see (17.9.2026).
+ */
+@Composable
+private fun Dot(chosen: Boolean) {
+    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(20.dp)) {
+            val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+            val r = size.minDimension / 2f - 1.dp.toPx()
+            drawCircle(
+                color = if (chosen) Paint.Amber else Paint.Dim,
+                radius = r,
+                center = c,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(1.4.dp.toPx()),
+            )
+            if (chosen) drawCircle(Paint.Amber, radius = r * 0.5f, center = c)
+        }
+    }
+}
+
 @Composable
 private fun Caret(open: Boolean, onTap: () -> Unit) {
     Box(
@@ -307,33 +308,6 @@ private fun Rule() {
     Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(1.dp).background(Paint.Rule))
 }
 
-/**
- * A TICK THAT MOVES WHEN IT IS TAPPED. The old one asked the preferences whether it was ticked
- * every time it was drawn, so tapping it changed the disk and not the screen (17.9.2026). This one
- * is told, and the telling is what redraws it.
- */
-@Composable
-private fun Box2(checked: Boolean, onChange: (Boolean) -> Unit) {
-    Box(
-        Modifier.size(48.dp).clickable { onChange(!checked) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(22.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(if (checked) Paint.Amber else Color.Transparent)
-                .border(
-                    width = 1.5.dp,
-                    color = if (checked) Paint.Amber else Paint.Dim,
-                    shape = RoundedCornerShape(5.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (checked) Words("✓", Paint.Ground, 14)
-        }
-    }
-}
 
 @Composable
 private fun Words(

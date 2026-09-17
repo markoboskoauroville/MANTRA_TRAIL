@@ -140,6 +140,25 @@ object Layers {
      */
     val ALL: List<MapLayer> = listOf(OFFLINE) + GOOGLE_ALL
 
+    /**
+     * THE OFFLINE MAP'S VIEWS (17.9.2026). Google has four ways of drawing the same ground and the
+     * offline map had none, which made the two entries in the settings look alike and behave
+     * differently. It has four now: the same file drawn four ways, by four themes.
+     *
+     * The name is what he chooses between; the theme behind it is this app's business.
+     */
+    data class OfflineView(val label: String, val theme: String, val about: String)
+
+    val OFFLINE_VIEWS: List<OfflineView> = listOf(
+        OfflineView("Walking", "MANTRA", "contours, path difficulty, waymarked routes"),
+        OfflineView("Plain", "DEFAULT", "roads and places, quietly"),
+        OfflineView("Outline", "OSMARENDER", "thin lines, heavy labels"),
+        OfflineView("Night", "NEWTRON", "dark ground, bright roads"),
+    )
+
+    fun offlineViewFor(theme: String): OfflineView =
+        OFFLINE_VIEWS.firstOrNull { it.theme == theme } ?: OFFLINE_VIEWS.first()
+
     fun byId(id: String): MapLayer = ALL.firstOrNull { it.id == id } ?: OFFLINE
 
     fun of(family: MapLayer.Family): List<MapLayer> = ALL.filter { it.family == family }

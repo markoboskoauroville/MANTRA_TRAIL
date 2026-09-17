@@ -470,29 +470,10 @@ check("the settings are grouped into cards with titles",
 check("the settings read the store once, not while drawing",
       "private class SettingsState" in settings_src and "remember(store) { SettingsState(store) }" in settings_src,
       "a tap moves the holder, the holder redraws the screen, the store is written behind it")
-check("a tick is told whether it is ticked",
-      "private fun Box2(checked: Boolean" in settings_src,
-      "rather than asking the disk every frame")
 check("a row says what it is and what it is set to",
       "Words(title, Paint.Sand, 15, TextAlign.Start)" in settings_src
       and "if (under != null) Words(under" in settings_src,
       "the title first, its state underneath, as Android does it")
-check("a map can be taken out of the toggle and still be in the list",
-      "store.inToggle" in screens and "fun inToggle" in (MAIN / "Store.kt").read_text(),
-      "excluding a map from the toggle is not the same as not having it")
-# Rewritten 15.9.2026: the toggle used to walk the FAMILIES, one remembered style each, so three
-# ticked Thunderforest maps got him one and the other two were unreachable from the map screen.
-check("the toggle walks every ticked map, not one per family",
-      "if (!store.inToggle(candidate.id)) continue" in screens
-      and "for (step in 1..all.size)" in screens,
-      "the list is the order, the ticks are the filter")
-check("a group can be taken out without forgetting what was ticked inside it",
-      "fun familyInToggle" in (MAIN / "Store.kt").read_text()
-      and "store.familyInToggle(candidate.family)" in screens,
-      "ticking the group again brings back exactly the maps he chose")
-check("the toggle is a tick, not two words",
-      "private fun Tick(" in screens and '"not in toggle"' not in screens,
-      "a checkbox, drawn rather than typed")
 
 
 
@@ -536,6 +517,19 @@ check("the compass is on the screen, not inside the centre target",
 # 17.9.2026: he sent Google's screenshot twice. Black disc, red north half, white south half, N.
 # Refined 17.9.2026: hollow, and one thing only. No disc behind it, and the tap that used to
 # choose a second state is gone with the state.
+# 17.9.2026: the ticks are gone and so are the four checks that guarded them. A tick asked whether
+# a view was ALLOWED in the switcher; he wanted to choose a view and see it. The switcher now turns
+# between the two maps, and each map's views are a radio in its own dropdown.
+check("a view is chosen with a radio, not permitted with a tick",
+      "private fun Dot(" in settings_src and "Box2" not in settings_src,
+      "one filled, the rest rings")
+check("the map key turns between the two maps and nothing else",
+      "if (current.family == MapLayer.Family.OFFLINE)" in screens
+      and "return Layers.OFFLINE" in screens,
+      "which Google view it shows is chosen in the settings")
+check("the offline map has views of its own",
+      "OFFLINE_VIEWS" in layers and "onOfflineView" in settings_src,
+      "the same file drawn four ways, because Google's entry had four and this one had none")
 check("the compass has a black ring outside the white one",
       "drawCircle(Color(0xFF0B0D10), radius = r" in screens
       and "radius = r - 1.8.dp.toPx()" in screens,

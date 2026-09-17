@@ -504,8 +504,17 @@ fun TrailApp(
                     settings = false
                     scope.launch { showLayer(store, Layers.OFFLINE) }
                 },
+                onOfflineView = { view ->
+                    store.themeName = view.theme
+                    CanvasHolder.canvas?.setTheme(view.theme)
+                    settings = false
+                    scope.launch { showLayer(store, Layers.OFFLINE) }
+                },
+                chosenGoogleId = store.googleViewId,
 
                 onPick = { picked ->
+                    if (picked.family == MapLayer.Family.GOOGLE) store.googleViewId = picked.id
+                    settings = false
                     layer = picked
                     store.layerId = picked.id
                     store.rememberStyle(picked)
@@ -588,20 +597,15 @@ private fun MapSurface(
  * shown the key stays where it is rather than moving to a blank screen.
  */
 private fun nextUsable(store: Store, current: MapLayer): MapLayer {
-    val all = Layers.ALL
-    val from = all.indexOfFirst { it.id == current.id }.let { if (it < 0) 0 else it }
-    for (step in 1..all.size) {
-        val candidate = all[(from + step) % all.size]
-        if (!store.familyInToggle(candidate.family)) continue
-        if (!store.inToggle(candidate.id)) continue
-        val ready = when {
-            candidate.provider != null -> !store.key(candidate.provider).isNullOrEmpty()
-            candidate.kind == LayerKind.VECTOR_FILE -> store.hasOfflineMap
-            else -> true
-        }
-        if (ready) return candidate
+    // TWO MAPS, AND THE KEY TURNS BETWEEN THEM (17.9.2026). It used to walk every ticked view,
+    // which is eight presses to come back to where he started. Which Google view it shows is
+    // chosen in the settings; the key only decides offline or Google.
+    if (current.family == MapLayer.Family.OFFLINE) {
+        val google = Layers.byId(store.googleViewId)
+        val hasKey = google.provider?.let { !store.key(it).isNullOrEmpty() } ?: false
+        return if (hasKey) google else current
     }
-    return current
+    return Layers.OFFLINE
 }
 
 /**

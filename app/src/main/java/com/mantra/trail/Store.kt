@@ -161,6 +161,14 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_OFFLINE_MAP, "") ?: ""
         set(v) = prefs.edit().putString(KEY_OFFLINE_MAP, v).apply()
 
+    /**
+     * WHICH GOOGLE VIEW THE MAP KEY SHOWS. One at a time, chosen in the settings: the key on the
+     * map screen turns between the offline map and Google, and this says which Google (17.9.2026).
+     */
+    var googleViewId: String
+        get() = prefs.getString(KEY_GOOGLE_VIEW, Layers.GOOGLE.id) ?: Layers.GOOGLE.id
+        set(v) = prefs.edit().putString(KEY_GOOGLE_VIEW, v).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -202,6 +210,7 @@ class Store(context: Context) {
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
         private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_THEME = "themeName"
+        private const val KEY_GOOGLE_VIEW = "googleView"
         private const val KEY_OFFLINE_MAP = "offlineMapName"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_USE_VTM = "useVtm"
