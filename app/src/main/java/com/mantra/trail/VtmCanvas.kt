@@ -451,9 +451,11 @@ class VtmCanvas(private val context: Context, private val store: Store) {
      * inside the map's own area at all.
      */
     fun emptyHere(): String? {
-        val file = MapDownload.target(context)
-        if (!file.exists()) return "No offline map on the phone yet"
-        return null
+        // IT ASKED THE WRONG FILE (17.9.2026). This looked only for the extract this app can
+        // download, so with an OpenAndroMaps or OpenHiking file drawing perfectly it announced
+        // that there was no offline map at all. It asks what is actually open.
+        if (offlineFile() != null || openOfflineFile() != null) return null
+        return "No offline map on the phone yet"
     }
 
     fun diagnose(): String {

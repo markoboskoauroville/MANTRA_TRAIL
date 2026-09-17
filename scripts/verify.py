@@ -664,6 +664,16 @@ check("only the map comes out of the archive",
 theme_path = ROOT / "app/src/main/assets/themes/mantra-walk.xml"
 theme_src = theme_path.read_text() if theme_path.exists() else ""
 check("the walking theme ships with the app", theme_path.exists(), f"{len(theme_src)} bytes")
+# 17.9.2026: his screenshot showed a map of thick brown hair. The stipple was the fault — in this
+# dialect the pattern length is two or three, the dash colour is stipple-stroke and the casing is
+# stroke, and I had set 14 with one colour for both.
+check("the dashed lines follow the renderer's own convention",
+      'stipple="2"' in theme_src and 'stroke="#aaffffff"' in theme_src
+      and 'stipple="14"' not in theme_src,
+      "pattern of two or three, a pale casing, the difficulty in the dash")
+check("the contour lines are hairlines, not cables",
+      'id="contour-minor" stroke="#b99a78" width="0.22"' in theme_src,
+      "a fifth of the width they were")
 check("it draws what makes these maps worth having",
       all(tag in theme_src for tag in ["contour_ext", "sac_scale", "hknetwork", "natural\" v=\"peak"]),
       "contour lines, path difficulty, waymarked routes, summits")

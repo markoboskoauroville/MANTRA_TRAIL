@@ -32,23 +32,42 @@
     <style-text id="contour-ele" k="ele" size="11" fill="#9a6b3f" stroke="#f6f3ec" stroke-width="2.0" />
 
     <!--###### LINES ######-->
-    <!-- The ground itself. Three weights, as the data has them: every fifth line heavier, so a
-         slope can be counted without reading a number. -->
-    <style-line id="contour-minor" stroke="#c8ab8a" width="0.55" />
-    <style-line id="contour-medium" stroke="#bd9a71" width="0.8" />
-    <style-line id="contour-major" stroke="#a87f50" width="1.2" />
+    <!--
+      CALIBRATED AGAINST VTM'S OWN default.xml (17.9.2026), after his screenshot showed a map of
+      thick brown hair. The mistake was mine and it was in the stipple: in this dialect a dashed
+      line is ONE line, where "stroke" paints the casing, "stipple-stroke" paints the dashes,
+      "stipple" is the pattern length in a small number — two or three, not fourteen — and
+      "stipple-width" is how much of the pattern the dash fills. I had set the pattern to 14 and
+      painted casing and dash the same colour, which is how a footpath came out looking like a
+      motorway with bristles.
 
-    <!-- Paths, by how hard they are to walk. The colour is the difficulty and nothing else. -->
-    <style-line id="path-easy" stroke="#8a4b12" width="1.5" stipple="14" stipple-stroke="#8a4b12" stipple-width="0.9" cap="butt" />
-    <style-line id="path-hard" stroke="#b3261e" width="1.7" stipple="10" stipple-stroke="#b3261e" stipple-width="1.0" cap="butt" />
-    <style-line id="path-alpine" stroke="#7b1fa2" width="1.9" stipple="8" stipple-stroke="#7b1fa2" stipple-width="1.1" cap="butt" />
-    <style-line id="track" stroke="#9c6b3f" width="2.0" stipple="20" stipple-stroke="#9c6b3f" stipple-width="1.2" />
-    <style-line id="waymarked" stroke="#e53935" width="3.4" cap="butt" />
+      Widths here are within a hair of the widths their own themes use, because those are the
+      numbers this renderer was built around.
+    -->
 
-    <style-line id="road-major" stroke="#f2b64c" width="3.2" outline="#c98f2a" />
-    <style-line id="road" stroke="#ffffff" width="2.4" outline="#b9b2a4" />
-    <style-line id="water-line" stroke="#7fb2d9" width="1.6" />
-    <style-line id="cliff" stroke="#6f6f6f" width="1.4" stipple="6" stipple-stroke="#6f6f6f" stipple-width="1.4" />
+    <!-- The ground. Thin, and the heavier every-fifth line only a little heavier. -->
+    <style-line id="contour-minor" stroke="#b99a78" width="0.22" fix="true" />
+    <style-line id="contour-medium" stroke="#ad8a63" width="0.32" fix="true" />
+    <style-line id="contour-major" stroke="#96723f" width="0.5" fix="true" />
+
+    <!-- Paths, by how hard they are to walk: the DASH carries the difficulty, over a pale casing
+         so the line reads on a dark hillside as well as on a white street. -->
+    <style-line id="path-easy" cap="butt" fix="true" stipple="2" stipple-stroke="#8a4b12"
+        stipple-width="0.7" stroke="#aaffffff" width="1.4" />
+    <style-line id="path-hard" cap="butt" fix="true" stipple="2" stipple-stroke="#c1392b"
+        stipple-width="0.8" stroke="#aaffffff" width="1.5" />
+    <style-line id="path-alpine" cap="butt" fix="true" stipple="2" stipple-stroke="#7b1fa2"
+        stipple-width="0.9" stroke="#aaffffff" width="1.6" />
+    <style-line id="track" cap="butt" fix="true" stipple="3" stipple-stroke="#9c6b3f"
+        stipple-width="0.6" stroke="#aaffffff" width="1.5" />
+
+    <!-- A waymarked route: a quiet band under the path, not a cable over it. -->
+    <style-line id="waymarked" stroke="#66e53935" width="2.2" cap="butt" />
+
+    <style-line id="road-major" stroke="#f0b95e" width="1.7" />
+    <style-line id="road" stroke="#fdfdfb" width="1.3" />
+    <style-line id="water-line" stroke="#8fbfe0" width="1.0" />
+    <style-line id="cliff" stroke="#8a8a8a" width="0.8" fix="true" />
 
     <!--###### AREAS ######-->
     <style-area id="forest" fill="#cfe0c0" />
@@ -89,17 +108,17 @@
     <!--###### CONTOUR LINES — the reason these maps exist ######-->
     <m e="way" k="contour_ext">
         <m v="elevation_minor">
-            <m zoom-min="14">
+            <m zoom-min="15">
                 <line use="contour-minor" />
             </m>
         </m>
         <m v="elevation_medium">
-            <m zoom-min="13">
+            <m zoom-min="14">
                 <line use="contour-medium" />
             </m>
         </m>
         <m v="elevation_major">
-            <m zoom-min="11">
+            <m zoom-min="12">
                 <line use="contour-major" />
                 <m zoom-min="14">
                     <text use="contour-ele" />
@@ -122,7 +141,7 @@
 
     <!--###### ROADS, quietly ######-->
     <m e="way" k="highway">
-        <m v="motorway|trunk|primary|secondary" zoom-min="8">
+        <m v="motorway|trunk|primary|secondary" zoom-min="9">
             <line use="road-major" />
         </m>
         <m v="tertiary|unclassified|residential|living_street|service|pedestrian" zoom-min="13">
