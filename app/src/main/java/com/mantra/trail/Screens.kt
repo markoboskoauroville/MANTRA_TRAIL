@@ -3,6 +3,7 @@ package com.mantra.trail
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1106,15 +1107,19 @@ private fun MapsFace(
             }
 
             // WHAT IS HAPPENING, at the top, because a gigabyte is worth knowing about.
+            // WHAT IS HAPPENING. Dark like everything else, with an amber outline round it —
+            // his instruction, 17.9.2026: this is a dark application, so nothing is filled in a
+            // light colour and black is never written on amber.
             if (busy != null) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Amber)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Paint.Card)
+                        .border(1.5.dp, Paint.Amber, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
-                    Label(busy ?: "", Paint.Ground, size = 12, align = TextAlign.Start)
+                    Label(busy ?: "", Paint.Amber, size = 12, align = TextAlign.Start)
                 }
             }
 
@@ -1127,33 +1132,43 @@ private fun MapsFace(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (inUse) Paint.Amber else Paint.Veil),
+                        .heightIn(min = 56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Paint.Card)
+                        .then(
+                            if (inUse) {
+                                Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(12.dp))
+                            } else {
+                                Modifier
+                            }
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         Modifier.weight(1f).fillMaxWidth().clickable { onUse(file) }
-                            .padding(horizontal = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Label(
-                            text = file.name.removePrefix("oam-").removeSuffix(".map") +
-                                "  ${file.length() / 1_000_000} MB",
-                            colour = if (inUse) Paint.Ground else Paint.Sand,
-                            size = 13,
-                            align = TextAlign.Start,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Label(
+                                text = file.name.removePrefix("oam-").removeSuffix(".map"),
+                                colour = Paint.Sand,
+                                size = 14,
+                                align = TextAlign.Start,
+                            )
+                            Label(
+                                text = "${file.length() / 1_000_000} MB" +
+                                    if (inUse) " · drawing" else "",
+                                colour = if (inUse) Paint.Amber else Paint.Dim,
+                                size = 11,
+                                align = TextAlign.Start,
+                            )
+                        }
                     }
-                    Label(
-                        text = if (inUse) "drawing" else "use",
-                        colour = if (inUse) Paint.Ground else Paint.Amber,
-                        size = 11,
-                    )
                     Box(
-                        Modifier.width(64.dp).fillMaxWidth().clickable { onRemove(file) },
+                        Modifier.width(72.dp).fillMaxWidth().clickable { onRemove(file) },
                         contentAlignment = Alignment.Center,
-                    ) { Label("delete", Paint.Red, size = 11) }
+                    ) { Label("delete", Paint.Red, size = 12) }
                 }
             }
             Label("kept in $folder", Paint.Dim, size = 10, align = TextAlign.Start)
@@ -1169,14 +1184,14 @@ private fun MapsFace(
                         .fillMaxWidth()
                         .height(44.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
+                        .background(Paint.Card)
                         .clickable { if (!here) onFetch(entry) }
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Label(
-                        text = "OpenHiking Croatia",
+                        text = "Croatia, for walking — from your own GitHub",
                         colour = if (here) Paint.Dim else Paint.Sand,
                         size = 12,
                         align = TextAlign.Start,
@@ -1196,13 +1211,20 @@ private fun MapsFace(
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (id == listingOf) Paint.Amber else Paint.Veil)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Paint.Card)
+                                .then(
+                                    if (id == listingOf) {
+                                        Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(10.dp))
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                                 .clickable { onBrowse(id) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Label(label, if (id == listingOf) Paint.Ground else Paint.Sand, size = 11)
+                            Label(label, if (id == listingOf) Paint.Amber else Paint.Sand, size = 12)
                         }
                     }
                     repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -1216,9 +1238,9 @@ private fun MapsFace(
                         .fillMaxWidth()
                         .height(44.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
+                        .background(Paint.Card)
                         .clickable { if (!here) onFetch(entry) }
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -1561,7 +1583,14 @@ private fun RouteMenu(
                             .weight(1f)
                             .height(38.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (name == profile) Paint.Amber else Paint.Veil)
+                            .background(Paint.Card)
+                            .then(
+                                if (name == profile) {
+                                    Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clickable {
                                 profile = name
                                 store.routeProfile = name
@@ -1574,7 +1603,7 @@ private fun RouteMenu(
                                 "hiking-mountain" -> "mountain"
                                 else -> "shortest"
                             },
-                            colour = if (name == profile) Paint.Ground else Paint.Sand,
+                            colour = if (name == profile) Paint.Amber else Paint.Sand,
                             size = 11,
                         )
                     }
@@ -1592,13 +1621,20 @@ private fun RouteMenu(
                         Modifier
                             .size(38.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (n == options) Paint.Amber else Paint.Veil)
+                            .background(Paint.Card)
+                            .then(
+                                if (n == options) {
+                                    Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clickable {
                                 options = n
                                 store.routeOptions = n
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Label("$n", if (n == options) Paint.Ground else Paint.Sand, size = 12) }
+                    ) { Label("$n", if (n == options) Paint.Amber else Paint.Sand, size = 12) }
                 }
             }
             Row(
@@ -1612,7 +1648,14 @@ private fun RouteMenu(
                         Modifier
                             .height(38.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (option == speed) Paint.Amber else Paint.Veil)
+                            .background(Paint.Card)
+                            .then(
+                                if (option == speed) {
+                                    Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clickable {
                                 speed = option
                                 store.walkSpeedKmh = option
@@ -1622,7 +1665,7 @@ private fun RouteMenu(
                     ) {
                         Label(
                             text = "${option.toInt()} km/h",
-                            colour = if (option == speed) Paint.Ground else Paint.Sand,
+                            colour = if (option == speed) Paint.Amber else Paint.Sand,
                             size = 11,
                         )
                     }
@@ -1634,7 +1677,10 @@ private fun RouteMenu(
                     .fillMaxWidth()
                     .height(46.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (enough) Paint.Amber else Paint.Veil)
+                    .background(Paint.Card)
+                    .then(
+                        if (enough) Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp)) else Modifier
+                    )
                     .clickable { if (enough) onRoute(profile, options) }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart,
@@ -1642,13 +1688,13 @@ private fun RouteMenu(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Label(
                         text = "find the ways",
-                        colour = if (enough) Paint.Ground else Paint.Dim,
+                        colour = if (enough) Paint.Amber else Paint.Dim,
                         size = 13,
                         align = TextAlign.Start,
                     )
                     Label(
                         text = if (enough) "$options to look for" else "place at least two",
-                        colour = if (enough) Paint.Ground else Paint.Dim,
+                        colour = if (enough) Paint.Amber else Paint.Dim,
                         size = 11,
                     )
                 }
@@ -1700,10 +1746,13 @@ private fun RouteMenu(
                         .weight(1f)
                         .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (enough) Paint.Amber else Paint.Veil)
+                        .background(Paint.Card)
+                    .then(
+                        if (enough) Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp)) else Modifier
+                    )
                         .clickable { if (enough) onSave() },
                     contentAlignment = Alignment.Center,
-                ) { Label("save points", if (enough) Paint.Ground else Paint.Dim, size = 14) }
+                ) { Label("save points", if (enough) Paint.Amber else Paint.Dim, size = 14) }
             }
         }
     }

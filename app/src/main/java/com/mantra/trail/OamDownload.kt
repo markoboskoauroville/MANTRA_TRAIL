@@ -100,7 +100,17 @@ object OamDownload {
         context: Context,
         entry: OamIndex.Entry,
         onProgress: (Progress) -> Unit,
-    ): String? = fetchUrl(context, OamIndex.elsewhereUrl(entry), entry.mapName, entry.label, onProgress)
+    ): String? = fetchUrl(
+        context,
+        OamIndex.elsewhereUrl(entry),
+        entry.mapName,
+        entry.label,
+        // THE SIZE WE WERE TOLD, as the total to count against. OpenHiking's download is served
+        // through a script that sends no Content-Length, so the progress line had nothing to
+        // divide by and showed megabytes alone — no percent, no speed, no time left (17.9.2026).
+        entry.bytes,
+        onProgress,
+    )
 
     fun remove(file: File): String? = if (file.delete()) null else "That map could not be deleted"
 
@@ -120,13 +130,14 @@ object OamDownload {
         context: Context,
         region: Oam.Region,
         onProgress: (Progress) -> Unit,
-    ): String? = fetchUrl(context, region.url, region.fileName, region.label, onProgress)
+    ): String? = fetchUrl(context, region.url, region.fileName, region.label, region.zipBytes, onProgress)
 
     private suspend fun fetchUrl(
         context: Context,
         url: String,
         mapName: String,
         label: String,
+        expectedBytes: Long = 0L,
         onProgress: (Progress) -> Unit,
     ): String? = withContext(Dispatchers.IO) {
         val finished = File(folder(context), mapName)
@@ -148,7 +159,8 @@ object OamDownload {
             }
             val resuming = code == 206
             if (!resuming && already > 0) zip.delete()
-            val total = connection.contentLengthLong.let { if (resuming) it + already else it }
+            val reported = connection.contentLengthLong.let { if (resuming) it + already else it }
+            val total = if (reported > 0) reported else expectedBytes
 
             connection.inputStream.use { input ->
                 java.io.FileOutputStream(zip, resuming).use { output ->
@@ -178,6 +190,16 @@ object OamDownload {
 
             if (total > 0 && zip.length() < total) {
                 return@withContext "The download stopped early. Press again to carry on."
+            }
+
+            // A FILE THAT IS ALREADY A MAP NEEDS NO UNPACKING (17.9.2026): the mirrored one is a
+            // .map, so what was downloaded is simply moved into place.
+            if (!url.endsWith(".zip", ignoreCase = true)) {
+                return@withContext if (zip.renameTo(finished)) {
+                    null
+                } else {
+                    "The map could not be put in place"
+                }
             }
 
             onProgress(Progress(zip.length(), zip.length(), unpacking = true))

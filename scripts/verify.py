@@ -614,9 +614,23 @@ check("the folder the maps live in is written down",
       "a file nobody can find is a file nobody has")
 # 17.9.2026, his question: can the app cut Croatia out of the 1.2 GB Balkan file? It cannot — a
 # .map is compiled, index and all — so a smaller map is offered instead of a promise.
+# 17.9.2026, his instruction: this is a dark application. Nothing is filled in a light colour and
+# black is never written on amber; state is an outline.
+check("nothing on a face is filled in the light colour",
+      "Paint.Amber else Paint.Veil" not in screens and "background(Paint.Amber)" not in screens,
+      "state is an amber outline round a dark row")
+check("the Croatia map is mirrored where it can be fetched",
+      "MANTRA_MAPS/releases/download/" in (MAIN / "OamIndex.kt").read_text(),
+      "the original server answered 500 on his phone and 200 from a desk")
+check("a file that is already a map is not unpacked",
+      'if (!url.endsWith(".zip"' in (MAIN / "OamDownload.kt").read_text(),
+      "only an archive is opened")
+check("a download counts against the size he was told",
+      "expectedBytes" in (MAIN / "OamDownload.kt").read_text(),
+      "so percent, speed and time left exist even when the server sends no length")
 check("a smaller map is offered where cropping is impossible",
-      "ELSEWHERE" in (MAIN / "OamIndex.kt").read_text() and "OpenHiking Croatia" in screens,
-      "294 MB against 1.19 GB, and made for walking too")
+      "ELSEWHERE" in (MAIN / "OamIndex.kt").read_text() and "Croatia, for walking" in screens,
+      "382 MB against 1.19 GB, and made for walking too")
 check("which map is drawn is his to choose",
       "store.offlineMapName" in canvas_src and "onUse" in screens,
       "with several regions on the phone, the app draws the one he ticked")

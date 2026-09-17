@@ -34,8 +34,19 @@ object OamIndex {
         /** Balkan.zip becomes Balkan; BalticStates.zip stays as it is written. */
         val label: String get() = fileName.removeSuffix(".zip")
 
-        /** What the unpacked map is called on the phone. */
-        val mapName: String get() = "oam-${label.lowercase()}.map"
+        /**
+         * What the map is called on the phone. A file that is already a .map keeps its own name;
+         * a zip is named after the region inside it.
+         */
+        val mapName: String
+            get() = if (fileName.endsWith(".map", ignoreCase = true)) {
+                fileName
+            } else {
+                "oam-${label.lowercase()}.map"
+            }
+
+        /** Whether it arrives ready to use, or inside an archive. */
+        val isArchive: Boolean get() = fileName.endsWith(".zip", ignoreCase = true)
 
         val url: String get() = "$MIRROR/$continent/$fileName"
 
@@ -65,17 +76,21 @@ object OamIndex {
      */
     val ELSEWHERE: List<Entry> = listOf(
         Entry(
-            fileName = "openhiking-croatia.zip",
-            bytes = 294_214_142L,
-            continent = "openhiking",
+            // MIRRORED ON HIS OWN GITHUB (17.9.2026). The original is served by a script that
+            // answered 500 on his phone while answering 200 from a desk — a download of 300 MB
+            // needs somewhere that is up when he is on a hill. A release asset is resumable, has
+            // no session and no token, and the repository names the source and the licence.
+            fileName = "openhiking-croatia.map",
+            bytes = 381_783_951L,
+            continent = "mirror",
         ),
     )
 
     /** Where a map from one of those other places is fetched from. */
     fun elsewhereUrl(entry: Entry): String = when (entry.fileName) {
-        "openhiking-croatia.zip" ->
-            "https://www.openhiking.eu/en/component/phocadownload/category/" +
-                "1-terkepek/5-turistaterkepek-mapsforge?download=21:openhiking-croatia"
+        "openhiking-croatia.map" ->
+            "https://github.com/markoboskoauroville/MANTRA_MAPS/releases/download/" +
+                "croatia-1/openhiking-croatia.map"
 
         else -> entry.url
     }
