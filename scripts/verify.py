@@ -520,9 +520,15 @@ check("the compass is on the screen, not inside the centre target",
 # 17.9.2026: the ticks are gone and so are the four checks that guarded them. A tick asked whether
 # a view was ALLOWED in the switcher; he wanted to choose a view and see it. The switcher now turns
 # between the two maps, and each map's views are a radio in its own dropdown.
-check("a view is chosen with a radio, not permitted with a tick",
-      "private fun Dot(" in settings_src and "Box2" not in settings_src,
-      "one filled, the rest rings")
+# Refined again 17.9.2026: no tick and no radio either. The whole row is the button and the
+# chosen one wears an amber outline.
+check("a view is chosen by pressing the row itself",
+      "chosen: Boolean = false" in settings_src and "border(1.5.dp, Paint.Amber" in settings_src
+      and "private fun Dot(" not in settings_src and "Box2" not in settings_src,
+      "no little circle beside it")
+check("the chevron appears only where a tap opens a screen",
+      "opens: Boolean = false" in settings_src and "} else if (opens) {" in settings_src,
+      "what is the map doing wore one and opened nothing")
 check("the map key turns between the two maps and nothing else",
       "if (current.family == MapLayer.Family.OFFLINE)" in screens
       and "return Layers.OFFLINE" in screens,

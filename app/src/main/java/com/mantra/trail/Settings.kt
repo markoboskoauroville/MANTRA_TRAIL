@@ -126,6 +126,7 @@ fun SettingsFace(
             Group("tracks") {
                 Line(
                     title = "tracks",
+                    opens = true,
                     under = "$trackCount in the folder · rename, show, delete, the folder itself",
                     onPress = onTracks,
                 )
@@ -140,6 +141,7 @@ fun SettingsFace(
             Group("maps") {
                 Line(
                     title = "offline map",
+                    opens = true,
                     under = offlineUnder,
                     onPress = onMaps,
                     trailing = {
@@ -153,8 +155,8 @@ fun SettingsFace(
                             title = view.label,
                             under = view.about,
                             inset = true,
+                            chosen = view.theme == state.theme,
                             onPress = { onOfflineView(view) },
-                            trailing = { Dot(chosen = view.theme == state.theme) },
                         )
                     }
                 }
@@ -174,13 +176,14 @@ fun SettingsFace(
                         Line(
                             title = layer.name,
                             inset = true,
+                            chosen = layer.id == chosenGoogleId,
                             onPress = { onPick(layer) },
-                            trailing = { Dot(chosen = layer.id == chosenGoogleId) },
                         )
                     }
                     Rule()
                     Line(
                         title = "Google Maps API key",
+                    opens = true,
                         under = if (hasGoogleKey) "set — from a file you picked" else "not set",
                         inset = true,
                         onPress = onImportKeys,
@@ -188,6 +191,7 @@ fun SettingsFace(
                     Rule()
                     Line(
                         title = "test the key",
+                    opens = true,
                         under = "asks the service for one tile",
                         inset = true,
                         onPress = onTestTiles,
@@ -240,15 +244,31 @@ private fun Line(
     title: String,
     under: String? = null,
     inset: Boolean = false,
+    // WHETHER A TAP OPENS ANOTHER SCREEN. The chevron is drawn only when it does (17.9.2026):
+    // "what is the map doing" wore one and opened nothing, which is a promise a row cannot keep.
+    opens: Boolean = false,
+    // WHETHER THIS ROW IS THE CHOSEN ONE. The whole row is the button; being chosen is an amber
+    // outline round it, not a little circle beside it.
+    chosen: Boolean = false,
     onPress: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
+            .padding(horizontal = if (inset) 10.dp else 0.dp, vertical = if (chosen) 4.dp else 0.dp)
+            .then(
+                if (chosen) {
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.5.dp, Paint.Amber, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier
+                }
+            )
             .heightIn(min = 60.dp)
             .then(if (onPress != null) Modifier.clickable(onClick = onPress) else Modifier)
-            .padding(start = if (inset) 32.dp else 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = if (inset) 20.dp else 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -258,7 +278,7 @@ private fun Line(
         }
         if (trailing != null) {
             Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { trailing() }
-        } else if (onPress != null) {
+        } else if (opens) {
             Words("›", Paint.Dim, 18, modifier = Modifier.padding(end = 8.dp))
         }
     }
@@ -272,26 +292,6 @@ private fun Line(
  * to point down when its list is open, and it is a hit area of its own — the row's own tap opens
  * that map's options, and this opens its views.
  */
-/**
- * A RADIO MARK: one of these is filled and the rest are rings. Not a tick — a tick is a question
- * about permission, and the question here is which one he wants to see (17.9.2026).
- */
-@Composable
-private fun Dot(chosen: Boolean) {
-    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(20.dp)) {
-            val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
-            val r = size.minDimension / 2f - 1.dp.toPx()
-            drawCircle(
-                color = if (chosen) Paint.Amber else Paint.Dim,
-                radius = r,
-                center = c,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(1.4.dp.toPx()),
-            )
-            if (chosen) drawCircle(Paint.Amber, radius = r * 0.5f, center = c)
-        }
-    }
-}
 
 @Composable
 private fun Caret(open: Boolean, onTap: () -> Unit) {
