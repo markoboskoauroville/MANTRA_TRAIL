@@ -60,12 +60,12 @@ private class SettingsState(val store: Store) {
         Layers.GOOGLE_ALL.forEach { add(store.inToggle(it.id)) }
     }
 
-    fun setGoogleFamily(on: Boolean) {
+    fun chooseGoogleFamily(on: Boolean) {
         googleFamily = on
         store.setFamilyInToggle(MapLayer.Family.GOOGLE, on)
     }
 
-    fun setGoogleView(index: Int, on: Boolean) {
+    fun chooseGoogleView(index: Int, on: Boolean) {
         googleViews[index] = on
         store.setInToggle(Layers.GOOGLE_ALL[index].id, on)
     }
@@ -155,7 +155,7 @@ fun SettingsFace(
                     title = "Google's views",
                     under = if (hasGoogleKey) "key set · tap to open" else "needs your own key",
                     onPress = { state.googleOpen = !state.googleOpen },
-                    trailing = { Box2(state.googleFamily) { state.setGoogleFamily(it) } },
+                    trailing = { Box2(state.googleFamily) { state.chooseGoogleFamily(it) } },
                 )
                 if (state.googleOpen) {
                     Layers.GOOGLE_ALL.forEachIndexed { index, layer ->
@@ -166,7 +166,7 @@ fun SettingsFace(
                             inset = true,
                             onPress = { onPick(layer) },
                             trailing = {
-                                Box2(state.googleViews[index]) { state.setGoogleView(index, it) }
+                                Box2(state.googleViews[index]) { state.chooseGoogleView(index, it) }
                             },
                         )
                     }
