@@ -142,6 +142,7 @@ fun TrailApp(
     var compass by remember { mutableIntStateOf(store.compassMode) }
     var points by remember { mutableStateOf(store.routePoints) }
     var routeMenu by remember { mutableStateOf(false) }
+    var showPlaces by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
     var ready by remember { mutableStateOf(false) }
@@ -393,11 +394,33 @@ fun TrailApp(
             }
         }
 
+        if (showPlaces) {
+            PlacesFace(
+                fix = fix,
+                store = store,
+                onAdd = { place ->
+                    if (points.size < Route.MAX_POINTS) {
+                        points = points + (place.lat to place.lon)
+                        store.routePoints = points
+                        CanvasHolder.canvas?.setRoutePoints(points)
+                        CanvasHolder.canvas?.centreOn(Fix(place.lat, place.lon, null, 0L, null))
+                    }
+                    showPlaces = false
+                    Trail.say("${place.name} added as ${Route.letterFor(points.size - 1)}")
+                },
+                onClose = { showPlaces = false },
+            )
+        }
+
         if (routeMenu) {
             RouteMenu(
                 store = store,
                 points = points,
                 found = routeOptions,
+                onFind = {
+                    routeMenu = false
+                    showPlaces = true
+                },
                 onAdd = {
                     val at = CanvasHolder.canvas?.centre()
                     if (at != null && points.size < Route.MAX_POINTS) {
@@ -1266,6 +1289,133 @@ private fun MapsFace(
     }
 }
 
+
+/**
+ * SEARCHING FOR A PLACE (17.9.2026).
+ *
+ * He types a name, presses search, and each answer is a row: press it and that place becomes the
+ * next point of the route, which is what he was panning the map to do by hand. The map goes there
+ * too, so he can see what he has chosen before walking to it.
+ *
+ * Nothing is searched while he types. Each search is a billed request on his account, so it
+ * happens when he presses and not before.
+ */
+@Composable
+private fun PlacesFace(
+    fix: Fix?,
+    store: Store,
+    onAdd: (Places.Place) -> Unit,
+    onClose: () -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var found by remember { mutableStateOf<List<Places.Place>>(emptyList()) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var looking by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    fun go() {
+        if (text.isBlank() || looking) return
+        looking = true
+        note = "Looking…"
+        scope.launch {
+            val (places, problem) = Places.search(text, fix, store)
+            found = places
+            note = problem ?: "${places.size} found"
+            looking = false
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+        Column(
+            Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(46.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("find a place", Paint.Dim, size = 13)
+                Box(
+                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Card).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Label("✕", Paint.Sand, size = 18) }
+            }
+
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Paint.Sand,
+                    fontSize = 16.sp,
+                    fontFamily = FontFamily.Monospace,
+                ),
+                cursorBrush = SolidColor(Paint.AmberBright),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { go() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Card)
+                    .border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 14.dp)
+                    .focusRequester(focus),
+            )
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Card)
+                    .border(1.5.dp, if (text.isBlank()) Paint.Dim else Paint.Amber, RoundedCornerShape(8.dp))
+                    .clickable { go() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Label(
+                    text = if (looking) "looking…" else "search",
+                    colour = if (text.isBlank()) Paint.Dim else Paint.Amber,
+                    size = 14,
+                )
+            }
+
+            if (note != null) Label(note ?: "", Paint.Dim, size = 11, align = TextAlign.Start)
+
+            found.forEach { place ->
+                val away = fix?.let { Geo.distance(it.lat, it.lon, place.lat, place.lon) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Paint.Card)
+                        .clickable { onAdd(place) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Label(place.name, Paint.Sand, size = 14, align = TextAlign.Start)
+                        if (place.where.isNotBlank()) {
+                            Label(place.where, Paint.Dim, size = 11, align = TextAlign.Start)
+                        }
+                    }
+                    Label(
+                        text = away?.let { Geo.formatDistance(it) } ?: "",
+                        colour = Paint.Amber,
+                        size = 11,
+                    )
+                }
+            }
+        }
+    }
+}
+
 /**
  * THE TRACK MANAGER. Every recording on the phone, newest first, with what it weighs. Rename it,
  * send it to the chosen folder again, or delete it — and deleting asks a second time, because a
@@ -1505,6 +1655,7 @@ private fun RouteMenu(
     points: List<Pair<Double, Double>>,
     found: List<Routing.Option>,
     onAdd: () -> Unit,
+    onFind: () -> Unit,
     onRemove: (Int) -> Unit,
     onRoute: (String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
@@ -1565,6 +1716,19 @@ private fun RouteMenu(
                         modifier = Modifier.clickable { onRemove(index) },
                     )
                 }
+            }
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Card)
+                    .clickable(onClick = onFind)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Label("find a place by name", Paint.Amber, size = 12, align = TextAlign.Start)
             }
 
             Box(

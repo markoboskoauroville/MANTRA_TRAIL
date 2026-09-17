@@ -734,6 +734,15 @@ check("the theme is chosen, not fixed at a motorcycle one",
 ring_src = (MAIN / "Keyring.kt").read_text()
 # 17.9.2026, after he enabled the rest of Google's APIs: their walking directions beside BRouter's,
 # with a toggle, because the two answer different questions and both are worth having.
+check("a place can be found by name and made a route point",
+      (MAIN / "Places.kt").exists() and "PlacesFace" in screens
+      and "points = points + (place.lat to place.lon)" in screens,
+      "instead of panning the map until the hut is under the crosshair")
+check("nothing is searched while he types",
+      "onSearch = { go() }" in screens and "fun go()" in screens,
+      "each search is a billed request, so it happens when he presses")
+check("what is left to do is written down",
+      (ROOT / "TODO.md").exists(), "he asked to be told after every build")
 check("both routers are offered and the choice is his",
       "useGoogleRouting" in (MAIN / "Store.kt").read_text()
       and "BRouter · offline" in screens and "Google · online" in screens,
