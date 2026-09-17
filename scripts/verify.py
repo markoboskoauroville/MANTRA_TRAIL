@@ -734,6 +734,15 @@ check("the theme is chosen, not fixed at a motorcycle one",
 ring_src = (MAIN / "Keyring.kt").read_text()
 # 17.9.2026, after he enabled the rest of Google's APIs: their walking directions beside BRouter's,
 # with a toggle, because the two answer different questions and both are worth having.
+# 17.9.2026: routing answered and not one tile drew. VTM's own HTTP client says in its comments
+# that it does not do https, and every tile service is https.
+check("the raster layer uses an engine that speaks https",
+      "OkHttpEngine.OkHttpFactory()" in canvas_src and "vtm-http" in (ROOT / "app/build.gradle.kts").read_text(),
+      "VTM's own client cannot, and every tile service is https")
+check("one visual language: the marks are the screen's crosshair",
+      "fun routePoint" in (MAIN / "Marks.kt").read_text()
+      and "setShadowLayer" not in (MAIN / "Marks.kt").read_text(),
+      "four hairlines with the letter in the middle, red, and no blur anywhere")
 check("a place can be found by name and made a route point",
       (MAIN / "Places.kt").exists() and "PlacesFace" in screens
       and "points = points + (place.lat to place.lon)" in screens,

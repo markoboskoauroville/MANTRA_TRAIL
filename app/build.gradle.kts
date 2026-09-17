@@ -131,6 +131,12 @@ dependencies {
     implementation("org.mapsforge:vtm:0.25.0")
     implementation("org.mapsforge:vtm-android:0.25.0")
     implementation("org.mapsforge:vtm-themes:0.25.0")
+    // VTM'S OWN HTTP CLIENT DOES NOT SPEAK HTTPS (17.9.2026). Its LwHttp says so in its own
+    // comments — "no https, full header parsing or other stuff" — so every raster tile from
+    // Google came back as nothing at all while the routing, which uses Android's own HTTP, worked
+    // perfectly. This is the engine VTM ships for exactly that, and OkHttp is what it needs.
+    implementation("org.mapsforge:vtm-http:0.25.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-arm64-v8a")
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-armeabi-v7a")
     runtimeOnly("org.mapsforge:vtm-android:0.25.0:natives-x86_64")

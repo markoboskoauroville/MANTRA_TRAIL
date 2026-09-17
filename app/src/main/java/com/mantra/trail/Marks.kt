@@ -72,7 +72,17 @@ object Marks {
         return bitmap
     }
 
-    /** A route point: the hairline cross of the screen's own centre, with its letter beside it. */
+    /**
+     * A ROUTE POINT: THE SCREEN'S OWN CROSSHAIR, IN RED, WITH ITS LETTER IN THE MIDDLE.
+     *
+     * Baba, 17.9.2026: one visual language through the app. The middle of the screen is four
+     * hairlines with an empty middle, so a placed point is the same four hairlines with its letter
+     * in that middle, and the whole thing red so it is never mistaken for the centre.
+     *
+     * NO SHADOW. The letter carried a blurred one and it smudged the mark at every zoom. Where
+     * something must read on both a snowfield and a forest, the answer is a second stroke in
+     * near-black — sharp, the same shape, no blur — and never a glow.
+     */
     fun routePoint(context: Context, letter: String): Bitmap {
         val scale = context.resources.displayMetrics.density
         val side = (44 * scale).toInt()
@@ -80,7 +90,7 @@ object Marks {
         val canvas = Canvas(bitmap)
         val c = side / 2f
         val arm = side / 2f - 2 * scale
-        val gap = arm * 0.36f
+        val gap = arm * 0.42f
 
         fun cross(colour: Int, width: Float) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -92,18 +102,32 @@ object Marks {
             canvas.drawLine(c + gap, c, c + arm, c, p)
             canvas.drawLine(c, c - arm, c, c - gap, p)
             canvas.drawLine(c, c + gap, c, c + arm, p)
-            canvas.drawCircle(c, c, gap, p)
         }
-        cross(Color.argb(200, 11, 13, 16), 3f * scale)
-        cross(Color.argb(255, 96, 165, 250), 1.4f * scale)
+        // Two passes, both sharp: near-black a little wider, then the red over it.
+        cross(Color.argb(190, 11, 13, 16), 3f * scale)
+        cross(RED, 1.3f * scale)
 
-        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(255, 96, 165, 250)
-            textSize = 13f * scale
+        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(190, 11, 13, 16)
+            textSize = 15f * scale
+            textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setShadowLayer(3f * scale, 0f, 0f, Color.argb(220, 11, 13, 16))
+            style = Paint.Style.STROKE
+            strokeWidth = 2.6f * scale
         }
-        canvas.drawText(letter, c + gap + 2 * scale, c - gap, text)
+        val face = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = RED
+            textSize = 15f * scale
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        }
+        // Centred in the gap the arms leave, by the text's own measured height.
+        val middle = c - (face.descent() + face.ascent()) / 2f
+        canvas.drawText(letter, c, middle, outline)
+        canvas.drawText(letter, c, middle, face)
         return bitmap
     }
+
+    /** The one red, used by every mark that is his rather than the map's. */
+    private val RED = Color.argb(255, 229, 57, 53)
 }

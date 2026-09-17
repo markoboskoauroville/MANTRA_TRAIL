@@ -5,6 +5,9 @@ done leaves this file; anything he refuses leaves it with a line saying so.
 
 ## Next, in the order I would do them
 
+0. **Nothing has been seen drawing.** The https engine (v63) is the reason no Google tile appeared;
+   whether tiles now draw is the first thing to check on the phone.
+
 1. **Elevation profile** — a height graph under a found route and under a saved track. Google's
    Elevation API answered on a desk (975, 980, 954, 951, 868 m along the Sljeme line) and BRouter
    already returns the climb, so an offline profile is possible from the route's own points.

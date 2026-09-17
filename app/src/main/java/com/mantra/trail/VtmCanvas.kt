@@ -174,6 +174,10 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         val source = BitmapTileSource.builder()
             .url(base)
             .tilePath(path)
+            // HTTPS, WHICH VTM'S OWN CLIENT CANNOT DO (17.9.2026). Every Google tile came back as
+            // nothing while the routing worked, because routing uses Android's HTTP and tiles used
+            // VTM's LwHttp, whose own comment says: no https.
+            .httpFactory(org.oscim.tiling.source.OkHttpEngine.OkHttpFactory())
             .zoomMin(layer.minZoom)
             .zoomMax(layer.maxZoom)
             .build()
