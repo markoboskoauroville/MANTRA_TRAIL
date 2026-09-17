@@ -1865,7 +1865,7 @@ private fun SettingsFace(
                 Row2(
                     title = "Google Maps API key",
                     value = if (keyState.contains("google")) "set — from a file you picked" else "not set",
-                    onPress = onPickKeys,
+                    onPress = onImportKeys,
                 )
                 Divider()
                 Row2(title = "test the Google Maps API key", value = "asks for one tile", onPress = onTestTiles)
