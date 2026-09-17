@@ -53,6 +53,34 @@ object OamIndex {
     fun urlFor(continent: String): String = "$MIRROR/$continent/"
 
     /**
+     * MAPS FROM SOMEWHERE ELSE, for when a whole continent is more than somebody wants.
+     *
+     * Baba, 17.9.2026, having fetched the 1.2 GB Balkan file: can the app cut Croatia out of it?
+     * It cannot, and neither can anything else — a .map file is compiled, with its tile index and
+     * zoom intervals built in, and cropping one means running the map writer again over the
+     * original OpenStreetMap extract. That is a desk job of hours and gigabytes, not a phone one.
+     *
+     * What CAN be done is fetch a smaller map instead, so these are offered beside the big ones.
+     * Sizes measured against the servers on 17.9.2026.
+     */
+    val ELSEWHERE: List<Entry> = listOf(
+        Entry(
+            fileName = "openhiking-croatia.zip",
+            bytes = 294_214_142L,
+            continent = "openhiking",
+        ),
+    )
+
+    /** Where a map from one of those other places is fetched from. */
+    fun elsewhereUrl(entry: Entry): String = when (entry.fileName) {
+        "openhiking-croatia.zip" ->
+            "https://www.openhiking.eu/en/component/phocadownload/category/" +
+                "1-terkepek/5-turistaterkepek-mapsforge?download=21:openhiking-croatia"
+
+        else -> entry.url
+    }
+
+    /**
      * Every .zip in a directory listing, with its size. Anything that is not a row with a size on
      * it is skipped, so a page that changes shape gives fewer regions rather than wrong ones.
      */

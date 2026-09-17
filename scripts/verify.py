@@ -596,6 +596,11 @@ check("a download in progress is visible from the maps face",
 check("the folder the maps live in is written down",
       "folderLabel" in (MAIN / "OamDownload.kt").read_text() and "kept in $folder" in screens,
       "a file nobody can find is a file nobody has")
+# 17.9.2026, his question: can the app cut Croatia out of the 1.2 GB Balkan file? It cannot — a
+# .map is compiled, index and all — so a smaller map is offered instead of a promise.
+check("a smaller map is offered where cropping is impossible",
+      "ELSEWHERE" in (MAIN / "OamIndex.kt").read_text() and "OpenHiking Croatia" in screens,
+      "294 MB against 1.19 GB, and made for walking too")
 check("which map is drawn is his to choose",
       "store.offlineMapName" in canvas_src and "onUse" in screens,
       "with several regions on the phone, the app draws the one he ticked")

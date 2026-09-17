@@ -1150,6 +1150,37 @@ private fun MapsFace(
             }
             Label("kept in $folder", Paint.Dim, size = 10, align = TextAlign.Start)
 
+            // SMALLER MAPS, FIRST (17.9.2026). He asked whether Croatia could be cut out of the
+            // Balkan file: it cannot, by this app or any other, so the answer offered instead is
+            // a map that is only Croatia — a quarter of the size, and made for walking too.
+            Label("a smaller map, from elsewhere", Paint.Dim, size = 12, align = TextAlign.Start)
+            OamIndex.ELSEWHERE.forEach { entry ->
+                val here = installed.any { it.name == entry.mapName }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable { if (!here) onFetch(entry) }
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Label(
+                        text = "OpenHiking Croatia",
+                        colour = if (here) Paint.Dim else Paint.Sand,
+                        size = 12,
+                        align = TextAlign.Start,
+                    )
+                    Label(
+                        text = if (here) "on the phone" else entry.sizeLabel,
+                        colour = if (here) Paint.Green else Paint.Amber,
+                        size = 11,
+                    )
+                }
+            }
+
             Label("fetch a region", Paint.Dim, size = 12, align = TextAlign.Start)
             OamIndex.CONTINENTS.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

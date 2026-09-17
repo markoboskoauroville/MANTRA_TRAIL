@@ -92,16 +92,15 @@ object OamDownload {
             }
         }
 
-    /** Fetch a region named by the mirror's own index. */
+    /**
+     * Fetch a region, whether it came from the mirror's index or from one of the other places a
+     * smaller map can be had. The URL is the entry's own, so nothing here has to know which.
+     */
     suspend fun fetchEntry(
         context: Context,
         entry: OamIndex.Entry,
         onProgress: (Progress) -> Unit,
-    ): String? = fetch(
-        context,
-        Oam.Region(entry.label.lowercase(), entry.label, "${entry.continent}/${entry.fileName}", entry.bytes),
-        onProgress,
-    )
+    ): String? = fetchUrl(context, OamIndex.elsewhereUrl(entry), entry.mapName, entry.label, onProgress)
 
     fun remove(file: File): String? = if (file.delete()) null else "That map could not be deleted"
 
@@ -116,13 +115,21 @@ object OamDownload {
         context: Context,
         region: Oam.Region,
         onProgress: (Progress) -> Unit,
+    ): String? = fetchUrl(context, region.url, region.fileName, region.label, onProgress)
+
+    private suspend fun fetchUrl(
+        context: Context,
+        url: String,
+        mapName: String,
+        label: String,
+        onProgress: (Progress) -> Unit,
     ): String? = withContext(Dispatchers.IO) {
-        val finished = target(context, region)
+        val finished = File(folder(context), mapName)
         if (finished.exists() && finished.length() > 1_000_000) return@withContext null
-        val zip = File(folder(context), "${region.name}.zip.part")
+        val zip = File(folder(context), "$mapName.zip.part")
 
         try {
-            val connection = URL(region.url).openConnection() as HttpURLConnection
+            val connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 20_000
             connection.readTimeout = 30_000
             connection.setRequestProperty("User-Agent", "MantraTrail/1")
@@ -169,7 +176,7 @@ object OamDownload {
             }
 
             onProgress(Progress(zip.length(), zip.length(), unpacking = true))
-            val part = File(folder(context), "${region.fileName}.part")
+            val part = File(folder(context), "$mapName.part")
             var found = false
             ZipInputStream(zip.inputStream().buffered(256 * 1024)).use { zin ->
                 while (true) {
