@@ -175,8 +175,11 @@ check("the download resumes rather than starting again",
 check("a part file only becomes the map when it is whole",
       "part.length() < total" in download and "renameTo(finished)" in download,
       "the length is checked before the rename")
+# Was about the mapsforge download row, which left with that row on 17.9.2026. The rule it stood
+# for is now kept by the maps face, where nothing is fetched before its size has been said.
 check("the size is on the screen before the download starts",
-      "OfflineDownload.LABEL" in screens or "OfflineDownload.LABEL" in activity, "present")
+      "Press again to start" in activity and "sizeLabel" in (MAIN / "OamIndex.kt").read_text(),
+      "named and measured, then a second press")
 
 
 # NO KEY IS BUILT INTO THIS APP (14.9.2026, after a live Maps key went out inside a public APK).
