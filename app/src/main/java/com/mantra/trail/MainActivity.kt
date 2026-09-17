@@ -351,8 +351,6 @@ class MainActivity : ComponentActivity() {
                 onChooseMapFile = { pickMapFile.launch(arrayOf("*/*")) },
                 onChooseExportFolder = { pickExportFolder.launch(null) },
                 onImportKeys = { pickKeyFile.launch(arrayOf("*/*")) },
-                onDownloadMap = ::downloadOfflineMap,
-                onOpenMapLink = ::openMapLink,
                 onBare = ::setFullScreen,
                 tracks = { Folder.list(this, store) },
                 folderLabel = Folder.label(this, store),
@@ -411,48 +409,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * THE OFFLINE MAP, FETCHED BY THE APP ITSELF. 176 MB from mapsforge's own server, resumable,
-     * with the progress on the screen the whole time (download-monitor.md: never in the dark).
-     */
-    private fun downloadOfflineMap() {
-        if (downloading) {
-            Trail.say("Already fetching the map")
-            return
-        }
-        if (MapDownload.isPresent(this)) {
-            Trail.say("The offline map is already on the phone")
-            return
-        }
-        downloading = true
-        Net.job = "downloading the offline map"
-        Trail.say("Fetching ${Layers.OfflineDownload.LABEL}. It can run in the background.")
-        lifecycleScope.launch {
-            val problem = MapDownload.fetch(this@MainActivity) { p ->
-                Trail.say("Map ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB")
-            }
-            downloading = false
-            Net.job = null
-            UiTick.bump()
-            if (problem != null) {
-                Trail.say(problem)
-            } else {
-                Trail.say("The offline map is on the phone. It works with no signal now.")
-                if (Layers.byId(store.layerId).kind == LayerKind.VECTOR_FILE) {
-                    Trail.say(canvas?.show(Layers.OFFLINE))
-                }
-            }
-        }
-    }
 
-    /** The same file, in a browser, for when the phone is the wrong place to fetch 176 MB. */
-    private fun openMapLink() {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Layers.OfflineDownload.URL)))
-        } catch (e: Exception) {
-            Trail.say("No browser answered: ${Layers.OfflineDownload.URL}")
-        }
-    }
 
 
     private fun whereAmI() {

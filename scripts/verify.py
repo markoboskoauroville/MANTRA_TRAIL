@@ -106,8 +106,9 @@ check("the notification is taken down when the service dies",
 
 # 7 nothing on the screen appears or disappears: the controls are always drawn and are enabled
 # or not (design-language.md 1). Five keys, five enabled arguments.
-screens_src = (MAIN / "Screens.kt").read_text()
+screens_src = (MAIN / "Screens.kt").read_text() + (MAIN / "Settings.kt").read_text()
 screens = code_only(screens_src)
+settings_src = (MAIN / "Settings.kt").read_text()
 keys = re.findall(r"\bKey\(", screens)
 check("the control row draws every key unconditionally",
       len(keys) + screens.count("MarkKey(") + screens.count("RecordKey(") >= 6,
@@ -210,7 +211,7 @@ check("no button pre-fetches anybody's tiles",
       'glyph = "CH"' not in screens and not (MAIN / "Caching.kt").exists(),
       "the key and the arithmetic behind it are both gone")
 check("the credits are gathered in settings, not printed over the map",
-      "creditOnMap: Boolean get() = false" in layers and "map credits" in screens,
+      "creditOnMap: Boolean get() = false" in layers and 'title = "credits"' in settings_src,
       "one block at the bottom of the settings face")
 
 # WHAT THE PHONE SHOWED ON 15.9.2026, TURNED INTO CHECKS.
@@ -442,12 +443,21 @@ check("two taps in a row are what lock it",
 # builds them: a quiet title, a rounded card, rows with a second line under the title. The three
 # checks that described the old flat list — folding families, capitals for a group, a family of
 # one — went with the list they described. With two families left there was nothing left to fold.
+# Rewritten from nothing on 17.9.2026, in its own file, because the ticks did not move when they
+# were tapped: the old face asked the preferences whether it was ticked while drawing the frame.
 check("the settings are grouped into cards with titles",
-      "private fun Section(" in screens and "private fun Row2(" in screens
-      and 'Section("maps")' in screens and 'Section("tracks")' in screens,
+      'Group("maps")' in settings_src and 'Group("tracks")' in settings_src
+      and 'Group("keys")' in settings_src and 'Group("about")' in settings_src,
       "maps, tracks, keys, about")
+check("the settings read the store once, not while drawing",
+      "private class SettingsState" in settings_src and "remember(store) { SettingsState(store) }" in settings_src,
+      "a tap moves the holder, the holder redraws the screen, the store is written behind it")
+check("a tick is told whether it is ticked",
+      "private fun Box2(checked: Boolean" in settings_src,
+      "rather than asking the disk every frame")
 check("a row says what it is and what it is set to",
-      "Label(title, Paint.Sand, size = 14" in screens and "if (value != null) Label(value" in screens,
+      "Words(title, Paint.Sand, 15, TextAlign.Start)" in settings_src
+      and "if (under != null) Words(under" in settings_src,
       "the title first, its state underneath, as Android does it")
 check("a map can be taken out of the toggle and still be in the list",
       "store.inToggle" in screens and "fun inToggle" in (MAIN / "Store.kt").read_text(),
@@ -530,8 +540,8 @@ check("the light turns with the map as well as with the phone",
 # behind the settings — the same fault export had. And the row showed the SETTING, so a phone
 # running mapsforge could read "VTM" and be telling the truth about the wrong thing.
 check("the diagnosis appears where it was asked for",
-      "answer = CanvasHolder.canvas?.diagnose()" in screens,
-      "not on a line behind the screen he is looking at")
+      "state.answer = CanvasHolder.canvas?.diagnose()" in settings_src,
+      "under the row that asked for it, not on a line behind the screen")
 check("the engine names itself in its answer",
       "VTM (GPU)" in canvas_src, "so a screenshot of it says which code was running")
 # The choice is gone with the CPU renderer (16.9.2026): there is one engine, so there is nothing

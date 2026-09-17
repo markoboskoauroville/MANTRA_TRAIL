@@ -124,8 +124,6 @@ fun TrailApp(
     onChooseMapFile: () -> Unit,
     onChooseExportFolder: () -> Unit,
     onImportKeys: () -> Unit,
-    onDownloadMap: () -> Unit,
-    onOpenMapLink: () -> Unit,
     onBare: (Boolean) -> Unit,
     tracks: () -> List<Folder.Entry>,
     folderLabel: String,
@@ -524,8 +522,6 @@ fun TrailApp(
                 onChooseMapFile = onChooseMapFile,
                 onChooseExportFolder = onChooseExportFolder,
                 onImportKeys = onImportKeys,
-                onDownloadMap = onDownloadMap,
-                onOpenMapLink = onOpenMapLink,
                 onPause = onPause,
                 recordingPaused = paused,
                 onTracks = {
@@ -539,6 +535,8 @@ fun TrailApp(
                     showMaps = true
                 },
                 installedCount = installedMaps.size,
+                folderName = store.exportFolderName ?: "none chosen yet",
+                hasGoogleKey = store.key(Keys.Provider.GOOGLE) != null,
                 onClose = { settings = false },
             )
         }
@@ -722,38 +720,37 @@ private fun LittleCompass(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // GOOGLE'S, COPIED (17.9.2026, from his screenshot). A black disc the size of a thumb, a red
+    // needle to the north and a pale one opposite, and nothing else on it. His words: the same,
+    // the same, the same. One tap north up and centred; the next follows the walk, and the disc
+    // takes an amber ring so the difference is a colour rather than a word.
     Box(
         modifier
-            .size(46.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .background(Paint.Bar)
+            .background(Color(0xFF16191D))
+            .then(
+                if (following) Modifier.border(1.5.dp, Paint.Amber, CircleShape) else Modifier
+            )
             .clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(30.dp)) {
+        Canvas(Modifier.size(26.dp)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f
-            if (following) drawCircle(Paint.Amber, radius = r, center = c, style = Stroke(1.5.dp.toPx()))
-            // The needle turns the other way from the map: the map turning east means north is
-            // now to the left, and the needle has to say so.
             val angle = Math.toRadians(-turn.toDouble() - 90.0)
-            val tip = Offset(
-                c.x + (r * 0.78f * Math.cos(angle)).toFloat(),
-                c.y + (r * 0.78f * Math.sin(angle)).toFloat(),
+            val across = Math.toRadians(-turn.toDouble())
+
+            fun at(distance: Float, direction: Double) = Offset(
+                c.x + (distance * Math.cos(direction)).toFloat(),
+                c.y + (distance * Math.sin(direction)).toFloat(),
             )
-            val tail = Offset(
-                c.x - (r * 0.78f * Math.cos(angle)).toFloat(),
-                c.y - (r * 0.78f * Math.sin(angle)).toFloat(),
-            )
-            val side = Math.toRadians(-turn.toDouble())
-            val left = Offset(
-                c.x + (r * 0.26f * Math.cos(side)).toFloat(),
-                c.y + (r * 0.26f * Math.sin(side)).toFloat(),
-            )
-            val right = Offset(
-                c.x - (r * 0.26f * Math.cos(side)).toFloat(),
-                c.y - (r * 0.26f * Math.sin(side)).toFloat(),
-            )
+
+            val tip = at(r * 0.92f, angle)
+            val tail = at(r * 0.92f, angle + Math.PI)
+            val left = at(r * 0.22f, across)
+            val right = at(r * 0.22f, across + Math.PI)
+
             drawPath(
                 androidx.compose.ui.graphics.Path().apply {
                     moveTo(tip.x, tip.y)
@@ -761,7 +758,7 @@ private fun LittleCompass(
                     lineTo(right.x, right.y)
                     close()
                 },
-                Paint.Red,
+                Color(0xFFEA4335),
             )
             drawPath(
                 androidx.compose.ui.graphics.Path().apply {
@@ -770,7 +767,7 @@ private fun LittleCompass(
                     lineTo(right.x, right.y)
                     close()
                 },
-                Paint.Sand,
+                Color(0xFFE8EAED),
             )
         }
     }
@@ -1758,204 +1755,6 @@ private fun RouteMenu(
     }
 }
 
-/**
- * EVERYTHING ELSE LIVES HERE: the tracks, the map choice, the offline map, the folders and the
- * keys. The compass has its own key now and the level is gone. One key on the map screen opens
- * this, and the way out is at the right-hand end of its top row, as on every face of every app
- * here.
- */
-@Composable
-private fun SettingsFace(
-    store: Store,
-    current: MapLayer,
-    version: String,
-    onPick: (MapLayer) -> Unit,
-    onChooseMapFile: () -> Unit,
-    onChooseExportFolder: () -> Unit,
-    onImportKeys: () -> Unit,
-    onDownloadMap: () -> Unit,
-    onOpenMapLink: () -> Unit,
-    onPause: () -> Unit,
-    recordingPaused: Boolean,
-    onTracks: () -> Unit,
-    trackCount: Int,
-    onTestTiles: () -> Unit,
-    onMaps: () -> Unit,
-    installedCount: Int,
-    onClose: () -> Unit,
-) {
-    var answer by remember { mutableStateOf<String?>(null) }
-    var theme by remember { mutableStateOf(store.themeName) }
-    var googleOpen by remember { mutableStateOf(false) }
-    val mapState = remember(UiTick.n) { store.offlineMapState }
-    // The folder BY NAME. "chosen" told him nothing he could act on (15.9.2026).
-    val exportState = remember(UiTick.n) {
-        store.exportFolderName ?: if (store.exportTreeUri != null) "chosen" else "none yet"
-    }
-    val keyState = remember(UiTick.n) { store.keyState }
-
-    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
-        // IT SCROLLS. Baba, 15.9.2026: *"I cannot reach bottom of the settings... Everything should
-        // be scrollable everywhere."* A settings face that is one screen tall today is two screens
-        // tall the moment a row is added, and the rows at the bottom are the ones nobody can reach
-        // — so it scrolls whether or not it currently needs to, and the safe area keeps the last
-        // row clear of the gesture bar.
-        Column(
-            Modifier
-                .fillMaxSize()
-                .safeDrawingPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(GAP),
-            verticalArrangement = Arrangement.spacedBy(GAP),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().height(46.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Label("settings", Paint.Dim, size = 13)
-                Box(
-                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) { Label("✕", Paint.Sand, size = 18) }
-            }
-
-            // TRACKS FIRST, because it is the thing he opens the settings for most (15.9.2026).
-            Section("maps") {
-                Row2(
-                    title = "map",
-                    value = current.label,
-                    onPress = { onPick(Layers.OFFLINE) },
-                )
-                Divider()
-                Row2(
-                    title = "maps on this phone",
-                    value = if (installedCount == 0) {
-                        "none yet — fetch one"
-                    } else {
-                        "$installedCount here · fetch any region"
-                    },
-                    onPress = onMaps,
-                )
-                Divider()
-                Row2(
-                    title = "how the map is drawn",
-                    value = when (theme) {
-                        "MANTRA" -> "walking — contours, path difficulty, waymarks"
-                        else -> theme.lowercase()
-                    },
-                    onPress = {
-                        val next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.size]
-                        theme = next
-                        Trail.say(CanvasHolder.canvas?.setTheme(next))
-                    },
-                )
-                Divider()
-                Row2(title = "add a .map file from the phone", value = "file picker", onPress = onChooseMapFile)
-                Divider()
-                Row2(
-                    title = "Google's views",
-                    value = if (keyState.contains("google")) "key set" else "needs your own key",
-                    onPress = { googleOpen = !googleOpen },
-                    trailing = {
-                        Tick(
-                            checked = store.familyInToggle(MapLayer.Family.GOOGLE),
-                            onChange = { store.setFamilyInToggle(MapLayer.Family.GOOGLE, it) },
-                        )
-                    },
-                )
-                if (googleOpen) {
-                    Layers.GOOGLE_ALL.forEach { layer ->
-                        var on by remember(layer.id, UiTick.n) { mutableStateOf(store.inToggle(layer.id)) }
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .padding(start = 32.dp, end = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier.weight(1f).fillMaxWidth().clickable { onPick(layer) },
-                                contentAlignment = Alignment.CenterStart,
-                            ) {
-                                Label(
-                                    text = layer.name,
-                                    colour = if (layer.id == current.id) Paint.Amber else Paint.Sand,
-                                    size = 13,
-                                    align = TextAlign.Start,
-                                )
-                            }
-                            Tick(
-                                checked = on,
-                                onChange = {
-                                    on = it
-                                    store.setInToggle(layer.id, it)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            Section("tracks") {
-                Row2(title = "tracks (gpx)", value = "$trackCount in the folder", onPress = onTracks)
-                Divider()
-                Row2(title = "folder they live in", value = exportState, onPress = onChooseExportFolder)
-                Divider()
-                Row2(
-                    title = "recording",
-                    value = if (recordingPaused) "paused" else "running",
-                    onPress = onPause,
-                )
-            }
-
-            Section("keys") {
-                Row2(
-                    title = "Google Maps API key",
-                    value = if (keyState.contains("google")) "set — from a file you picked" else "not set",
-                    onPress = onImportKeys,
-                )
-                Divider()
-                Row2(title = "test the Google Maps API key", value = "asks for one tile", onPress = onTestTiles)
-            }
-
-            Section("about") {
-                Row2(
-                    title = "what is the map doing",
-                    value = answer ?: "ask it",
-                    onPress = { answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet" },
-                )
-                Divider()
-                Row2(title = "Mantra Trail", value = "v$version")
-                Divider()
-                Row2(
-                    title = "map credits",
-                    value = "© OpenStreetMap contributors · OpenAndroMaps · BRouter (MIT) · Google",
-                )
-            }
-
-            Label("", Paint.Dim, size = 10)
-
-            // EVERY CREDIT, IN ONE PLACE, AT THE VERY BOTTOM. Off the map, where they were in the
-            // way of the ground he is walking on, and here where they can be read once.
-            Label("map credits", Paint.Dim, size = 11, align = TextAlign.Start)
-            Layers.ALL.map { it.attribution }.distinct().forEach {
-                Label(it, Paint.Dim, size = 9, align = TextAlign.Start)
-            }
-        }
-    }
-}
-
-
-/**
- * A SETTINGS SECTION, built the way the phone's own Settings app builds one (17.9.2026).
- *
- * He said it looked amateurish beside Android's, and he was right: a flat list of rows with long
- * sentences in them and no grouping is a list you read word by word. Android's has a quiet title,
- * then a rounded card, then rows inside it with a title and a second line underneath — so the eye
- * lands on the title and takes the rest only if it needs to.
- */
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
