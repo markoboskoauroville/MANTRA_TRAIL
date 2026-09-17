@@ -114,6 +114,15 @@ class Store(context: Context) {
     fun setFamilyInToggle(family: MapLayer.Family, value: Boolean) =
         prefs.edit().putBoolean("family-toggle-${family.name}", value).apply()
 
+    /**
+     * WHETHER A DROPDOWN IN THE SETTINGS IS OPEN, remembered between sessions (17.9.2026): "once
+     * I uncollapse it, it stays uncollapsed until I do the opposite".
+     */
+    fun opened(name: String): Boolean = prefs.getBoolean("open-$name", false)
+
+    fun setOpened(name: String, value: Boolean) =
+        prefs.edit().putBoolean("open-$name", value).apply()
+
     /** Whether a settings section is folded away. Remembered between sessions (15.9.2026). */
     fun collapsed(section: String): Boolean = prefs.getBoolean("collapsed-$section", section != "thunderforest")
 

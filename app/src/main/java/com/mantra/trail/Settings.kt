@@ -55,9 +55,10 @@ import androidx.compose.ui.unit.sp
  */
 private class SettingsState(val store: Store) {
     var theme by mutableStateOf(store.themeName)
-    var googleOpen by mutableStateOf(false)
-    var keysOpen by mutableStateOf(false)
-    var offlineOpen by mutableStateOf(false)
+    // OPEN UNTIL HE CLOSES IT (17.9.2026). The state is his, so it outlives the screen.
+    var googleOpen by mutableStateOf(store.opened("google"))
+    var keysOpen by mutableStateOf(store.opened("keys"))
+    var offlineOpen by mutableStateOf(store.opened("offline"))
     var answer by mutableStateOf<String?>(null)
     fun cycleTheme(): String? {
         val next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.size]
@@ -130,9 +131,9 @@ fun SettingsFace(
             // is TWO controls on one line: the name opens that map's own options, and the arrow
             // drops down its views. Choosing a view closes the settings and shows the map, which
             // is the only reason anybody opened the dropdown.
-            Group("tracks") {
+            Group("Tracks") {
                 Line(
-                    title = "tracks",
+                    title = "Tracks",
                     opens = true,
                     under = "$trackCount in the folder · rename, show, delete, the folder itself",
                     onPress = onTracks,
@@ -145,16 +146,16 @@ fun SettingsFace(
             // question nobody asked: he wants to pick a view and see it. So each view is a radio —
             // one at a time, the chosen one marked — and choosing closes the settings and draws it.
             // The key on the map screen turns between the two MAPS, not through eight views.
-            Group("maps") {
+            Group("Maps") {
                 Line(
                     // PLURAL, BECAUSE THERE ARE SEVERAL (17.9.2026): the dropdown lists every map
                     // on the phone, finished or half-fetched, and one of them draws at a time.
-                    title = "offline maps",
+                    title = "Offline maps",
                     opens = true,
                     under = offlineUnder,
                     onPress = onMaps,
                     trailing = {
-                        Caret(open = state.offlineOpen) { state.offlineOpen = !state.offlineOpen }
+                        Caret(open = state.offlineOpen) { state.setOfflineopen(!state.offlineOpen) }
                     },
                 )
                 if (state.offlineOpen) {
@@ -221,10 +222,10 @@ fun SettingsFace(
                 Rule()
                 Line(
                     title = "Google maps",
-                    under = if (hasGoogleKey) "key set" else "needs your own key",
-                    onPress = { state.googleOpen = !state.googleOpen },
+
+                    onPress = { state.setGoogleopen(!state.googleOpen) },
                     trailing = {
-                        Caret(open = state.googleOpen) { state.googleOpen = !state.googleOpen }
+                        Caret(open = state.googleOpen) { state.setGoogleopen(!state.googleOpen) }
                     },
                 )
                 if (state.googleOpen) {
@@ -237,92 +238,86 @@ fun SettingsFace(
                             onPress = { onPick(layer) },
                         )
                     }
-                    // THE KEYRING (17.9.2026, as in his own KEY_RING_TESTER): every key he has
-                    // added, what it last answered, a square that tests it and writes the result
-                    // beside it, and a cross that takes it off. The app walks them in order when
-                    // it needs one, so a key that stops working is not a dead map.
-                    Rule()
-                    Line(
-                        title = "keys",
-                        under = if (keyring.isEmpty()) {
-                            "none yet · add a file with a key in it"
-                        } else {
-                            "${keyring.size} on the ring · tried in order"
-                        },
-                        inset = true,
-                        onPress = { state.keysOpen = !state.keysOpen },
-                        trailing = { Caret(open = state.keysOpen) { state.keysOpen = !state.keysOpen } },
-                    )
-                    if (state.keysOpen) {
-                        keyring.forEach { key ->
-                            Rule()
-                            Line(
-                                title = key.label,
-                                under = if (key.said.isNotBlank() && key.verdict != Keyring.Verdict.GOOD) {
-                                    "${key.masked} · ${key.said}"
-                                } else {
-                                    Keyring.describe(key)
-                                },
-                                inset = true,
-                                // TWO BUTTONS THE SAME SIZE, side by side and not overlapping
-                                // (17.9.2026): a cross squeezed against a bordered box read as
-                                // one broken control.
-                                trailing = {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Box(
-                                            Modifier
-                                                .size(width = 58.dp, height = 36.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .border(1.2.dp, Paint.Amber, RoundedCornerShape(8.dp))
-                                                .clickable { onTestKey(key) },
-                                            contentAlignment = Alignment.Center,
-                                        ) { Words("test", Paint.Amber, 12) }
-                                        Box(
-                                            Modifier
-                                                .size(width = 58.dp, height = 36.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .border(1.2.dp, Paint.Red, RoundedCornerShape(8.dp))
-                                                .clickable { onRemoveKey(key) },
-                                            contentAlignment = Alignment.Center,
-                                        ) { Words("delete", Paint.Red, 12) }
-                                    }
-                                },
-                            )
-                        }
-                        Rule()
-                        Line(
-                            title = "add keys from a file",
-                            under = "every Google key in it goes on the ring and is tested",
-                            inset = true,
-                            opens = true,
-                            onPress = onImportKeys,
-                        )
-                    }
                 }
             }
 
-            Group("about") {
+            // THE KEYS, AT THE BOTTOM AND ON THEIR OWN (17.9.2026). They belong to no single
+            // map: one ring serves whatever asks. Under the Google row they were two lines he had
+            // to pass every time he wanted a view.
+            Group("API keys") {
+                // THE KEYRING (17.9.2026, as in his own KEY_RING_TESTER): every key he has
+                // added, what it last answered, a square that tests it and writes the result
+                // beside it, and a cross that takes it off. The app walks them in order when
+                // it needs one, so a key that stops working is not a dead map.
                 Line(
-                    title = "what is the map doing",
-                    under = state.answer ?: "ask it",
-                    onPress = {
-                        state.answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet"
+                    title = "Google Maps API keys",
+                    under = if (keyring.isEmpty()) {
+                        "none yet · add a file with a key in it"
+                    } else {
+                        "${keyring.size} on the ring · tried in order"
                     },
+                    onPress = { state.setKeysopen(!state.keysOpen) },
+                    trailing = { Caret(open = state.keysOpen) { state.setKeysopen(!state.keysOpen) } },
                 )
-                Rule()
-                Line(title = "Mantra Trail", under = "v$version")
-                Rule()
-                Line(
-                    title = "credits",
-                    under = "© OpenStreetMap contributors · OpenAndroMaps · OpenHiking · " +
-                        "BRouter (MIT) · Google",
-                )
+                if (state.keysOpen) {
+                    keyring.forEach { key ->
+                    Rule()
+                    Line(
+                        title = key.label,
+                        under = if (key.said.isNotBlank() && key.verdict != Keyring.Verdict.GOOD) {
+                            "${key.masked} · ${key.said}"
+                        } else {
+                            Keyring.describe(key)
+                        },
+                        inset = true,
+                        // TWO BUTTONS THE SAME SIZE, side by side and not overlapping
+                        // (17.9.2026): a cross squeezed against a bordered box read as
+                        // one broken control.
+                        trailing = {
+                            Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                            Box(
+                                Modifier
+                                    .size(width = 58.dp, height = 36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(1.2.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                    .clickable { onTestKey(key) },
+                                contentAlignment = Alignment.Center,
+                            ) { Words("test", Paint.Amber, 12) }
+                            Box(
+                                Modifier
+                                    .size(width = 58.dp, height = 36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(1.2.dp, Paint.Red, RoundedCornerShape(8.dp))
+                                    .clickable { onRemoveKey(key) },
+                                contentAlignment = Alignment.Center,
+                            ) { Words("delete", Paint.Red, 12) }
+                            }
+                        },
+                    )
+                    }
+                    Rule()
+                    Line(
+                    title = "add keys from a file",
+                    under = "every Google key in it goes on the ring and is tested",
+                    inset = true,
+                    opens = true,
+                    onPress = onImportKeys,
+                    )
+                }
             }
 
-            Box(Modifier.height(24.dp))
+            Group("About") {
+                Line(
+                    // The version is the title's own state; the app's name above it was a row
+                    // spent saying what the launcher already says.
+                    title = "credits",
+                    under = "v$version · © OpenStreetMap contributors · OpenAndroMaps · " +
+                        "OpenHiking · BRouter (MIT) · Google",
+                )
+            }
         }
     }
 }

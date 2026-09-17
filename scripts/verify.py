@@ -461,8 +461,8 @@ check("two taps in a row are what lock it",
 # Reordered 17.9.2026 to his logic: tracks first, then one entry per map, each with a way into
 # its own options and a dropdown of its views.
 check("tracks come first and each map is one entry",
-      settings_src.index('Group("tracks")') < settings_src.index('Group("maps")')
-      and 'title = "offline maps"' in settings_src and 'title = "Google maps"' in settings_src,
+      settings_src.index('Group("Tracks")') < settings_src.index('Group("Maps")')
+      and 'title = "Offline maps"' in settings_src and 'title = "Google maps"' in settings_src,
       "two entries, both called map; the offline one plural because there are several")
 check("every offline map on the phone is a button in that dropdown",
       "installedMaps.forEach { file ->" in settings_src and "chosen = file.name == drawingMapName" in settings_src,
@@ -474,7 +474,7 @@ check("a half-fetched map is shown rather than hidden",
       "fun unfinished(" in (MAIN / "OamDownload.kt").read_text() and "not finished, open this row to carry on" in settings_src,
       "he asked where his Balkan map was; half on the phone is an answer")
 check("an arrow that opens a list is not the same control as the row",
-      "private fun Caret(" in settings_src and "state.offlineOpen = !state.offlineOpen" in settings_src,
+      "private fun Caret(" in settings_src and "state.setOfflineopen(!state.offlineOpen)" in settings_src,
       "the row opens that map's options; the arrow drops its views")
 check("choosing a view closes the settings and shows the map",
       "settings = false\n                    scope.launch { showLayer(store, Layers.OFFLINE) }" in screens,
@@ -482,9 +482,9 @@ check("choosing a view closes the settings and shows the map",
 # The keys group folded into the Google map's own options on 17.9.2026: a key belongs to the map
 # that needs it, not to a drawer of its own at the bottom of the screen.
 check("the settings are grouped into cards with titles",
-      'Group("tracks")' in settings_src and 'Group("maps")' in settings_src
-      and 'Group("about")' in settings_src,
-      "tracks, maps, about")
+      'Group("Tracks")' in settings_src and 'Group("Maps")' in settings_src
+      and 'Group("About")' in settings_src and 'Group("API keys")' in settings_src,
+      "Tracks, Maps, API keys, About")
 check("the settings read the store once, not while drawing",
       "private class SettingsState" in settings_src and "remember(store) { SettingsState(store) }" in settings_src,
       "a tap moves the holder, the holder redraws the screen, the store is written behind it")
@@ -594,9 +594,10 @@ check("the light turns with the map as well as with the phone",
 # 16.9.2026: he pressed "ask it" and saw nothing, because the answer went to the map's note line
 # behind the settings — the same fault export had. And the row showed the SETTING, so a phone
 # running mapsforge could read "VTM" and be telling the truth about the wrong thing.
-check("the diagnosis appears where it was asked for",
-      "state.answer = CanvasHolder.canvas?.diagnose()" in settings_src,
-      "under the row that asked for it, not on a line behind the screen")
+# Removed 17.9.2026 at his word. The tile fetcher still keeps its report for the day something is
+# white again; it simply is not a row he has to pass every time.
+check("the map's diagnosis is not a row in the settings",
+      "diagnose()" not in settings_src, "he does not need it in front of him")
 check("the engine names itself in its answer",
       "VTM (GPU)" in canvas_src, "so a screenshot of it says which code was running")
 # The choice is gone with the CPU renderer (16.9.2026): there is one engine, so there is nothing
@@ -789,6 +790,17 @@ check("their polyline is decoded where it can be tested",
 check("the keys are a ring, not one key",
       "fun order(" in ring_src and "sessionFromRing" in (MAIN / "GoogleTiles.kt").read_text(),
       "the one that worked last is tried first, the refused one last")
+# 17.9.2026: the keys left the Google row for a group of their own at the bottom — one ring serves
+# whatever asks — and a dropdown he opens stays open until he closes it.
+check("the keys are a group of their own at the bottom",
+      settings_src.index('Group("Maps")') < settings_src.index('Group("API keys")'),
+      "under the Google row they were two lines he passed on the way to a view")
+check("a dropdown he opened stays open",
+      "store.opened(" in settings_src and "fun setOpened(" in (MAIN / "Store.kt").read_text(),
+      "between sessions, as he asked")
+check("the version rides on the credits and the app's name is not a row",
+      '"credits"' in settings_src and '"Mantra Trail"' not in settings_src,
+      "the launcher already says what the app is called")
 check("each key can be tested from its own row",
       'Words("test", Paint.Amber' in settings_src and "onTestKey" in settings_src,
       "and what Google said sits under that key, not somewhere else")
