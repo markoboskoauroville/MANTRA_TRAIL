@@ -483,9 +483,12 @@ check("renaming goes to the provider, not through a wrapper that cannot do it",
       "DocumentsContract.renameDocument" in folder_src, "the call that works on a tree's document")
 check("deleting goes the same way",
       "DocumentsContract.deleteDocument" in folder_src, "one lesson, applied twice")
+# 17.9.2026: the lock moved into the handover, so it is applied to whichever map appears rather
+# than only to the one that was up when he pressed.
 check("the position can be locked to the middle of the screen",
-      "if (follow && fix != null) Canvases.centreOn(fix)" in screens,
-      "one press holds it, the next lets the map go")
+      "if (follow && fix != null) centreOn(fix)" in (MAIN / "Canvases.kt").read_text()
+      and "Canvases.handOver(points, line, fix, follow)" in screens,
+      "one press holds it, the next lets the map go, on either engine")
 # Refined 15.9.2026: one tap centres, TWO IN A ROW lock. A second tap a minute later is somebody
 # centring again, not somebody asking for a lock.
 check("two taps in a row are what lock it",
