@@ -1,36 +1,40 @@
 # WHAT IS LEFT
 
-Kept because he asked, on 17.9.2026, to be told after every build what remains. Anything that is
-done leaves this file; anything he refuses leaves it with a line saying so.
+Kept because he asked, on 17.9.2026, to be told after every build what remains.
 
-## Next, in the order I would do them
+## The one that matters now
 
-He walks half in signal and half out of it (17.9.2026), so the signal half should be worth having
-and the other half must never depend on it.
+**The key row speaks only to VTM.** Google's renderer draws (v69, proved on his phone), but the
+minus, plus, centre, crosshair and point keys all call CanvasHolder, which holds the OFFLINE
+canvas — twenty-four places in the screen, against three that know the Google one exists. On a
+Google map they do nothing and say "the map view is not up yet", which is the line he is seeing in
+both screenshots. Every one of those keys needs to ask whichever canvas is up.
 
-0. **Whether Google's own renderer draws** (v68). If the map is blank and the log says the key is
-   refused, the restriction needs five minutes, or the fingerprint in Cloud Console does not match
-   4A:2A:FC:93:E8:D8:AC:A3:F1:DB:12:0F:25:12:EB:B9:25:D0:48:AB.
-0b. **The overlays on the Google canvas**: his position, the route line and the lettered points are
-   wired; the recorded track and the compass reading from that canvas are not.
+## Then, in order
 
-1. **The height graph for a SAVED TRACK** — v64 put it under a found route; a walk already
-   recorded should be able to show the same thing.
-2. **Street View at a point** — one photograph at A or B, to see a trailhead before driving to it.
-   One billed image per press.
-4. **The map screen's state**, rewritten the way the settings were — it is the last big file where
-   state is read during drawing, which is what made the settings slow and the ticks dead.
+1. **His position on the Google map.** Google's blue dot needs the location permission handed to
+   the SDK; the app has the permission but never passes it, so the dot is missing.
+2. **The recorded walk and the found route on the Google canvas.** The lettered points and the
+   straight line between them are drawn; a recording in progress and a saved track are not.
+3. **The compass over the Google map** — it reads VTM's rotation, so it will not turn with a map
+   Google is drawing.
+4. **Google's logo sits under the key row.** Their terms require it stay visible: the row needs to
+   leave the bottom-left corner alone, or the map needs padding under it.
+5. **Height graph for a saved track** — it exists for a found route only.
+6. **Street View at a point** — one photograph at A or B before driving to a trailhead.
+7. **The map screen's state**, rewritten the way the settings were. It is the last big file where
+   state is read while drawing, which is what made the settings slow and the ticks dead.
 
-## Known, not yet decided
+## Open, not decided
 
-- **Attribution must return to the map** if the app ever leaves his phone: Thunderforest's terms
-  wanted it and they are gone, but OpenStreetMap's ODbL and Google's terms both still ask.
-- **The signing keys** for both apps were made in the sandbox, not on the phone, and exist only as
-  repository secrets (android-app.md 3 wants a copy on the phone so he can rotate them).
-- **Nothing is tested on a phone from this side.** Every screen bug this week was found by his
-  screenshots, not by the checks.
+- **Attribution on the map** if this app ever leaves his phone: OpenStreetMap's ODbL and Google's
+  terms both ask for it, and it lives in the settings now.
+- **The signing keys** for both apps exist only as repository secrets, not on his phone
+  (android-app.md 3 wants a copy he can rotate).
+- **Two keys now.** The restricted one is in the APK and works only there; the unrestricted test
+  one is in the sandbox vault. A budget alert in Cloud Console would be wise for the second.
 
 ## Refused, and why
 
-- **Aerial View, Maps SDK, 3D tiles** — a second renderer fighting VTM, and none of it works
-  without a signal, which is the case the app exists for.
+- **Aerial View, Maps 3D SDK** — none of it works without a signal, which is the case this app
+  exists for.
