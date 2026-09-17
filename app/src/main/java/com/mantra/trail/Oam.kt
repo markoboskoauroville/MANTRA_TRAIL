@@ -14,6 +14,17 @@ package com.mantra.trail
  */
 object Oam {
 
+    /**
+     * THE TWO HE ASKED FOR BY NAME (17.9.2026): the Balkan file that covers Croatia and its
+     * neighbours, and the Croatia-only one mirrored on his own GitHub. They are offered in the
+     * offline maps dropdown whether or not they are on the phone, so switching between them is
+     * one press when they are and two when they are not.
+     */
+    val OFFERED: List<OamIndex.Entry> = listOf(
+        OamIndex.Entry("Balkan.zip", 1_194_219_384L, "europe"),
+        OamIndex.ELSEWHERE.first(),
+    )
+
     const val MIRROR = "https://ftp.gwdg.de/pub/misc/openstreetmap/openandromaps"
 
     data class Region(val name: String, val label: String, val path: String, val zipBytes: Long) {

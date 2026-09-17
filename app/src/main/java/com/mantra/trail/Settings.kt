@@ -74,6 +74,7 @@ fun SettingsFace(
     current: MapLayer,
     installedMaps: List<java.io.File>,
     unfinishedMaps: List<java.io.File>,
+    onFetchOffer: (OamIndex.Entry) -> Unit,
     drawingMapName: String,
     offlineUnder: String,
     onUseMap: (java.io.File) -> Unit,
@@ -182,6 +183,22 @@ fun SettingsFace(
                         )
                     }
 
+                    // THE TWO HE NAMED, whether or not they are here yet: Balkan and the Croatia
+                    // one from his own GitHub. A dropdown that only lists what is already on the
+                    // phone cannot be used to switch to the other one.
+                    Oam.OFFERED.forEach { offer ->
+                        val here = installedMaps.any { it.name == offer.mapName }
+                        if (!here) {
+                            Rule()
+                            Line(
+                                title = offer.label,
+                                under = "not on the phone · ${offer.sizeLabel} to fetch",
+                                inset = true,
+                                onPress = { onFetchOffer(offer) },
+                            )
+                        }
+                    }
+
                     Rule()
                     Line(title = "how they are drawn", inset = true)
                     Layers.OFFLINE_VIEWS.forEach { view ->
@@ -198,7 +215,7 @@ fun SettingsFace(
 
                 Rule()
                 Line(
-                    title = "Google map",
+                    title = "Google maps",
                     under = if (hasGoogleKey) "key set" else "needs your own key",
                     onPress = { state.googleOpen = !state.googleOpen },
                     trailing = {

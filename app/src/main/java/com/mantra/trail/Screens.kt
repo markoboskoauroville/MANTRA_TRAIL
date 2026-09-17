@@ -491,6 +491,11 @@ fun TrailApp(
                 version = version,
                 installedMaps = installedMaps,
                 unfinishedMaps = unfinishedMaps,
+                onFetchOffer = { entry ->
+                    settings = false
+                    showMaps = true
+                    onFetchRegion(entry)
+                },
                 drawingMapName = store.offlineMapName.ifBlank {
                     installedMaps.firstOrNull()?.name ?: ""
                 },
