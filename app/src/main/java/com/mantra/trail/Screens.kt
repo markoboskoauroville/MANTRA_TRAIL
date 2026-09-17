@@ -713,6 +713,21 @@ private fun nextUsable(store: Store, current: MapLayer): MapLayer {
  * made here — once, when the view is actually chosen, because Google bills per tile.
  */
 suspend fun showLayer(store: Store, layer: MapLayer) {
+    // GOOGLE'S MAPS ARE GOOGLE'S TO DRAW (17.9.2026). This routine asked the offline canvas for
+    // every layer, so choosing a Google view — which their own renderer had already drawn
+    // perfectly — ended with "the map view is not up yet" written across a working map. The
+    // sentence was true of the canvas it asked and false about everything he could see.
+    if (layer.family == MapLayer.Family.GOOGLE) {
+        val google = GoogleHolder.canvas
+        if (google == null) {
+            // Not an error: the view is a frame or two behind the choice, and the canvas applies
+            // whatever it was asked for as soon as it arrives.
+            return
+        }
+        Trail.say(google.show(layer))
+        return
+    }
+
     val canvas = CanvasHolder.canvas
     if (canvas == null) {
         // This return used to be silent, which is how a blank screen kept its secret for five

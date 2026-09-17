@@ -802,6 +802,11 @@ check("save is not beside close",
 # dropped in silence. Both bugs he reported were that.
 # 17.9.2026: the yellow key centred the activity's own VTM canvas by name, so on Google's map it
 # dutifully centred a map he could not see.
+# 17.9.2026: showLayer asked the offline canvas for every layer, so a Google view that their own
+# renderer had drawn perfectly still ended with "the map view is not up yet" across a working map.
+check("a Google view is drawn by Google's canvas",
+      "if (layer.family == MapLayer.Family.GOOGLE) {\n        val google = GoogleHolder.canvas" in screens,
+      "and the offline canvas is not asked about a map it is not drawing")
 check("the centre key centres whichever map is on the screen",
       "Canvases.centreOn(fix)" in (MAIN / "MainActivity.kt").read_text(),
       "not the offline canvas by name")
