@@ -138,11 +138,6 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString(KEY_ROUTE_POINTS, Route.encode(v)).apply()
 
 
-    /** 0 free, 1 north up, 2 turning with the walk. Which the little compass was left in. */
-    var northMode: Int
-        get() = prefs.getInt(KEY_NORTH_MODE, 1).coerceIn(0, 2)
-        set(v) = prefs.edit().putInt(KEY_NORTH_MODE, v.coerceIn(0, 2)).apply()
-
     /**
      * WHICH ENGINE DRAWS THE MAP (16.9.2026). false is mapsforge, which rasterises on the CPU and
      * is what every version until now used; true is VTM, the same project's OpenGL renderer,
@@ -209,7 +204,6 @@ class Store(context: Context) {
         private const val KEY_THEME = "themeName"
         private const val KEY_OFFLINE_MAP = "offlineMapName"
         private const val KEY_ROUTE_POINTS = "routePoints"
-        private const val KEY_NORTH_MODE = "northMode"
         private const val KEY_USE_VTM = "useVtm"
         private const val KEY_WALK_SPEED = "walkSpeedKmh"
         private const val KEY_MAP_FILE = "mapFile"

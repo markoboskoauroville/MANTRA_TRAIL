@@ -519,18 +519,24 @@ check("the compass is on the screen, not inside the centre target",
       screens_src.index("LittleCompass(") < screens_src.index("// THE TAP IN THE MIDDLE"),
       "top right, where Google keeps it; it used to be nested in the 72dp centre target")
 # 17.9.2026: he sent Google's screenshot twice. Black disc, red north half, white south half, N.
-check("the compass is Google's, not one of my own",
-      "Color(0xFFEA4335)" in screens and "Color(0xFFF1F3F4)" in screens
-      and 'Label("N"' in screens,
-      "red needle, white tail, the letter under it")
-check("there is a compass that puts north up and centres him",
+# Refined 17.9.2026: hollow, and one thing only. No disc behind it, and the tap that used to
+# choose a second state is gone with the state.
+check("the compass is hollow",
+      "private fun LittleCompass(turn: Float, onTap: () -> Unit" in screens
+      and "Color(0xFF17171A)" not in screens,
+      "a ring, a needle and an N, with the map showing through")
+check("one tap rights the map and that is all it does",
+      "onTap = { CanvasHolder.canvas?.setMapRotation(0f) }" in screens
+      and "NORTH_FOLLOW" not in screens,
+      "no second state to be in by accident")
+check("there is a compass that puts north up",
       "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
-      "one tap, and it centres too")
-check("a second tap turns the map the way he is walking",
-      "if (northMode == NORTH_FOLLOW) {" in screens and "val wanted = (-heading).toFloat()" in screens,
-      "and which of the two it was left in is remembered")
-check("the map is not turned for every wobble of the magnetometer",
-      "> 2.0) {" in screens, "two degrees, or the map shivers in the hand")
+      "one tap")
+# Removed with the second tap, 17.9.2026: he asked for a control that does one thing.
+check("the compass reports the map's own angle",
+      "mapTurn = CanvasHolder.canvas?.mapRotationDeg()" in screens,
+      "so it cannot disagree with what is under it")
+
 check("the map can be turned and the turn can be read back",
       "fun setMapRotation" in canvas_src and "fun mapRotationDeg" in canvas_src,
       "VTM turns with two fingers by itself; the little compass needs to read and set it")

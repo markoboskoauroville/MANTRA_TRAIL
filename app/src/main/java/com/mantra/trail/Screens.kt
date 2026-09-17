@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shadow
@@ -93,10 +94,6 @@ private val CROSS = 34.dp
 private const val COMPASS_DARK = 0
 private const val COMPASS_NIGHT = 1
 private const val COMPASS_OFF = 2
-
-/** What the little compass is doing: north at the top, or the way he is walking at the top. */
-private const val NORTH_UP = 1
-private const val NORTH_FOLLOW = 2
 
 /** The five a line can be drawn in: green, amber, red, blue, white. */
 /** VTM's own themes, in the order they are offered. The plain one leads because it is plainest. */
@@ -150,7 +147,6 @@ fun TrailApp(
     var follow by remember { mutableStateOf(false) }
     var lastCentreTap by remember { mutableLongStateOf(0L) }
     // 0 free, 1 north up, 2 turning with the walk (16.9.2026, as Google's little compass does).
-    var northMode by remember { mutableIntStateOf(store.northMode) }
     var mapTurn by remember { mutableFloatStateOf(0f) }
 
     val fix by Trail.fix.collectAsState()
@@ -225,16 +221,8 @@ fun TrailApp(
             Box(Modifier.fillMaxSize().safeDrawingPadding().padding(top = 52.dp, end = 10.dp)) {
                 LittleCompass(
                     turn = mapTurn,
-                    following = northMode == NORTH_FOLLOW,
                     modifier = Modifier.align(Alignment.TopEnd),
-                    onTap = {
-                        northMode = if (northMode == NORTH_FOLLOW) NORTH_UP else NORTH_FOLLOW
-                        store.northMode = northMode
-                        if (northMode == NORTH_UP) {
-                            CanvasHolder.canvas?.setMapRotation(0f)
-                            onWhereAmI()
-                        }
-                    },
+                    onTap = { CanvasHolder.canvas?.setMapRotation(0f) },
                 )
             }
         }
@@ -394,18 +382,8 @@ fun TrailApp(
         LaunchedEffect(ready) {
             while (true) {
                 if (ready) {
-                    val heading = sensors.heading()
-                    CanvasHolder.canvas?.setHeading(heading)
-                    // TURNING WITH THE WALK: the map is turned so that where he is going is up.
-                    // Only when he asked for it, and only when the needle has really moved, or
-                    // the map would shiver in the hand at every wobble of the magnetometer.
-                    if (northMode == NORTH_FOLLOW) {
-                        val wanted = (-heading).toFloat()
-                        val now = CanvasHolder.canvas?.mapRotationDeg() ?: 0f
-                        if (Math.abs(Geo.deltaDeg(now.toDouble(), wanted.toDouble())) > 2.0) {
-                            CanvasHolder.canvas?.setMapRotation(wanted)
-                        }
-                    }
+                    CanvasHolder.canvas?.setHeading(sensors.heading())
+                    // The compass reports the map's own angle, so it is read where the heading is.
                     mapTurn = CanvasHolder.canvas?.mapRotationDeg() ?: 0f
                 }
                 delay(200)
@@ -714,73 +692,67 @@ object CanvasHolder {
  * It is 44dp, which is a thumb, and it sits under the top bar at the right-hand edge.
  */
 /**
- * GOOGLE'S COMPASS, COPIED (17.9.2026).
+ * THE COMPASS: HOLLOW, AND IT DOES ONE THING (17.9.2026).
  *
- * He sent the screenshot twice and asked for this one and no other: a black disc, a needle whose
- * north half is red and south half white, and the letter N under it. Nothing else on it, and it
- * takes one button's worth of screen.
+ * Baba: *"It shows me if I manually rotating my map where it is pointing to... And when I click
+ * on it, it turns the map to upright position. And it's hollow. There will be just outline and
+ * compass. No black background."*
  *
- * One tap puts north at the top and centres him. The next turns the map so the way he is walking
- * is up, and the disc gains a thin amber ring — the only thing added to Google's, because this
- * app has two states where Google's has one.
+ * So: no disc. A ring, a needle whose north half is red, the letter N, and nothing behind them.
+ * It turns with the map, which is the whole of what it reports, and one tap puts north back at the
+ * top. The second state — turning the map to follow his walk — is gone with the second tap that
+ * chose it; a control that does one thing needs no explanation of which thing it is doing.
+ *
+ * Every stroke is drawn twice, near-black a little wider and then the light colour, because this
+ * hangs over a map that may be a snowfield or a forest and a single colour cannot be read on both.
  */
 @Composable
-private fun LittleCompass(
-    turn: Float,
-    following: Boolean,
-    onTap: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(Color(0xFF17171A))
-            .then(
-                if (following) Modifier.border(1.5.dp, Paint.Amber, CircleShape) else Modifier
-            )
-            .clickable(onClick = onTap),
+        modifier.size(48.dp).clip(CircleShape).clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(24.dp)) {
+            Canvas(Modifier.size(30.dp)) {
                 val c = Offset(size.width / 2f, size.height / 2f)
-                val r = size.minDimension / 2f
-                // The needle turns against the map: the map turned east means north is now to the
-                // left, and a compass that did not say so would be worse than none.
+                val r = size.minDimension / 2f - 1.dp.toPx()
+
+                drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(2.6.dp.toPx()))
+                drawCircle(Paint.Sand, radius = r, center = c, style = Stroke(1.2.dp.toPx()))
+
+                // The needle turns against the map: the map turned east puts north to the left.
                 val angle = Math.toRadians(-turn.toDouble() - 90.0)
-                val tip = Offset(
-                    c.x + (r * 0.92f * Math.cos(angle)).toFloat(),
-                    c.y + (r * 0.92f * Math.sin(angle)).toFloat(),
-                )
-                val tail = Offset(
-                    c.x - (r * 0.92f * Math.cos(angle)).toFloat(),
-                    c.y - (r * 0.92f * Math.sin(angle)).toFloat(),
-                )
                 val across = Math.toRadians(-turn.toDouble())
-                val left = Offset(
-                    c.x + (r * 0.22f * Math.cos(across)).toFloat(),
-                    c.y + (r * 0.22f * Math.sin(across)).toFloat(),
+                fun at(distance: Float, radians: Double) = Offset(
+                    c.x + (distance * Math.cos(radians)).toFloat(),
+                    c.y + (distance * Math.sin(radians)).toFloat(),
                 )
-                val right = Offset(
-                    c.x - (r * 0.22f * Math.cos(across)).toFloat(),
-                    c.y - (r * 0.22f * Math.sin(across)).toFloat(),
-                )
-                fun half(a: Offset, colour: Color) {
+                val tip = at(r * 0.82f, angle)
+                val tail = at(-r * 0.82f, angle)
+                val left = at(r * 0.26f, across)
+                val right = at(-r * 0.26f, across)
+
+                fun half(point: Offset, colour: Color, widen: Float) {
                     drawPath(
                         androidx.compose.ui.graphics.Path().apply {
-                            moveTo(a.x, a.y)
+                            moveTo(point.x, point.y)
                             lineTo(left.x, left.y)
                             lineTo(right.x, right.y)
                             close()
                         },
                         colour,
+                        style = if (widen > 0f) Stroke(widen) else Fill,
                     )
                 }
-                    half(tip, Color(0xFFEA4335))
-                    half(tail, Color(0xFFF1F3F4))
-                }
-            Label("N", Color(0xFFF1F3F4), size = 10)
+                half(tip, Paint.Ground, 3.2.dp.toPx())
+                half(tail, Paint.Ground, 3.2.dp.toPx())
+                half(tip, Color(0xFFEA4335), 0f)
+                half(tail, Paint.Sand, 0f)
+            }
+            Box(contentAlignment = Alignment.Center) {
+                Label("N", Paint.Ground, size = 11)
+                Label("N", Paint.Sand, size = 10)
+            }
         }
     }
 }
