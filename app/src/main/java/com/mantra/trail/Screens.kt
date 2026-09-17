@@ -619,6 +619,16 @@ private fun MapSurface(
                 made.view
             },
             update = { GoogleHolder.canvas?.show(layer) },
+            // A VIEW THAT LEAVES THE SCREEN MUST LET GO OF THE SCREEN (17.9.2026). Compose took
+            // the Google map out of the tree when he switched back to the offline file, but
+            // nobody told the MapView, so it kept its lifecycle and its GL surface — and VTM,
+            // handed a surface that was still somebody else's, drew black. His offline map went
+            // dark the moment Google's renderer had been shown once.
+            onRelease = {
+                GoogleHolder.canvas?.onPause()
+                GoogleHolder.canvas?.onDestroy()
+                GoogleHolder.canvas = null
+            },
         )
         return
     }
@@ -639,6 +649,11 @@ private fun MapSurface(
             // there. The map is now told to draw itself from here, where the view is real.
             onReady()
             made.view
+        },
+        onRelease = {
+            // The same courtesy in the other direction: VTM stops drawing when it leaves.
+            CanvasHolder.canvas?.pause()
+            CanvasHolder.canvas = null
         },
     )
 

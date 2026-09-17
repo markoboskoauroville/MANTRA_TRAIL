@@ -317,6 +317,13 @@ check("the first draw is triggered by the view existing, not by a bare effect",
 # 17.9.2026: two engines, so no key names one of them. Canvases sends each press to whichever map
 # is on the screen; before this the keys asked the offline canvas and were told, truthfully and
 # uselessly, that it was not up.
+# 17.9.2026: his offline map went black the moment Google's renderer had been shown once. Compose
+# took the Google view out of the tree and nobody told the MapView, so it kept its lifecycle and
+# its GL surface, and VTM drew onto a surface that was still somebody else's.
+check("a map that leaves the screen lets go of the screen",
+      "onRelease = {" in screens and "GoogleHolder.canvas?.onDestroy()" in screens
+      and "CanvasHolder.canvas?.pause()" in screens,
+      "both engines, or the one that stays draws black")
 check("every key speaks to whichever map is up",
       (MAIN / "Canvases.kt").exists() and "Canvases.googleIsUp" in screens
       and "CanvasHolder.canvas?.zoomIn" not in screens,
