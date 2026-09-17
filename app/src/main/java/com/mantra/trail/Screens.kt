@@ -1227,6 +1227,12 @@ private fun MapsFace(
     listing: List<OamIndex.Entry>,
     listingOf: String?,
     onFetch: (OamIndex.Entry) -> Unit,
+    imageryDepth: Int,
+    imageryCost: String,
+    imageryHeld: String,
+    onImageryDepth: (Int) -> Unit,
+    onFetchImagery: () -> Unit,
+    onForgetImagery: () -> Unit,
     onClose: () -> Unit,
 ) {
     val busy by OamDownload.state.collectAsState()
