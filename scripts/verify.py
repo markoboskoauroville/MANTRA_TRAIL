@@ -467,8 +467,9 @@ check("the name box starts empty and says what the name is now",
 check("the entry box has a frame and the cursor is already in it",
       "border(1.5.dp, Paint.Amber" in screens and "focus.requestFocus()" in screens,
       "on a dark panel an unfocused dark field is a label, not a box")
-check("the name box has two answers and they are named OK and cancel",
-      '"cancel"' in screens and '"OK"' in screens,
+# 17.9.2026: cancel became discard, because that is what the key now does.
+check("the name box has two answers and they are named OK and discard",
+      '"discard"' in screens and '"OK"' in screens,
       "no third thing to read on a hillside")
 # The reason it was not empty: the file name was being built from a date stamp AND a name that
 # was already a date, so nothing matched the pattern and the box opened full of numbers.
@@ -807,6 +808,10 @@ check("save is not beside close",
 check("a Google view is drawn by Google's canvas",
       "if (layer.family == MapLayer.Family.GOOGLE) {\n        val google = GoogleHolder.canvas" in screens,
       "and the offline canvas is not asked about a map it is not drawing")
+check("discard discards",
+      "onDiscardRecording(file)" in screens and 'Label("discard", Paint.Red' in screens
+      and "fun discardRecording" in (MAIN / "MainActivity.kt").read_text(),
+      "a key that does the opposite of its word teaches him to trust none of them")
 check("the centre key centres whichever map is on the screen",
       "Canvases.centreOn(fix)" in (MAIN / "MainActivity.kt").read_text(),
       "not the offline canvas by name")

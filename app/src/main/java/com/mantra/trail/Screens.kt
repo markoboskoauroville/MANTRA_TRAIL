@@ -125,6 +125,7 @@ fun TrailApp(
     tracks: () -> List<Folder.Entry>,
     folderLabel: String,
     onRenameJustFinished: (java.io.File, String) -> Unit,
+    onDiscardRecording: (java.io.File) -> Unit,
     onDeleteTrack: (Folder.Entry) -> Unit,
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
@@ -379,9 +380,13 @@ fun TrailApp(
             // away": the track goes into the folder under the date it already has.
             NameBox(
                 current = Tracks.displayName(file.name),
+                // CANCEL MEANS CANCELLED (17.9.2026, his word). It used to save the walk under
+                // its own name, on the reasoning that a walk is hard-won and should never be lost
+                // by a stray press. But a key called cancel that keeps the thing is a key that
+                // lies, and he pressed it meaning to throw the walk away. It throws it away.
                 onCancel = {
                     Trail.dealtWith()
-                    onRenameJustFinished(file, Tracks.displayName(file.name))
+                    onDiscardRecording(file)
                 },
                 onOk = { name ->
                     Trail.dealtWith()
@@ -1159,7 +1164,7 @@ private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Uni
                         .background(Paint.Veil)
                         .clickable(onClick = onCancel),
                     contentAlignment = Alignment.Center,
-                ) { Label("cancel", Paint.Sand, size = 14) }
+                ) { Label("discard", Paint.Red, size = 14) }
                 Box(
                     Modifier
                         .weight(1f)

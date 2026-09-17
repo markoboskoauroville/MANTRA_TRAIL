@@ -129,6 +129,21 @@ class MainActivity : ComponentActivity() {
      * THE WALK IS PUT IN THE FOLDER HE CHOSE, under whatever he called it in the popup. There is
      * no export any more (15.9.2026): a track that is already in the folder has nowhere to go.
      */
+    /**
+     * THROW THE WALK AWAY, because he pressed the key that says so (17.9.2026).
+     *
+     * This used to save it under its own name: a walk is hard-won and losing one to a stray press
+     * seemed the worse mistake. He pressed cancel meaning to discard and got a saved track, which
+     * is the worse mistake — a key that does the opposite of its word teaches him not to trust any
+     * of them. The recording is the app's own working file, not yet in his folder, so deleting it
+     * takes nothing else with it.
+     */
+    private fun discardRecording(file: java.io.File) {
+        val gone = runCatching { file.delete() }.getOrDefault(false)
+        Trail.say(if (gone) "That walk was discarded" else "That walk could not be deleted")
+        UiTick.bump()
+    }
+
     private fun saveRecording(file: java.io.File, name: String) {
         if (store.exportTreeUri == null) {
             pendingSave = file to name
@@ -446,6 +461,7 @@ class MainActivity : ComponentActivity() {
                 tracks = { Folder.list(this, store) },
                 folderLabel = Folder.label(this, store),
                 onRenameJustFinished = ::saveRecording,
+                onDiscardRecording = ::discardRecording,
                 onDeleteTrack = ::deleteTrack,
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
