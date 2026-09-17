@@ -174,10 +174,10 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         val source = BitmapTileSource.builder()
             .url(base)
             .tilePath(path)
-            // HTTPS, WHICH VTM'S OWN CLIENT CANNOT DO (17.9.2026). Every Google tile came back as
-            // nothing while the routing worked, because routing uses Android's HTTP and tiles used
-            // VTM's LwHttp, whose own comment says: no https.
-            .httpFactory(org.oscim.tiling.source.OkHttpEngine.OkHttpFactory())
+            // THE STACK THAT IS KNOWN TO WORK (17.9.2026). VTM's own client cannot do https and
+            // its OkHttp engine did not draw a tile either; this is java.net, the same thing that
+            // fetches the session, the routes and the maps, and it says what came back.
+            .httpFactory(TileHttp.Factory())
             .zoomMin(layer.minZoom)
             .zoomMax(layer.maxZoom)
             .build()
@@ -482,8 +482,9 @@ class VtmCanvas(private val context: Context, private val store: Store) {
     }
 
     fun diagnose(): String {
+        // What the tiles are actually doing, where he can read it.
         val position = map.mapPosition
-        return "VTM (GPU) · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
+        return "VTM (GPU) · ${Report.tileReport()} · z${position.zoomLevel} · ${Geo.formatLat(position.getLatitude())} " +
             "${Geo.formatLon(position.getLongitude())} · layers ${map.layers().size}"
     }
 

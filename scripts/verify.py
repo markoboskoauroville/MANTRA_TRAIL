@@ -753,9 +753,15 @@ check("the heights are sampled by ground, not by index",
 check("Google's turn instructions are kept, not thrown away",
       "fun turnsOf(" in (MAIN / "GoogleRoutes.kt").read_text() and "option.turns" in screens,
       "they were already in the answer being paid for")
-check("the raster layer uses an engine that speaks https",
-      "OkHttpEngine.OkHttpFactory()" in canvas_src and "vtm-http" in (ROOT / "app/build.gradle.kts").read_text(),
-      "VTM's own client cannot, and every tile service is https")
+# 17.9.2026: the URL the app builds was proved right on a desk, byte for byte, and still nothing
+# drew. VTM's own client cannot do https and its OkHttp engine drew nothing either, so tiles now
+# go through java.net — the stack that fetches the session, the routes and the maps.
+check("tiles are fetched with the stack that is known to work",
+      "TileHttp.Factory()" in canvas_src and (MAIN / "TileHttp.kt").exists(),
+      "java.net, the same as everything else in this app that works")
+check("the tile fetcher says what came back",
+      "Report.tiles(" in (MAIN / "TileHttp.kt").read_text() and "Report.tileReport()" in canvas_src,
+      "a white map is not debuggable; 403 on tile 16/35762/23697 is")
 check("one visual language: the marks are the screen's crosshair",
       "fun routePoint" in (MAIN / "Marks.kt").read_text()
       and "setShadowLayer" not in (MAIN / "Marks.kt").read_text(),
