@@ -106,7 +106,8 @@ check("the notification is taken down when the service dies",
 
 # 7 nothing on the screen appears or disappears: the controls are always drawn and are enabled
 # or not (design-language.md 1). Five keys, five enabled arguments.
-screens_src = (MAIN / "Screens.kt").read_text() + (MAIN / "Settings.kt").read_text()
+screens_src = (MAIN / "Screens.kt").read_text()
+settings_src = (MAIN / "Settings.kt").read_text() + (MAIN / "Settings.kt").read_text()
 screens = code_only(screens_src)
 settings_src = (MAIN / "Settings.kt").read_text()
 keys = re.findall(r"\bKey\(", screens)
@@ -448,10 +449,24 @@ check("two taps in a row are what lock it",
 # one — went with the list they described. With two families left there was nothing left to fold.
 # Rewritten from nothing on 17.9.2026, in its own file, because the ticks did not move when they
 # were tapped: the old face asked the preferences whether it was ticked while drawing the frame.
+# Reordered 17.9.2026 to his logic: tracks first, then one entry per map, each with a way into
+# its own options and a dropdown of its views.
+check("tracks come first and each map is one entry",
+      settings_src.index('Group("tracks")') < settings_src.index('Group("maps")')
+      and 'title = "offline map"' in settings_src and 'title = "Google map"' in settings_src,
+      "two maps, two entries, both called map")
+check("an arrow that opens a list is not the same control as the row",
+      "private fun Caret(" in settings_src and "state.offlineOpen = !state.offlineOpen" in settings_src,
+      "the row opens that map's options; the arrow drops its views")
+check("choosing a view closes the settings and shows the map",
+      "settings = false\n                    scope.launch { showLayer(store, Layers.OFFLINE) }" in screens,
+      "which is the only reason anybody opened the dropdown")
+# The keys group folded into the Google map's own options on 17.9.2026: a key belongs to the map
+# that needs it, not to a drawer of its own at the bottom of the screen.
 check("the settings are grouped into cards with titles",
-      'Group("maps")' in settings_src and 'Group("tracks")' in settings_src
-      and 'Group("keys")' in settings_src and 'Group("about")' in settings_src,
-      "maps, tracks, keys, about")
+      'Group("tracks")' in settings_src and 'Group("maps")' in settings_src
+      and 'Group("about")' in settings_src,
+      "tracks, maps, about")
 check("the settings read the store once, not while drawing",
       "private class SettingsState" in settings_src and "remember(store) { SettingsState(store) }" in settings_src,
       "a tap moves the holder, the holder redraws the screen, the store is written behind it")
@@ -521,9 +536,13 @@ check("the compass is on the screen, not inside the centre target",
 # 17.9.2026: he sent Google's screenshot twice. Black disc, red north half, white south half, N.
 # Refined 17.9.2026: hollow, and one thing only. No disc behind it, and the tap that used to
 # choose a second state is gone with the state.
+check("the compass has a black ring outside the white one",
+      "drawCircle(Color(0xFF0B0D10), radius = r" in screens
+      and "radius = r - 1.8.dp.toPx()" in screens,
+      "concentric, so there is no double edge anywhere on it")
 check("the compass is one white ring and a needle inside it",
       "drawCircle(Color.White" in screens and 'Label("N"' not in screens
-      and "r * 0.58f" in screens,
+      and "* 0.58f" in screens,
       "nothing drawn twice, nothing reaching past the ring, no letter")
 check("one tap rights the map and that is all it does",
       "onTap = { CanvasHolder.canvas?.setMapRotation(0f) }" in screens

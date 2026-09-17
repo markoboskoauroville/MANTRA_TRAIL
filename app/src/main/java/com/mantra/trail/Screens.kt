@@ -488,6 +488,23 @@ fun TrailApp(
                 store = store,
                 current = layer,
                 version = version,
+                installedMaps = installedMaps,
+                drawingMapName = store.offlineMapName.ifBlank {
+                    installedMaps.firstOrNull()?.name ?: ""
+                },
+                offlineUnder = if (installedMaps.isEmpty()) {
+                    "no map on the phone yet"
+                } else {
+                    val drawing = store.offlineMapName.ifBlank { installedMaps.first().name }
+                    drawing.removePrefix("oam-").removeSuffix(".map") +
+                        " · " + (if (store.themeName == "MANTRA") "walking" else store.themeName.lowercase())
+                },
+                onUseMap = { file ->
+                    store.offlineMapName = file.name
+                    settings = false
+                    scope.launch { showLayer(store, Layers.OFFLINE) }
+                },
+
                 onPick = { picked ->
                     layer = picked
                     store.layerId = picked.id
@@ -708,14 +725,17 @@ object CanvasHolder {
 @Composable
 private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier.size(44.dp).clip(CircleShape).clickable(onClick = onTap),
+        modifier.size(55.dp).clip(CircleShape).clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(30.dp)) {
+        // A QUARTER LARGER (17.9.2026), with a black ring OUTSIDE the white one — concentric, not
+        // one drawn under the other, so there is no double edge anywhere on it.
+        Canvas(Modifier.size(38.dp)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f - 1.dp.toPx()
 
-            drawCircle(Color.White, radius = r, center = c, style = Stroke(1.2.dp.toPx()))
+            drawCircle(Color(0xFF0B0D10), radius = r, center = c, style = Stroke(2.2.dp.toPx()))
+            drawCircle(Color.White, radius = r - 1.8.dp.toPx(), center = c, style = Stroke(1.2.dp.toPx()))
 
             // The needle turns against the map: the map turned east puts north to the left.
             val along = Math.toRadians(-turn.toDouble() - 90.0)
@@ -724,7 +744,7 @@ private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = M
                 c.x + (distance * Math.cos(radians)).toFloat(),
                 c.y + (distance * Math.sin(radians)).toFloat(),
             )
-            val reach = r * 0.58f
+            val reach = (r - 1.8.dp.toPx()) * 0.58f
             val waist = r * 0.13f
             val tip = at(reach, along)
             val tail = at(-reach, along)

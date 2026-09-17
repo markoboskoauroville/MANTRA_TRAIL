@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 private class SettingsState(val store: Store) {
     var theme by mutableStateOf(store.themeName)
     var googleOpen by mutableStateOf(false)
+    var offlineOpen by mutableStateOf(false)
     var googleFamily by mutableStateOf(store.familyInToggle(MapLayer.Family.GOOGLE))
     var answer by mutableStateOf<String?>(null)
     val googleViews = mutableStateListOf<Boolean>().apply {
@@ -85,6 +86,10 @@ private val THEMES = listOf("MANTRA", "DEFAULT", "OSMARENDER", "NEWTRON", "BIKER
 fun SettingsFace(
     store: Store,
     current: MapLayer,
+    installedMaps: List<java.io.File>,
+    drawingMapName: String,
+    offlineUnder: String,
+    onUseMap: (java.io.File) -> Unit,
     version: String,
     onPick: (MapLayer) -> Unit,
     onChooseMapFile: () -> Unit,
@@ -125,37 +130,60 @@ fun SettingsFace(
                 ) { Words("✕", Paint.Sand, 18) }
             }
 
+            // HIS ORDER AND HIS LOGIC (17.9.2026): tracks first, because that is what he opens
+            // the settings for. Then one entry per map — offline and Google — and each of those
+            // is TWO controls on one line: the name opens that map's own options, and the arrow
+            // drops down its views. Choosing a view closes the settings and shows the map, which
+            // is the only reason anybody opened the dropdown.
+            Group("tracks") {
+                Line(
+                    title = "tracks",
+                    under = "$trackCount in the folder · rename, show, delete, the folder itself",
+                    onPress = onTracks,
+                )
+            }
+
             Group("maps") {
                 Line(
-                    title = "maps on this phone",
-                    under = if (installedCount == 0) {
-                        "none yet — fetch Croatia or any region"
-                    } else {
-                        "$installedCount here · fetch any region"
-                    },
+                    title = "offline map",
+                    under = offlineUnder,
                     onPress = onMaps,
-                )
-                Rule()
-                Line(
-                    title = "how the map is drawn",
-                    under = when (state.theme) {
-                        "MANTRA" -> "walking — contours, path difficulty, waymarks"
-                        else -> state.theme.lowercase()
+                    trailing = {
+                        Caret(open = state.offlineOpen) { state.offlineOpen = !state.offlineOpen }
                     },
-                    onPress = { Trail.say(state.cycleTheme()) },
                 )
+                if (state.offlineOpen) {
+                    if (installedMaps.isEmpty()) {
+                        Rule()
+                        Line(
+                            title = "no map on the phone yet",
+                            under = "open this row to fetch one",
+                            inset = true,
+                            onPress = onMaps,
+                        )
+                    }
+                    installedMaps.forEach { file ->
+                        Rule()
+                        Line(
+                            title = file.name.removePrefix("oam-").removeSuffix(".map"),
+                            under = if (file.name == drawingMapName) "drawing now" else "${file.length() / 1_000_000} MB",
+                            inset = true,
+                            onPress = { onUseMap(file) },
+                        )
+                    }
+                }
+
                 Rule()
                 Line(
-                    title = "add a .map file from the phone",
-                    under = "file picker",
-                    onPress = onChooseMapFile,
-                )
-                Rule()
-                Line(
-                    title = "Google's views",
-                    under = if (hasGoogleKey) "key set · tap to open" else "needs your own key",
+                    title = "Google map",
+                    under = if (hasGoogleKey) "key set · four views" else "needs your own key",
+                    // Google has no screen of its own: its views and its key are few enough to
+                    // live under the row itself, so the arrow and the row do the same thing here
+                    // and neither pretends otherwise (17.9.2026).
                     onPress = { state.googleOpen = !state.googleOpen },
-                    trailing = { Box2(state.googleFamily) { state.chooseGoogleFamily(it) } },
+                    trailing = {
+                        Caret(open = state.googleOpen) { state.googleOpen = !state.googleOpen }
+                    },
                 )
                 if (state.googleOpen) {
                     Layers.GOOGLE_ALL.forEachIndexed { index, layer ->
@@ -170,29 +198,21 @@ fun SettingsFace(
                             },
                         )
                     }
+                    Rule()
+                    Line(
+                        title = "Google Maps API key",
+                        under = if (hasGoogleKey) "set — from a file you picked" else "not set",
+                        inset = true,
+                        onPress = onImportKeys,
+                    )
+                    Rule()
+                    Line(
+                        title = "test the key",
+                        under = "asks the service for one tile",
+                        inset = true,
+                        onPress = onTestTiles,
+                    )
                 }
-            }
-
-            Group("tracks") {
-                Line(title = "tracks (gpx)", under = "$trackCount in the folder", onPress = onTracks)
-                Rule()
-                Line(title = "folder they live in", under = folderName, onPress = onChooseExportFolder)
-                Rule()
-                Line(
-                    title = "recording",
-                    under = if (recordingPaused) "paused" else "running",
-                    onPress = onPause,
-                )
-            }
-
-            Group("keys") {
-                Line(
-                    title = "Google Maps API key",
-                    under = if (hasGoogleKey) "set — from a file you picked" else "not set",
-                    onPress = onImportKeys,
-                )
-                Rule()
-                Line(title = "test the key", under = "asks the service for one tile", onPress = onTestTiles)
             }
 
             Group("about") {
@@ -261,6 +281,24 @@ private fun Line(
         } else if (onPress != null) {
             Words("›", Paint.Dim, 18, modifier = Modifier.padding(end = 8.dp))
         }
+    }
+}
+
+/**
+ * THE ARROW THAT ACTUALLY OPENS SOMETHING (17.9.2026).
+ *
+ * He caught this: a row with a chevron on it that cycled through options instead of opening
+ * anything. An arrow is a promise about what a tap does, and that one was lying. This one turns
+ * to point down when its list is open, and it is a hit area of its own — the row's own tap opens
+ * that map's options, and this opens its views.
+ */
+@Composable
+private fun Caret(open: Boolean, onTap: () -> Unit) {
+    Box(
+        Modifier.size(52.dp).clickable(onClick = onTap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Words(if (open) "▾" else "▸", Paint.Amber, 15)
     }
 }
 
