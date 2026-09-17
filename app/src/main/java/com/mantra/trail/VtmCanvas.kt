@@ -169,6 +169,35 @@ class VtmCanvas(private val context: Context, private val store: Store) {
     }
 
     private fun showRaster(layer: MapLayer, session: String?, key: String?): String? {
+        // IMAGERY FROM THE PHONE (17.9.2026). Its address is a folder, so the same raster path and
+        // the same fetcher serve it; a tile that was never fetched is missing and draws as nothing,
+        // which is the honest picture of an area he did not take.
+        if (layer.id == Layers.IMAGERY.id) {
+            if (!ImageryStore.has(context)) {
+                return "No imagery kept yet. Maps: satellite for offline use."
+            }
+            val base = "file://" + ImageryStore.folder(context).absolutePath
+            val source = BitmapTileSource.builder()
+                .url(base)
+                .tilePath("/{Z}/{X}/{Y}.jpg")
+                .httpFactory(TileHttp.Factory())
+                .zoomMin(layer.minZoom)
+                .zoomMax(layer.maxZoom)
+                .build()
+            return try {
+                clearBaseLayers()
+                org.oscim.renderer.MapRenderer.setBackgroundColor(android.graphics.Color.BLACK)
+                val tiles = BitmapTileLayer(map, source)
+                map.layers().add(tiles)
+                bitmapLayer = tiles
+                map.clearMap()
+                map.updateMap(true)
+                null
+            } catch (e: Exception) {
+                "The kept imagery could not be opened: ${e.javaClass.simpleName}"
+            }
+        }
+
         val (base, path) = Layers.tilePattern(layer, session, key)
             ?: return "That map needs a key first"
         val source = BitmapTileSource.builder()
@@ -480,6 +509,18 @@ class VtmCanvas(private val context: Context, private val store: Store) {
         if (offlineFile() != null || openOfflineFile() != null) return null
         return "No offline map on the phone yet"
     }
+
+    /** The ground on the screen: north, west, south, east. */
+    fun visibleBox(): DoubleArray? = runCatching {
+        // getBBox answers in VTM's own projected units, not degrees, so it is converted here.
+        val box = map.viewport().getBBox(null, 0)
+        doubleArrayOf(
+            org.oscim.core.MercatorProjection.toLatitude(box.ymin),
+            org.oscim.core.MercatorProjection.toLongitude(box.xmin),
+            org.oscim.core.MercatorProjection.toLatitude(box.ymax),
+            org.oscim.core.MercatorProjection.toLongitude(box.xmax),
+        )
+    }.getOrNull()
 
     fun diagnose(): String {
         // What the tiles are actually doing, where he can read it.

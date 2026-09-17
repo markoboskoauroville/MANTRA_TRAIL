@@ -215,6 +215,17 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
 
     fun onDestroy() = view.onDestroy()
 
+    /** The ground on the screen: north, west, south, east. */
+    fun visibleBox(): DoubleArray? = runCatching {
+        val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return@runCatching null
+        doubleArrayOf(
+            bounds.northeast.latitude,
+            bounds.southwest.longitude,
+            bounds.southwest.latitude,
+            bounds.northeast.longitude,
+        )
+    }.getOrNull()
+
     fun diagnose(): String {
         val at = map?.cameraPosition
         return "Google SDK (vector) · z${at?.zoom?.toInt() ?: 0} · " +

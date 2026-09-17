@@ -715,6 +715,47 @@ class CoreTest {
         assertFalse(MapLayer.GoogleView.SATELLITE.overlayRoads)
     }
 
+    // --- imagery he can keep ------------------------------------------------------------------
+
+    @Test fun theTileUnderZagrebIsTheOneTheirServerServes() {
+        // Proved against their server on 17.9.2026: z14 over Zagreb is x=8919 y=5840, and their
+        // address puts the ROW before the COLUMN, which is not the usual order.
+        assertEquals(8919, Imagery.xOf(15.9819, 14))
+        assertEquals(5840, Imagery.yOf(45.8150, 14))
+        val tile = Imagery.Tile(14, 8919, 5840)
+        assertTrue(tile.url, tile.url.endsWith("/14/5840/8919.jpg"))
+        assertEquals("14/8919/5840.jpg", tile.path)
+    }
+
+    @Test fun aBoxIsTheSameBoxWhicheverCornerHeStartedFrom() {
+        val a = Imagery.countFor(45.9, 15.9, 45.8, 16.0, 14, 14)
+        val b = Imagery.countFor(45.8, 16.0, 45.9, 15.9, 14, 14)
+        assertEquals(a, b)
+        assertTrue(a > 0)
+    }
+
+    @Test fun everyZoomAddsItsOwnTilesAndTheCountMatchesTheList() {
+        val one = Imagery.countFor(45.85, 15.95, 45.80, 16.00, 14, 14)
+        val three = Imagery.countFor(45.85, 15.95, 45.80, 16.00, 14, 16)
+        assertTrue("$one then $three", three > one * 4)
+        assertEquals(three, Imagery.tilesFor(45.85, 15.95, 45.80, 16.00, 14, 16).size)
+    }
+
+    @Test fun heIsToldWhatItCostsBeforeHePressesAnything() {
+        assertTrue(Imagery.sizeLabel(1300), Imagery.sizeLabel(1300).contains("MB"))
+        assertEquals("under a megabyte", Imagery.sizeLabel(20))
+        assertTrue(Imagery.sizeLabel(200_000).contains("GB"))
+    }
+
+    @Test fun aTileAndItsCornersAgree() {
+        val z = 14
+        val x = Imagery.xOf(15.9819, z)
+        val y = Imagery.yOf(45.8150, z)
+        // The point must lie inside the tile it was asked for.
+        assertTrue(Imagery.lonOf(x, z) <= 15.9819 && 15.9819 < Imagery.lonOf(x + 1, z))
+        assertTrue(Imagery.latOf(y, z) >= 45.8150 && 45.8150 > Imagery.latOf(y + 1, z))
+    }
+
     // --- Google's encoded polyline -----------------------------------------------------------
 
     @Test fun theExampleFromGooglesOwnDocumentationDecodes() {

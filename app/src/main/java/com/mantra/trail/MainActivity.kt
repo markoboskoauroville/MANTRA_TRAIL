@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private var routing = false
     private var pendingSegment: String? = null
     private var pendingOam: String? = null
+    private var pendingImagery: Int = 0
     private var tileAnswer: String? = null
 
     private val askLocation = registerForActivityResult(
@@ -410,6 +411,45 @@ class MainActivity : ComponentActivity() {
         UiTick.bump()
     }
 
+    /**
+     * KEEP THE IMAGERY UNDER WHAT HE IS LOOKING AT (17.9.2026). One press, the ground on the
+     * screen, every zoom up to the depth he chose. Tiles already on the phone are skipped, so a
+     * second area overlapping the first costs only what is new.
+     */
+    private fun fetchImagery(depth: Int) {
+        if (downloading) {
+            Trail.say("Already fetching something")
+            return
+        }
+        val box = CanvasHolder.canvas?.visibleBox() ?: GoogleHolder.canvas?.visibleBox()
+        if (box == null) {
+            Trail.say("Move the map to the ground you want first")
+            return
+        }
+        val tiles = Imagery.tilesFor(
+            box[0], box[1], box[2], box[3],
+            Imagery.MIN_ZOOM.coerceAtMost(depth),
+            depth,
+        )
+        if (tiles.isEmpty()) {
+            Trail.say("Nothing to fetch there")
+            return
+        }
+        if (pendingImagery != tiles.size) {
+            pendingImagery = tiles.size
+            Trail.say("${tiles.size} tiles, ${Imagery.sizeLabel(tiles.size)}. Press again to fetch.")
+            return
+        }
+        pendingImagery = 0
+        downloading = true
+        lifecycleScope.launch {
+            val problem = ImageryStore.fetch(this@MainActivity, tiles, { p -> Trail.say(p.line()) })
+            downloading = false
+            Trail.say(problem ?: "Imagery kept: ${ImageryStore.label(this@MainActivity)}")
+            UiTick.bump()
+        }
+    }
+
     private fun testTiles() {
         val layer = Layers.byId(store.layerId)
         Trail.say("Asking ${layer.name} for one tile…")
@@ -467,6 +507,7 @@ class MainActivity : ComponentActivity() {
                 onShowTrack = ::showTrack,
                 onTestTiles = ::testTiles,
                 onFetchRegion = ::fetchRegion,
+                onFetchImagery = ::fetchImagery,
                 onTestKey = ::testKey,
                 onRemoveKey = ::removeKey,
                 onSaveRoute = ::saveRoute,

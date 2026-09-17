@@ -30,6 +30,15 @@ class TileHttp(private val source: UrlTileSource) : HttpEngine {
     override fun sendRequest(tile: Tile?) {
         if (tile == null) throw java.io.IOException("no tile asked for")
         val url = source.getTileUrl(tile)
+        // IMAGERY HE HAS ALREADY KEPT (17.9.2026): a layer whose address begins with file:// is
+        // read off the phone, by the same engine and the same code path as everything else. A
+        // tile that was never fetched is simply missing, which VTM draws as nothing.
+        if (url.startsWith("file://")) {
+            val onDisk = java.io.File(url.removePrefix("file://"))
+            if (!onDisk.exists()) throw java.io.IOException("not kept: ${onDisk.name}")
+            stream = onDisk.inputStream()
+            return
+        }
         val open = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 20_000

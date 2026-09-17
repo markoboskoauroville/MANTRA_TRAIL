@@ -138,7 +138,25 @@ object Layers {
      * they are raster tiles from somebody else's service, and the point of this app is the file
      * on the phone. Google stays because a satellite photograph answers a different question.
      */
-    val ALL: List<MapLayer> = listOf(OFFLINE) + GOOGLE_ALL
+    /**
+     * SATELLITE HE KEEPS (17.9.2026). Sentinel-2 cloudless, fetched by the area and read off the
+     * phone afterwards — the only imagery that may legally be stored, since Google forbid exactly
+     * this for theirs. Its address is a folder, not a server.
+     */
+    val IMAGERY = MapLayer(
+        family = MapLayer.Family.OFFLINE,
+        id = "imagery",
+        label = "Satellite, kept on the phone",
+        name = "Satellite",
+        short = "SAT",
+        kind = LayerKind.RASTER_XYZ,
+        offline = MapLayer.Offline.COMPLETE,
+        attribution = Imagery.ATTRIBUTION,
+        minZoom = Imagery.MIN_ZOOM,
+        maxZoom = Imagery.MAX_ZOOM,
+    )
+
+    val ALL: List<MapLayer> = listOf(OFFLINE, IMAGERY) + GOOGLE_ALL
 
     /**
      * THE OFFLINE MAP'S VIEWS (17.9.2026). Google has four ways of drawing the same ground and the

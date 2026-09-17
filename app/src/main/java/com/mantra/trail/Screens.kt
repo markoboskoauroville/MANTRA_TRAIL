@@ -131,6 +131,7 @@ fun TrailApp(
     onShowTrack: (Folder.Entry) -> Unit,
     onTestTiles: () -> Unit,
     onFetchRegion: (OamIndex.Entry) -> Unit,
+    onFetchImagery: (Int) -> Unit,
     onTestKey: (Keyring.Key) -> Unit,
     onRemoveKey: (Keyring.Key) -> Unit,
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
@@ -169,6 +170,21 @@ fun TrailApp(
     val justFinished by Trail.justFinished.collectAsState()
     var showTracks by remember { mutableStateOf(false) }
     var showMaps by remember { mutableStateOf(false) }
+    // How deep the kept imagery goes, and what the area on the screen would cost at that depth.
+    var imageryDepth by remember { mutableIntStateOf(15) }
+    val imageryCost = remember(UiTick.n, imageryDepth, showMaps) {
+        val box = CanvasHolder.canvas?.visibleBox() ?: GoogleHolder.canvas?.visibleBox()
+        if (box == null) {
+            "move the map to the ground you want"
+        } else {
+            val tiles = Imagery.countFor(
+                box[0], box[1], box[2], box[3],
+                Imagery.MIN_ZOOM.coerceAtMost(imageryDepth),
+                imageryDepth,
+            )
+            "$tiles tiles · ${Imagery.sizeLabel(tiles)}"
+        }
+    }
     var listing by remember { mutableStateOf<List<OamIndex.Entry>>(emptyList()) }
     var listingOf by remember { mutableStateOf<String?>(null) }
     val appContext = androidx.compose.ui.platform.LocalContext.current
@@ -472,6 +488,16 @@ fun TrailApp(
             MapsFace(
                 store = store,
                 installed = installedMaps,
+                imageryDepth = imageryDepth,
+                imageryCost = imageryCost,
+                imageryHeld = remember(UiTick.n, showMaps) { ImageryStore.label(appContext) },
+                onImageryDepth = { imageryDepth = it },
+                onFetchImagery = { onFetchImagery(imageryDepth) },
+                onForgetImagery = {
+                    ImageryStore.forget(appContext)
+                    Trail.say("The kept imagery was deleted")
+                    UiTick.bump()
+                },
                 folder = OamDownload.folderLabel(appContext),
                 onUse = { file ->
                     store.offlineMapName = file.name
@@ -1293,6 +1319,75 @@ private fun MapsFace(
             // SMALLER MAPS, FIRST (17.9.2026). He asked whether Croatia could be cut out of the
             // Balkan file: it cannot, by this app or any other, so the answer offered instead is
             // a map that is only Croatia — a quarter of the size, and made for walking too.
+
+            // SATELLITE HE KEEPS (17.9.2026). Google forbid storing theirs — their policy lists
+            // offline use among the things their tiles may not be used for — so this is Sentinel-2
+            // cloudless from EOX, CC BY 4.0, which may be kept. Ten metres to the pixel: forest
+            // from clearing, ridge from valley, not cars.
+            //
+            // The area is what is on the screen. Drawing a rectangle with a finger on a map that
+            // pans under it is a fiddle; moving the map until it shows what he wants is not.
+            Label("satellite for offline use", Paint.Dim, size = 12, align = TextAlign.Start)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(14, 15, 16).forEach { depth ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Paint.Card)
+                            .then(
+                                if (depth == imageryDepth) {
+                                    Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable { onImageryDepth(depth) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Label(
+                            text = when (depth) {
+                                14 -> "coarse"
+                                15 -> "closer"
+                                else -> "closest"
+                            },
+                            colour = if (depth == imageryDepth) Paint.Amber else Paint.Sand,
+                            size = 12,
+                        )
+                    }
+                }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Paint.Card)
+                    .clickable(onClick = onFetchImagery)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Label("keep what is on the screen", Paint.Sand, size = 13, align = TextAlign.Start)
+                    Label(imageryCost, Paint.Dim, size = 11, align = TextAlign.Start)
+                }
+                Label("fetch", Paint.Amber, size = 12)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Label("kept: $imageryHeld", Paint.Dim, size = 11, align = TextAlign.Start)
+                if (imageryHeld != "none yet") {
+                    Box(Modifier.clickable(onClick = onForgetImagery)) {
+                        Label("delete all", Paint.Red, size = 11)
+                    }
+                }
+            }
+            Label(Imagery.ATTRIBUTION, Paint.Dim, size = 10, align = TextAlign.Start)
+
             Label("a smaller map, from elsewhere", Paint.Dim, size = 12, align = TextAlign.Start)
             OamIndex.ELSEWHERE.forEach { entry ->
                 val here = installed.any { it.name == entry.mapName }

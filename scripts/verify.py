@@ -808,6 +808,25 @@ check("save is not beside close",
 check("a Google view is drawn by Google's canvas",
       "if (layer.family == MapLayer.Family.GOOGLE) {\n        val google = GoogleHolder.canvas" in screens,
       "and the offline canvas is not asked about a map it is not drawing")
+# 17.9.2026: he asked for Google's "select an area and keep it". Google forbid it — their Map
+# Tiles policy lists offline use among the prohibited uses of their content — so the imagery comes
+# from Sentinel-2 cloudless (EOX, CC BY 4.0), which may be kept, and the attribution travels with
+# it because that licence asks for it.
+check("imagery can be kept for offline use",
+      (MAIN / "Imagery.kt").exists() and (MAIN / "ImageryStore.kt").exists()
+      and "keep what is on the screen" in screens,
+      "the area is what is on the screen, at the depth he chose")
+check("nothing of Google's is stored",
+      "tiles.maps.eox.at" in (MAIN / "Imagery.kt").read_text()
+      and "googleapis" not in (MAIN / "ImageryStore.kt").read_text(),
+      "their terms forbid it and their key would be at risk")
+check("the licence that allows it is carried with it",
+      "CC BY 4.0" in (MAIN / "Imagery.kt").read_text()
+      and "Imagery.ATTRIBUTION" in screens,
+      "attribution is the whole of what CC BY asks")
+check("a tile already kept is never fetched twice",
+      "if (file.exists() && file.length() > 0)" in (MAIN / "ImageryStore.kt").read_text(),
+      "so an overlapping area costs only what is new, and a stopped download carries on")
 check("discard discards",
       "onDiscardRecording(file)" in screens and 'Label("discard", Paint.Red' in screens
       and "fun discardRecording" in (MAIN / "MainActivity.kt").read_text(),
