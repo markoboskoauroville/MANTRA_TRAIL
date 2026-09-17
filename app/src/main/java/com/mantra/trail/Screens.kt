@@ -165,7 +165,8 @@ fun TrailApp(
     var showMaps by remember { mutableStateOf(false) }
     var listing by remember { mutableStateOf<List<OamIndex.Entry>>(emptyList()) }
     var listingOf by remember { mutableStateOf<String?>(null) }
-    val installedMaps = remember(UiTick.n, showMaps) { OamDownload.installed(context) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    val installedMaps = remember(UiTick.n, showMaps) { OamDownload.installed(appContext) }
     val scope = rememberCoroutineScope()
 
     // The map the app opened on, drawn as soon as the view is real and not a moment before.
@@ -437,7 +438,7 @@ fun TrailApp(
             MapsFace(
                 store = store,
                 installed = installedMaps,
-                folder = OamDownload.folderLabel(context),
+                folder = OamDownload.folderLabel(appContext),
                 onUse = { file ->
                     store.offlineMapName = file.name
                     UiTick.bump()
