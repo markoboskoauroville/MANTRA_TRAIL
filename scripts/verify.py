@@ -518,6 +518,11 @@ check("the engine is given every point as a waypoint",
 check("the compass is on the screen, not inside the centre target",
       screens_src.index("LittleCompass(") < screens_src.index("// THE TAP IN THE MIDDLE"),
       "top right, where Google keeps it; it used to be nested in the 72dp centre target")
+# 17.9.2026: he sent Google's screenshot twice. Black disc, red north half, white south half, N.
+check("the compass is Google's, not one of my own",
+      "Color(0xFFEA4335)" in screens and "Color(0xFFF1F3F4)" in screens
+      and 'Label("N"' in screens,
+      "red needle, white tail, the letter under it")
 check("there is a compass that puts north up and centres him",
       "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
       "one tap, and it centres too")

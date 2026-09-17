@@ -713,6 +713,17 @@ object CanvasHolder {
  *
  * It is 44dp, which is a thumb, and it sits under the top bar at the right-hand edge.
  */
+/**
+ * GOOGLE'S COMPASS, COPIED (17.9.2026).
+ *
+ * He sent the screenshot twice and asked for this one and no other: a black disc, a needle whose
+ * north half is red and south half white, and the letter N under it. Nothing else on it, and it
+ * takes one button's worth of screen.
+ *
+ * One tap puts north at the top and centres him. The next turns the map so the way he is walking
+ * is up, and the disc gains a thin amber ring — the only thing added to Google's, because this
+ * app has two states where Google's has one.
+ */
 @Composable
 private fun LittleCompass(
     turn: Float,
@@ -720,55 +731,56 @@ private fun LittleCompass(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // GOOGLE'S, COPIED (17.9.2026, from his screenshot). A black disc the size of a thumb, a red
-    // needle to the north and a pale one opposite, and nothing else on it. His words: the same,
-    // the same, the same. One tap north up and centred; the next follows the walk, and the disc
-    // takes an amber ring so the difference is a colour rather than a word.
     Box(
         modifier
             .size(48.dp)
             .clip(CircleShape)
-            .background(Color(0xFF16191D))
+            .background(Color(0xFF17171A))
             .then(
                 if (following) Modifier.border(1.5.dp, Paint.Amber, CircleShape) else Modifier
             )
             .clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(26.dp)) {
-            val c = Offset(size.width / 2f, size.height / 2f)
-            val r = size.minDimension / 2f
-            val angle = Math.toRadians(-turn.toDouble() - 90.0)
-            val across = Math.toRadians(-turn.toDouble())
-
-            fun at(distance: Float, direction: Double) = Offset(
-                c.x + (distance * Math.cos(direction)).toFloat(),
-                c.y + (distance * Math.sin(direction)).toFloat(),
-            )
-
-            val tip = at(r * 0.92f, angle)
-            val tail = at(r * 0.92f, angle + Math.PI)
-            val left = at(r * 0.22f, across)
-            val right = at(r * 0.22f, across + Math.PI)
-
-            drawPath(
-                androidx.compose.ui.graphics.Path().apply {
-                    moveTo(tip.x, tip.y)
-                    lineTo(left.x, left.y)
-                    lineTo(right.x, right.y)
-                    close()
-                },
-                Color(0xFFEA4335),
-            )
-            drawPath(
-                androidx.compose.ui.graphics.Path().apply {
-                    moveTo(tail.x, tail.y)
-                    lineTo(left.x, left.y)
-                    lineTo(right.x, right.y)
-                    close()
-                },
-                Color(0xFFE8EAED),
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Canvas(Modifier.size(24.dp)) {
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val r = size.minDimension / 2f
+                // The needle turns against the map: the map turned east means north is now to the
+                // left, and a compass that did not say so would be worse than none.
+                val angle = Math.toRadians(-turn.toDouble() - 90.0)
+                val tip = Offset(
+                    c.x + (r * 0.92f * Math.cos(angle)).toFloat(),
+                    c.y + (r * 0.92f * Math.sin(angle)).toFloat(),
+                )
+                val tail = Offset(
+                    c.x - (r * 0.92f * Math.cos(angle)).toFloat(),
+                    c.y - (r * 0.92f * Math.sin(angle)).toFloat(),
+                )
+                val across = Math.toRadians(-turn.toDouble())
+                val left = Offset(
+                    c.x + (r * 0.22f * Math.cos(across)).toFloat(),
+                    c.y + (r * 0.22f * Math.sin(across)).toFloat(),
+                )
+                val right = Offset(
+                    c.x - (r * 0.22f * Math.cos(across)).toFloat(),
+                    c.y - (r * 0.22f * Math.sin(across)).toFloat(),
+                )
+                fun half(a: Offset, colour: Color) {
+                    drawPath(
+                        androidx.compose.ui.graphics.Path().apply {
+                            moveTo(a.x, a.y)
+                            lineTo(left.x, left.y)
+                            lineTo(right.x, right.y)
+                            close()
+                        },
+                        colour,
+                    )
+                }
+                    half(tip, Color(0xFFEA4335))
+                    half(tail, Color(0xFFF1F3F4))
+                }
+            Label("N", Color(0xFFF1F3F4), size = 10)
         }
     }
 }
