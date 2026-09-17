@@ -65,7 +65,10 @@ class MainActivity : ComponentActivity() {
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         store.mapFileUri = uri.toString()
         UiTick.bump()
-        Trail.say(canvas?.show(Layers.OFFLINE))
+        Trail.say(
+            canvas?.show(Layers.OFFLINE)
+                ?: "The file is set. Choose the offline map to see it."
+        )
     }
 
     /**
@@ -300,7 +303,7 @@ class MainActivity : ComponentActivity() {
                 report("No points could be read from ${entry.name}")
                 return@launch
             }
-            canvas?.showSavedTrack(points, store.trackColour)
+            Canvases.drawSavedTrack(points, store.trackColour)
             Trail.say(
                 "${entry.name}: ${points.size} points, " +
                     Geo.formatDistance(TrackMath.stats(points).distanceM)
@@ -336,7 +339,13 @@ class MainActivity : ComponentActivity() {
             } else {
                 store.offlineMapName = entry.mapName
                 OamDownload.say("${entry.label} is on the phone and being drawn.")
-                canvas?.show(Layers.OFFLINE)
+                // If Google's map is on the screen the offline canvas is not there to draw on;
+                // saying so beats a download that ends in nothing visible (17.9.2026).
+                if (canvas == null) {
+                    OamDownload.say("${entry.label} is on the phone. Choose the offline map to see it.")
+                } else {
+                    canvas?.show(Layers.OFFLINE)
+                }
             }
             UiTick.bump()
         }
@@ -509,7 +518,10 @@ class MainActivity : ComponentActivity() {
             Trail.say("No fix yet. Under a roof it can take a minute.")
             return
         }
-        canvas?.centreOn(fix)
+        // WHICHEVER MAP HE IS LOOKING AT (17.9.2026). This centred the activity's own VTM canvas
+        // by name, so on Google's map the yellow key did nothing at all — the offline canvas was
+        // dutifully centred somewhere he could not see.
+        Canvases.centreOn(fix)
         sensors.updateDeclination(fix)
     }
 

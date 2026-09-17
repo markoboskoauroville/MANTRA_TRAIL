@@ -800,6 +800,11 @@ check("save is not beside close",
 # 17.9.2026: Google's map arrives some frames after its view, and every method began by returning
 # when it was not there yet — so a centring, a point or a route asked for in those frames was
 # dropped in silence. Both bugs he reported were that.
+# 17.9.2026: the yellow key centred the activity's own VTM canvas by name, so on Google's map it
+# dutifully centred a map he could not see.
+check("the centre key centres whichever map is on the screen",
+      "Canvases.centreOn(fix)" in (MAIN / "MainActivity.kt").read_text(),
+      "not the offline canvas by name")
 check("nothing asked of Google's map before it exists is dropped",
       "pendingCentre" in (MAIN / "GoogleCanvas.kt").read_text()
       and "made.onReady = { onReady() }" in screens,
