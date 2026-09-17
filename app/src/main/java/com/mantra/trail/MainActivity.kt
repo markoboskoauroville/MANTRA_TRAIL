@@ -276,40 +276,33 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * FETCH AN OPENANDROMAPS REGION: 1.2 GB of zip, unpacked to a map with contour lines in it.
-     * Named and measured before it starts, and the same press again carries on after a break.
+     * FETCH A REGION FROM THE MIRROR'S OWN LISTING. The size was read from that listing, so the
+     * warning before it starts is a measurement and not a guess, and every line of progress goes
+     * to OamDownload.state, which the maps face shows wherever he is standing (16.9.2026).
      */
-    private fun downloadOam(region: Oam.Region) {
+    private fun fetchRegion(entry: OamIndex.Entry) {
         if (downloading) {
-            Trail.say("Already fetching a map")
+            OamDownload.say("Already fetching a map")
             return
         }
-        if (OamDownload.isPresent(this, region)) {
-            Trail.say("${region.label} is already on the phone")
-            return
-        }
-        if (pendingOam != region.name) {
-            pendingOam = region.name
-            Trail.say("${region.label}: ${Oam.sizeLabel(region)}. Press again to start.")
+        if (pendingOam != entry.fileName) {
+            pendingOam = entry.fileName
+            OamDownload.say("${entry.label}: ${entry.sizeLabel} to fetch, ${entry.roomLabel}. Press again to start.")
             return
         }
         pendingOam = null
         downloading = true
+        OamDownload.say("${entry.label}: starting…")
         lifecycleScope.launch {
-            val problem = OamDownload.fetch(this@MainActivity, region) { p ->
-                Trail.say(
-                    if (p.unpacking) {
-                        "Unpacking ${region.label}…"
-                    } else {
-                        "${region.label} ${p.percent}%, ${p.done / 1_000_000} of ${p.total / 1_000_000} MB"
-                    }
-                )
+            val problem = OamDownload.fetchEntry(this@MainActivity, entry) { p ->
+                OamDownload.say(p.line(entry.label))
             }
             downloading = false
             if (problem != null) {
-                Trail.say(problem)
+                OamDownload.say(problem)
             } else {
-                Trail.say("${region.label} is on the phone. Choose the offline map to see it.")
+                store.offlineMapName = entry.mapName
+                OamDownload.say("${entry.label} is on the phone and being drawn.")
                 canvas?.show(Layers.OFFLINE)
             }
             UiTick.bump()
@@ -368,7 +361,7 @@ class MainActivity : ComponentActivity() {
                 onRenameTrack = ::renameTrack,
                 onShowTrack = ::showTrack,
                 onTestTiles = ::testTiles,
-                onDownloadOam = ::downloadOam,
+                onFetchRegion = ::fetchRegion,
                 onSaveRoute = ::saveRoute,
                 onFindWays = ::findWays,
                 onSaveOption = ::saveOption,

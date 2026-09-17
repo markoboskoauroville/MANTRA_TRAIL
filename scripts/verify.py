@@ -585,9 +585,20 @@ check("the raster map services are gone from the code",
       and "tile.openstreetmap.org" not in code_only(layers_src),
       "the point of this app is the file on the phone; the comments keep the history")
 check("OpenAndroMaps can be fetched from inside the app",
-      (MAIN / "Oam.kt").exists() and (MAIN / "OamDownload.kt").exists()
-      and "onDownloadOam" in screens,
-      "named, measured and resumable, as every download here is")
+      (MAIN / "OamIndex.kt").exists() and (MAIN / "OamDownload.kt").exists()
+      and "onFetchRegion" in screens,
+      "every region the mirror keeps, read from its own listing")
+# 16.9.2026: he started a 1.2 GB download and could not tell it was running, where it went, or
+# which map was being drawn afterwards.
+check("a download in progress is visible from the maps face",
+      "OamDownload.state.collectAsState()" in screens and "fun line(" in (MAIN / "OamDownload.kt").read_text(),
+      "percent, megabytes, speed and time left")
+check("the folder the maps live in is written down",
+      "folderLabel" in (MAIN / "OamDownload.kt").read_text() and "kept in $folder" in screens,
+      "a file nobody can find is a file nobody has")
+check("which map is drawn is his to choose",
+      "store.offlineMapName" in canvas_src and "onUse" in screens,
+      "with several regions on the phone, the app draws the one he ticked")
 check("the size said includes the room unpacking needs",
       "twice that free while it unpacks" in (MAIN / "Oam.kt").read_text(),
       "1.2 GB of zip becomes 1.4 GB of map, and both are on the phone at once")

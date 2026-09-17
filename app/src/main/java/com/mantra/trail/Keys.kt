@@ -21,16 +21,14 @@ package com.mantra.trail
 object Keys {
 
     /**
-     * THUNDERFOREST STAYS IN THIS LIST though its maps left the app on 16.9.2026: a key file he
-     * picks may still hold one, and "a Thunderforest key, which this app no longer uses" is a
-     * better answer than "unknown key".
+     * ONE PROVIDER (16.9.2026). Thunderforest's maps left this app and its key left with them: a
+     * list that names a service the app cannot draw is a list that lies.
      */
     enum class Provider {
         /** Google Map Tiles: roadmap, satellite, terrain and hybrid, online only. */
         GOOGLE,
 
         /** Thunderforest Outdoors: contours and marked trails, and it may be cached. */
-        THUNDERFOREST,
     }
 
     private val GOOGLE = Regex("AIza[A-Za-z0-9_\\-]{30,}")
@@ -42,7 +40,6 @@ object Keys {
     /** The provider a key belongs to, or null when the shape is one nobody here knows. */
     fun providerOf(candidate: String): Provider? = when {
         GOOGLE.matches(candidate) || GOOGLE_AQ.matches(candidate) -> Provider.GOOGLE
-        HEX32.matches(candidate) -> Provider.THUNDERFOREST
         else -> null
     }
 

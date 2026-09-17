@@ -195,9 +195,6 @@ object Layers {
         Keys.Provider.GOOGLE ->
             "Google needs your own key. Settings, API keys, pick the file it is in."
 
-        // Thunderforest keys are still recognised by the key reader, but no layer here uses one.
-        Keys.Provider.THUNDERFOREST -> null
-
         null -> null
     }
 

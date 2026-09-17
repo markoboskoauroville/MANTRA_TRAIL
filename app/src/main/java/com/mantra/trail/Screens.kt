@@ -132,7 +132,7 @@ fun TrailApp(
     onRenameTrack: (Folder.Entry, String) -> Unit,
     onShowTrack: (Folder.Entry) -> Unit,
     onTestTiles: () -> Unit,
-    onDownloadOam: (Oam.Region) -> Unit,
+    onFetchRegion: (OamIndex.Entry) -> Unit,
     onSaveRoute: (List<Pair<Double, Double>>) -> Unit,
     onFindWays: (List<Pair<Double, Double>>, String, Int) -> Unit,
     onSaveOption: (Routing.Option) -> Unit,
@@ -162,6 +162,10 @@ fun TrailApp(
     val recording = recordingSince != null
     val justFinished by Trail.justFinished.collectAsState()
     var showTracks by remember { mutableStateOf(false) }
+    var showMaps by remember { mutableStateOf(false) }
+    var listing by remember { mutableStateOf<List<OamIndex.Entry>>(emptyList()) }
+    var listingOf by remember { mutableStateOf<String?>(null) }
+    val installedMaps = remember(UiTick.n, showMaps) { OamDownload.installed(context) }
     val scope = rememberCoroutineScope()
 
     // The map the app opened on, drawn as soon as the view is real and not a moment before.
@@ -429,6 +433,38 @@ fun TrailApp(
             CompassOverlay(sensors = sensors, night = compass == COMPASS_NIGHT)
         }
 
+        if (showMaps) {
+            MapsFace(
+                store = store,
+                installed = installedMaps,
+                folder = OamDownload.folderLabel(context),
+                onUse = { file ->
+                    store.offlineMapName = file.name
+                    UiTick.bump()
+                    scope.launch { showLayer(store, Layers.OFFLINE) }
+                },
+                onRemove = { file ->
+                    OamDownload.remove(file)
+                    if (store.offlineMapName == file.name) store.offlineMapName = ""
+                    UiTick.bump()
+                },
+                onBrowse = { continent ->
+                    listingOf = continent
+                    listing = emptyList()
+                    scope.launch {
+                        OamDownload.say("Reading the list for $continent…")
+                        val (entries, problem) = OamDownload.index(continent)
+                        listing = entries
+                        OamDownload.say(problem)
+                    }
+                },
+                listing = listing,
+                listingOf = listingOf,
+                onFetch = onFetchRegion,
+                onClose = { showMaps = false },
+            )
+        }
+
         if (showTracks) {
             // THE LIST IS LOADED, NOT COMPUTED. It used to be read from the folder inside the
             // composition, so every tap — a colour, a note, anything — listed the directory again
@@ -488,7 +524,11 @@ fun TrailApp(
                 },
                 trackCount = tracks().size,
                 onTestTiles = onTestTiles,
-                onDownloadOam = onDownloadOam,
+                onMaps = {
+                    settings = false
+                    showMaps = true
+                },
+                installedCount = installedMaps.size,
                 onClose = { settings = false },
             )
         }
@@ -1014,6 +1054,146 @@ private fun NameBox(current: String, onCancel: () -> Unit, onOk: (String) -> Uni
     }
 }
 
+
+/**
+ * THE MAPS ON THIS PHONE, AND EVERY ONE IN THE WORLD THAT COULD BE.
+ *
+ * Baba, 16.9.2026: he started a 1.2 GB download and could not tell it was running, could not see
+ * where it went, and could not tell afterwards which map the app was drawing. So this face says
+ * all three at once — what is here, what is happening, and what can be fetched, continent by
+ * continent, read from the mirror's own listing rather than from a list somebody typed.
+ */
+@Composable
+private fun MapsFace(
+    store: Store,
+    installed: List<java.io.File>,
+    folder: String,
+    onUse: (java.io.File) -> Unit,
+    onRemove: (java.io.File) -> Unit,
+    onBrowse: (String) -> Unit,
+    listing: List<OamIndex.Entry>,
+    listingOf: String?,
+    onFetch: (OamIndex.Entry) -> Unit,
+    onClose: () -> Unit,
+) {
+    val busy by OamDownload.state.collectAsState()
+    val chosen = remember(UiTick.n) { store.offlineMapName }
+
+    Box(Modifier.fillMaxSize().background(Paint.Ground)) {
+        Column(
+            Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(46.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Label("maps", Paint.Dim, size = 13)
+                Box(
+                    Modifier.size(46.dp).clip(CircleShape).background(Paint.Veil).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Label("✕", Paint.Sand, size = 18) }
+            }
+
+            // WHAT IS HAPPENING, at the top, because a gigabyte is worth knowing about.
+            if (busy != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Amber)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Label(busy ?: "", Paint.Ground, size = 12, align = TextAlign.Start)
+                }
+            }
+
+            Label("on this phone", Paint.Dim, size = 12, align = TextAlign.Start)
+            if (installed.isEmpty()) {
+                Label("None yet. Fetch one below.", Paint.Dim, size = 12, align = TextAlign.Start)
+            }
+            installed.forEach { file ->
+                val inUse = file.name == chosen || (chosen.isBlank() && file == installed.first())
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (inUse) Paint.Amber else Paint.Veil),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth().clickable { onUse(file) }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Label(
+                            text = file.name.removePrefix("oam-").removeSuffix(".map") +
+                                "  ${file.length() / 1_000_000} MB",
+                            colour = if (inUse) Paint.Ground else Paint.Sand,
+                            size = 13,
+                            align = TextAlign.Start,
+                        )
+                    }
+                    Label(
+                        text = if (inUse) "drawing" else "use",
+                        colour = if (inUse) Paint.Ground else Paint.Amber,
+                        size = 11,
+                    )
+                    Box(
+                        Modifier.width(64.dp).fillMaxWidth().clickable { onRemove(file) },
+                        contentAlignment = Alignment.Center,
+                    ) { Label("delete", Paint.Red, size = 11) }
+                }
+            }
+            Label("kept in $folder", Paint.Dim, size = 10, align = TextAlign.Start)
+
+            Label("fetch a region", Paint.Dim, size = 12, align = TextAlign.Start)
+            OamIndex.CONTINENTS.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { (id, label) ->
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (id == listingOf) Paint.Amber else Paint.Veil)
+                                .clickable { onBrowse(id) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Label(label, if (id == listingOf) Paint.Ground else Paint.Sand, size = 11)
+                        }
+                    }
+                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+
+            listing.forEach { entry ->
+                val here = installed.any { it.name == entry.mapName }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Veil)
+                        .clickable { if (!here) onFetch(entry) }
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Label(entry.label, if (here) Paint.Dim else Paint.Sand, size = 12, align = TextAlign.Start)
+                    Label(
+                        text = if (here) "on the phone" else entry.sizeLabel,
+                        colour = if (here) Paint.Green else Paint.Amber,
+                        size = 11,
+                    )
+                }
+            }
+        }
+    }
+}
+
 /**
  * THE TRACK MANAGER. Every recording on the phone, newest first, with what it weighs. Rename it,
  * send it to the chosen folder again, or delete it — and deleting asks a second time, because a
@@ -1511,7 +1691,8 @@ private fun SettingsFace(
     onTracks: () -> Unit,
     trackCount: Int,
     onTestTiles: () -> Unit,
-    onDownloadOam: (Oam.Region) -> Unit,
+    onMaps: () -> Unit,
+    installedCount: Int,
     onClose: () -> Unit,
 ) {
     var answer by remember { mutableStateOf<String?>(null) }
@@ -1729,16 +1910,11 @@ private fun SettingsFace(
                 }
             }
 
-            // OPENANDROMAPS: the hiking maps, with contour lines and waymarked routes in the data
-            // rather than painted over it (16.9.2026). They arrive as a zip and are unpacked here.
-            Label("openandromaps, for walking", Paint.Dim, size = 12, align = TextAlign.Start)
-            Oam.ALL.forEach { region ->
-                SettingRow(region.label, Oam.sizeLabel(region).substringBefore(","), {
-                    onDownloadOam(region)
-                })
-            }
+            // ONE ROW INTO THE MAPS (16.9.2026). The four regions that used to sit here were a
+            // list somebody typed; behind this row is the mirror's own, continent by continent.
+            SettingRow("maps: what is here, and every region there is", "$installedCount here", onMaps)
 
-            SettingRow("ask this map's service for one tile", "test it", onTestTiles)
+            SettingRow("test the Google Maps API key", "test it", onTestTiles)
             SettingRow("what is the map doing", "ask it", {
                 answer = CanvasHolder.canvas?.diagnose() ?: "the map view is not up yet"
             })

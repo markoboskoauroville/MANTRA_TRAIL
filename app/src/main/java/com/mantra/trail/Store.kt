@@ -161,6 +161,11 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_THEME, "MANTRA") ?: "MANTRA"
         set(v) = prefs.edit().putString(KEY_THEME, v).apply()
 
+    /** Which map file on the phone the offline layer draws. Empty means "the newest one". */
+    var offlineMapName: String
+        get() = prefs.getString(KEY_OFFLINE_MAP, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_OFFLINE_MAP, v).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -202,6 +207,7 @@ class Store(context: Context) {
         private const val KEY_ROUTE_OPTIONS = "routeOptions"
         private const val KEY_ROUTE_PROFILE = "routeProfile"
         private const val KEY_THEME = "themeName"
+        private const val KEY_OFFLINE_MAP = "offlineMapName"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_NORTH_MODE = "northMode"
         private const val KEY_USE_VTM = "useVtm"

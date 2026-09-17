@@ -124,7 +124,13 @@ class VtmCanvas(private val context: Context, private val store: Store) {
      * plain extract this app can download.
      */
     private fun offlineFile(): File? {
-        OamDownload.installed(context).firstOrNull()?.let { return it }
+        val installed = OamDownload.installed(context)
+        // HIS CHOICE FIRST (16.9.2026): with several regions on the phone, the app must draw the
+        // one he ticked rather than whichever the file system happens to list first.
+        store.offlineMapName.takeIf { it.isNotBlank() }
+            ?.let { chosen -> installed.firstOrNull { it.name == chosen } }
+            ?.let { return it }
+        installed.firstOrNull()?.let { return it }
         val downloaded = MapDownload.target(context)
         return if (downloaded.exists() && downloaded.length() > 1_000_000) downloaded else null
     }

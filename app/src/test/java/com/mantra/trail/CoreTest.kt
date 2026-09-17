@@ -690,16 +690,18 @@ class CoreTest {
 
     @Test fun aKeyIsSortedByItsShapeRatherThanByBeingAsked() {
         assertEquals(Keys.Provider.GOOGLE, Keys.providerOf("AIza" + "B".repeat(35)))
-        assertEquals(Keys.Provider.THUNDERFOREST, Keys.providerOf("0123456789abcdef" + "0123456789abcdef"))
         assertNull(Keys.providerOf("cafeteria"))
+        // A 32-character hex string was a Thunderforest key until 16.9.2026, when those maps left
+        // the app. It belongs to nobody here now, and saying so beats claiming otherwise.
+        assertNull(Keys.providerOf("0123456789abcdef" + "0123456789abcdef"))
         assertNull(Keys.providerOf("0123456789ABCDEF0123456789ABCDEF"))
     }
 
-    @Test fun aFileWithBothKindsSortsBoth() {
+    @Test fun aFileWithTwoKindsKeepsOnlyTheOneThisAppUses() {
         val text = "google\n" + "AIza" + "B".repeat(35) + "\n\nthunderforest\n" + "a".repeat(32) + "\n"
         val found = Keys.parse(text)
-        assertEquals(2, found.size)
-        assertEquals(setOf(Keys.Provider.GOOGLE, Keys.Provider.THUNDERFOREST), found.map { it.provider }.toSet())
+        assertEquals(1, found.size)
+        assertEquals(Keys.Provider.GOOGLE, found[0].provider)
     }
 
     @Test fun googleContributesAllFourOfItsViews() {
@@ -833,17 +835,17 @@ class CoreTest {
               https://tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=$k
             Styles: cycle, transport, landscape, outdoors.
         """.trimIndent()
-        val found = Keys.parse(text)
-        assertEquals(1, found.size)
-        assertEquals(k, found[0].key)
-        assertEquals(Keys.Provider.THUNDERFOREST, found[0].provider)
+        // Thunderforest's maps left the app on 16.9.2026, so this file — which is the real one
+        // his key arrived in — now parses to nothing at all. The case is kept because the file
+        // still exists on his phone and the reader must not invent a provider for it.
+        assertTrue(Keys.parse(text).isEmpty())
     }
 
     @Test fun aKeyInsideAUrlIsStillTheSameKey() {
-        // Built from pieces on purpose: a 32-hex literal in the source is exactly what
-        // Gate G2 scans the history for, and it cannot tell a fixture from a real key.
-        val k = "a1b2c3d4" + "e5f60718" + "293a4b5c" + "6d7e8f90"
-        val found = Keys.parse("https://tile.thunderforest.com/outdoors/1/1/1.png?apikey=$k")
+        // Was written with a Thunderforest URL; those maps left on 16.9.2026, so the case is
+        // asked of the provider that remains. A key in a URL is still a key.
+        val k = "AIza" + "B".repeat(35)
+        val found = Keys.parse("https://tile.googleapis.com/v1/2dtiles/1/1/1?key=$k")
         assertEquals(1, found.size)
         assertEquals(k, found[0].key)
     }

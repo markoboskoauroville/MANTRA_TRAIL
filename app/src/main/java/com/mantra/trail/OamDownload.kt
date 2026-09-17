@@ -20,8 +20,40 @@ import java.util.zip.ZipInputStream
  */
 object OamDownload {
 
-    data class Progress(val done: Long, val total: Long, val unpacking: Boolean = false) {
+    data class Progress(
+        val done: Long,
+        val total: Long,
+        val unpacking: Boolean = false,
+        val bytesPerSecond: Long = 0L,
+    ) {
         val percent: Int get() = if (total <= 0) 0 else ((done * 100) / total).toInt()
+
+        /** What is happening, in the words somebody wants while it happens. */
+        fun line(label: String): String = when {
+            unpacking -> "$label: unpacking…"
+            total <= 0 -> "$label: ${done / 1_000_000} MB"
+            else -> "$label $percent% · ${done / 1_000_000} of ${total / 1_000_000} MB" +
+                (if (bytesPerSecond > 0) " · ${bytesPerSecond / 1_000_000.0} MB/s".take(12) else "") +
+                (if (bytesPerSecond > 0) " · ${remaining(done, total, bytesPerSecond)} left" else "")
+        }
+
+        private fun remaining(done: Long, total: Long, rate: Long): String {
+            val seconds = ((total - done) / rate.coerceAtLeast(1)).toInt()
+            return if (seconds >= 60) "${seconds / 60} min" else "${seconds}s"
+        }
+    }
+
+    /**
+     * WHAT IS HAPPENING NOW, for any screen that cares (16.9.2026). He started a 1.2 GB download
+     * and had no way to see it was running: the sentence went to the map's note line and the
+     * settings he was looking at said nothing. A download this size must be visible from wherever
+     * he is standing.
+     */
+    private val _state = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val state: kotlinx.coroutines.flow.StateFlow<String?> = _state
+
+    fun say(line: String?) {
+        _state.value = line
     }
 
     fun folder(context: Context): File = File(context.filesDir, "maps").apply { mkdirs() }
@@ -30,6 +62,48 @@ object OamDownload {
 
     fun isPresent(context: Context, region: Oam.Region): Boolean =
         target(context, region).let { it.exists() && it.length() > 1_000_000 }
+
+    /** Where the maps are kept, in words he can find on the phone. */
+    fun folderLabel(context: Context): String = "Android/data/${context.packageName}/files/maps"
+
+    /** Fetch a listing of one continent from the mirror, or null and the reason. */
+    suspend fun index(continent: String): Pair<List<OamIndex.Entry>, String?> =
+        withContext(Dispatchers.IO) {
+            try {
+                val connection = URL(OamIndex.urlFor(continent)).openConnection() as HttpURLConnection
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 20_000
+                connection.setRequestProperty("User-Agent", "MantraTrail/1")
+                val code = connection.responseCode
+                if (code != 200) {
+                    connection.disconnect()
+                    return@withContext emptyList<OamIndex.Entry>() to "The mirror answered $code"
+                }
+                val html = connection.inputStream.bufferedReader().use { it.readText() }
+                connection.disconnect()
+                val entries = OamIndex.parse(html, continent)
+                if (entries.isEmpty()) {
+                    entries to "Nothing readable in that listing"
+                } else {
+                    entries to null
+                }
+            } catch (e: Exception) {
+                emptyList<OamIndex.Entry>() to "The mirror could not be reached: ${e.javaClass.simpleName}"
+            }
+        }
+
+    /** Fetch a region named by the mirror's own index. */
+    suspend fun fetchEntry(
+        context: Context,
+        entry: OamIndex.Entry,
+        onProgress: (Progress) -> Unit,
+    ): String? = fetch(
+        context,
+        Oam.Region(entry.label.lowercase(), entry.label, "${entry.continent}/${entry.fileName}", entry.bytes),
+        onProgress,
+    )
+
+    fun remove(file: File): String? = if (file.delete()) null else "That map could not be deleted"
 
     /** Every OpenAndroMaps file already on the phone. */
     fun installed(context: Context): List<File> =
@@ -69,6 +143,8 @@ object OamDownload {
                     val buffer = ByteArray(128 * 1024)
                     var done = if (resuming) already else 0L
                     var said = 0L
+                    var lastMs = System.currentTimeMillis()
+                    var lastBytes = done
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
@@ -76,7 +152,12 @@ object OamDownload {
                         done += read
                         if (done - said > 5_000_000) {
                             said = done
-                            onProgress(Progress(done, total))
+                            val now = System.currentTimeMillis()
+                            val seconds = ((now - lastMs) / 1000.0).coerceAtLeast(0.001)
+                            val rate = ((done - lastBytes) / seconds).toLong()
+                            lastMs = now
+                            lastBytes = done
+                            onProgress(Progress(done, total, bytesPerSecond = rate))
                         }
                     }
                 }
