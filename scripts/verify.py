@@ -106,7 +106,8 @@ check("the notification is taken down when the service dies",
 
 # 7 nothing on the screen appears or disappears: the controls are always drawn and are enabled
 # or not (design-language.md 1). Five keys, five enabled arguments.
-screens = code_only((MAIN / "Screens.kt").read_text())
+screens_src = (MAIN / "Screens.kt").read_text()
+screens = code_only(screens_src)
 keys = re.findall(r"\bKey\(", screens)
 check("the control row draws every key unconditionally",
       len(keys) + screens.count("MarkKey(") + screens.count("RecordKey(") >= 6,
@@ -502,8 +503,8 @@ check("the engine is given every point as a waypoint",
 # 17.9.2026: it was written on the 16th and he never saw it, because it was nested inside the
 # 72dp centre target — fillMaxSize inside 72dp is 72dp, so it drew behind the crosshair.
 check("the compass is on the screen, not inside the centre target",
-      screens.index("THE LITTLE COMPASS, at the top right") < screens.index("THE TAP IN THE MIDDLE"),
-      "top right, where Google keeps it")
+      screens_src.index("LittleCompass(") < screens_src.index("// THE TAP IN THE MIDDLE"),
+      "top right, where Google keeps it; it used to be nested in the 72dp centre target")
 check("there is a compass that puts north up and centres him",
       "private fun LittleCompass" in screens and "CanvasHolder.canvas?.setMapRotation(0f)" in screens,
       "one tap, and it centres too")
