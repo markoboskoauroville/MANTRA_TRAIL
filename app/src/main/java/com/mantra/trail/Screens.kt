@@ -256,10 +256,6 @@ fun TrailApp(
             contentAlignment = Alignment.Center,
         ) {
             CentreCross()
-
-        },
-                )
-            }
         }
 
         if (!bare) {
