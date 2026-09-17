@@ -62,12 +62,25 @@ object Canvases {
         vtm?.setRoutePoints(points)
     }
 
+    /** A found way: remembered here, so a change of engine does not lose it. */
+    fun drawRoute(points: List<Fix>, colour: Long) {
+        Shown.route = points to colour
+        if (googleIsUp) google?.showTrack(points, colour) else vtm?.showSavedTrack(points, colour)
+    }
+
+    /** A saved walk, the same way. */
+    fun drawSavedTrack(points: List<Fix>, colour: Long) {
+        Shown.track = points to colour
+        if (googleIsUp) google?.showTrack(points, colour) else vtm?.showSavedTrack(points, colour)
+    }
+
     fun drawTrack(points: List<Fix>) {
         // The walk being recorded: VTM draws it in its own colour, Google in the same blue.
         if (googleIsUp) google?.showTrack(points, 0xFF60A5FA) else vtm?.drawTrack(points)
     }
 
     fun clearSavedTrack() {
+        Shown.forget()
         google?.showTrack(emptyList(), 0L)
         vtm?.clearSavedTrack()
     }
@@ -90,4 +103,27 @@ object Canvases {
     }
 
     fun ready(): Boolean = anyUp
+}
+
+/**
+ * WHAT IS ON THE MAP, kept apart from whichever engine is drawing it (17.9.2026).
+ *
+ * He asked for this plainly: a line from A to B drawn on the offline map must still be there when
+ * he switches to Google's, and the other way round. The routers were already map-independent —
+ * BRouter reads the file, Google answers over the wire, and neither cares what is being drawn —
+ * but the ANSWER was being handed to one canvas and lost with it.
+ */
+object Shown {
+    /** The way he chose, and its colour. */
+    @Volatile
+    var route: Pair<List<Fix>, Long>? = null
+
+    /** A saved walk he asked to see. */
+    @Volatile
+    var track: Pair<List<Fix>, Long>? = null
+
+    fun forget() {
+        route = null
+        track = null
+    }
 }

@@ -788,9 +788,18 @@ check("the ground under a route can be asked for",
 check("the heights are sampled by ground, not by index",
       "fun sample(" in (MAIN / "Route.kt").read_text() and "Route.sample(points, samples)" in (MAIN / "Elevation.kt").read_text(),
       "a hairpin must not eat the budget a ridge needs")
-check("Google's turn instructions are kept, not thrown away",
-      "fun turnsOf(" in (MAIN / "GoogleRoutes.kt").read_text() and "option.turns" in screens,
-      "they were already in the answer being paid for")
+# 17.9.2026, reversed at his word and asked five times: he does not want turn-by-turn in this
+# menu. This is a walking app; he wants the way drawn on the map, not streets to read. They are
+# still fetched, because they arrive in the same answer, and simply not shown.
+check("the turns are fetched and not shown",
+      "fun turnsOf(" in (MAIN / "GoogleRoutes.kt").read_text() and "option.turns.take" not in screens,
+      "the way is on the map, which is where he is looking")
+check("save is not beside close",
+      screens.index("save these points as a track") < screens.index('Label("close"'),
+      "they were the same size in the same corner and one of them threw work away")
+check("a line drawn survives a change of engine",
+      "object Shown" in (MAIN / "Canvases.kt").read_text() and "Shown.route?.let" in screens,
+      "the routers never cared which map was up; the answer was being lost with the canvas")
 # 17.9.2026: the URL the app builds was proved right on a desk, byte for byte, and still nothing
 # drew. VTM's own client cannot do https and its OkHttp engine drew nothing either, so tiles now
 # go through java.net — the stack that fetches the session, the routes and the maps.

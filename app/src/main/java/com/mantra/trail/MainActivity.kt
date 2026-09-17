@@ -199,6 +199,10 @@ class MainActivity : ComponentActivity() {
             routing = false
             routeOptions = options
             canvas?.showRouteOptions(options)
+            // AND ON WHICHEVER MAP IS UP (17.9.2026): the ways found belong to him, not to the
+            // engine that happened to be drawing when he pressed. The first is put up through
+            // Canvases, which remembers it across a change of map.
+            options.firstOrNull()?.let { Canvases.drawRoute(it.points, it.colour) }
             Trail.say(
                 problem ?: when (options.size) {
                     1 -> "One way found"

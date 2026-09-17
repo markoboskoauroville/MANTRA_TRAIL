@@ -146,7 +146,12 @@ fun TrailApp(
     var showPlaces by remember { mutableStateOf(false) }
     var bare by remember { mutableStateOf(false) }
     var zoom by remember { mutableIntStateOf(13) }
-    var ready by remember { mutableStateOf(false) }
+    // EVERY CANVAS GETS TOLD TO DRAW (17.9.2026). This was a one-shot flag: true the first time a
+    // map view existed, and true for ever after. Switching to Google's renderer and back builds a
+    // NEW VTM canvas, and nothing told it anything, because the flag was already true — a black
+    // screen with his position dot on it, which is exactly what he photographed. A counter goes
+    // up with each canvas, so each one is drawn on.
+    var ready by remember { mutableIntStateOf(0) }
     // LOCKED TO THE MIDDLE (15.9.2026). One press centres and holds; the next lets the map go.
     var follow by remember { mutableStateOf(false) }
     var lastCentreTap by remember { mutableLongStateOf(0L) }
@@ -171,8 +176,14 @@ fun TrailApp(
     val scope = rememberCoroutineScope()
 
     // The map the app opened on, drawn as soon as the view is real and not a moment before.
-    LaunchedEffect(ready) {
-        if (ready) showLayer(store, layer)
+    LaunchedEffect(ready, layer.id) {
+        if (ready > 0) {
+            showLayer(store, layer)
+            // and whatever was on the old map goes onto the new one
+            Canvases.setRoutePoints(store.routePoints)
+            Shown.route?.let { Canvases.drawRoute(it.first, it.second) }
+            Shown.track?.let { Canvases.drawSavedTrack(it.first, it.second) }
+        }
     }
 
     // The network line: sampled from the phone's own byte counters once a second, so it reports
@@ -212,7 +223,7 @@ fun TrailApp(
             line = Trail.line.collectAsState().value,
             follow = follow,
             onCanvas = onCanvas,
-            onReady = { ready = true },
+            onReady = { ready += 1 },
         )
 
 
@@ -379,8 +390,11 @@ fun TrailApp(
             )
         }
 
-        LaunchedEffect(ready) {
-            if (ready) Canvases.setRoutePoints(points)
+        // WHAT IS DRAWN BELONGS TO HIM, NOT TO AN ENGINE (17.9.2026). The lettered points and the
+        // way found between them are put back on every new canvas, so switching between the
+        // offline file and Google's map keeps the line he is walking rather than losing it.
+        LaunchedEffect(ready, points) {
+            if (ready > 0) Canvases.setRoutePoints(points)
         }
 
         // THE LIGHT IN FRONT OF THE DOT NEEDS THE HEADING, whether or not the compass overlay is
@@ -388,10 +402,10 @@ fun TrailApp(
         // the canvas redraws only when the heading has really moved (bounded by the composition).
         LaunchedEffect(ready) {
             while (true) {
-                if (ready) {
+                if (ready > 0) {
                     Canvases.setHeading(sensors.heading())
                     // The compass reports the map's own angle, so it is read where the heading is.
-                    mapTurn = Canvases.mapRotationDeg() ?: 0f
+                    mapTurn = Canvases.mapRotationDeg()
                 }
                 delay(200)
             }
@@ -1765,6 +1779,22 @@ private fun RouteMenu(
                 }
             }
 
+            if (enough) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Paint.Card)
+                        .border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                        .clickable(onClick = onSave)
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Label("save these points as a track", Paint.Amber, size = 12, align = TextAlign.Start)
+                }
+            }
+
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -1938,7 +1968,7 @@ private fun RouteMenu(
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Label(
-                        text = "find the ways",
+                        text = "route",
                         colour = if (enough) Paint.Amber else Paint.Dim,
                         size = 13,
                         align = TextAlign.Start,
@@ -1981,11 +2011,10 @@ private fun RouteMenu(
                         }
                     }
                 }
-                if (option.turns.isNotEmpty()) {
-                    option.turns.take(8).forEach { turn ->
-                        Label("· $turn", Paint.Dim, size = 11, align = TextAlign.Start)
-                    }
-                }
+                // NO TURN-BY-TURN HERE (17.9.2026, his fifth telling). This is a walking app: he
+                // wants the way drawn on the map, not a list of streets to read. Google's
+                // instructions are still fetched with the route — they come in the same answer —
+                // and they are simply not shown.
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -2030,29 +2059,20 @@ private fun RouteMenu(
                 }
             }
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Veil)
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) { Label("close", Paint.Sand, size = 14) }
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Paint.Card)
-                    .then(
-                        if (enough) Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp)) else Modifier
-                    )
-                        .clickable { if (enough) onSave() },
-                    contentAlignment = Alignment.Center,
-                ) { Label("save points", if (enough) Paint.Amber else Paint.Dim, size = 14) }
-            }
+            // CLOSE STANDS ALONE (17.9.2026). Save and close sat side by side at the bottom and he
+            // hit save when he meant close, keeping points he did not want. Two keys of the same
+            // size in the same corner, one destructive: that is a trap, not a layout. Save has
+            // gone to the top of the menu, beside the points it saves; the bottom is only the way
+            // out.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Paint.Veil)
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center,
+            ) { Label("close", Paint.Sand, size = 14) }
         }
     }
 }
