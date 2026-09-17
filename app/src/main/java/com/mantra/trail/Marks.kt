@@ -92,39 +92,25 @@ object Marks {
         val arm = side / 2f - 2 * scale
         val gap = arm * 0.42f
 
-        fun cross(colour: Int, width: Float) {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = colour
-                strokeWidth = width
-                style = Paint.Style.STROKE
-            }
-            canvas.drawLine(c - arm, c, c - gap, c, p)
-            canvas.drawLine(c + gap, c, c + arm, c, p)
-            canvas.drawLine(c, c - arm, c, c - gap, p)
-            canvas.drawLine(c, c + gap, c, c + arm, p)
-        }
-        // Two passes, both sharp: near-black a little wider, then the red over it.
-        cross(Color.argb(190, 11, 13, 16), 3f * scale)
-        cross(RED, 1.3f * scale)
-
-        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(190, 11, 13, 16)
-            textSize = 15f * scale
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        // ONE HAIRLINE, ONE PASS. The second stroke in near-black under this was an outline, and
+        // he has ruled them out: a hairline is one pixel with nothing behind it (17.9.2026).
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = RED
+            strokeWidth = 1f * scale
             style = Paint.Style.STROKE
-            strokeWidth = 2.6f * scale
         }
+        canvas.drawLine(c - arm, c, c - gap, c, line)
+        canvas.drawLine(c + gap, c, c + arm, c, line)
+        canvas.drawLine(c, c - arm, c, c - gap, line)
+        canvas.drawLine(c, c + gap, c, c + arm, line)
+
         val face = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = RED
             textSize = 15f * scale
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
-        // Centred in the gap the arms leave, by the text's own measured height.
-        val middle = c - (face.descent() + face.ascent()) / 2f
-        canvas.drawText(letter, c, middle, outline)
-        canvas.drawText(letter, c, middle, face)
+        canvas.drawText(letter, c, c - (face.descent() + face.ascent()) / 2f, face)
         return bitmap
     }
 

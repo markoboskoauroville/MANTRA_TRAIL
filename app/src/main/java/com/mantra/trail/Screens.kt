@@ -777,8 +777,9 @@ private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = M
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f - 1.dp.toPx()
 
-            drawCircle(Color(0xFF0B0D10), radius = r, center = c, style = Stroke(2.2.dp.toPx()))
-            drawCircle(Color.White, radius = r - 1.8.dp.toPx(), center = c, style = Stroke(1.2.dp.toPx()))
+            // ONE LINE, ONE PIXEL, NO OUTLINE (17.9.2026, his rule three). The black ring around
+            // this was me outlining by reflex; it is gone, and so is every other outline I added.
+            drawCircle(Color.White, radius = r, center = c, style = Stroke(1.dp.toPx()))
 
             // The needle turns against the map: the map turned east puts north to the left.
             val along = Math.toRadians(-turn.toDouble() - 90.0)
@@ -787,7 +788,7 @@ private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = M
                 c.x + (distance * Math.cos(radians)).toFloat(),
                 c.y + (distance * Math.sin(radians)).toFloat(),
             )
-            val reach = (r - 1.8.dp.toPx()) * 0.58f
+            val reach = r * 0.58f
             val waist = r * 0.13f
             val tip = at(reach, along)
             val tail = at(-reach, along)
@@ -826,8 +827,9 @@ private fun CentreCross() {
         val c = Offset(size.width / 2f, size.height / 2f)
         val arm = size.minDimension / 2f
         val gap = arm * 0.36f
+        // ONE HAIRLINE. A hairline is one pixel and nothing under it (17.9.2026, his rule three).
         val hair = 1.dp.toPx()
-        val ink = androidx.compose.ui.graphics.Color(0x80000000)
+        val ink = Color(0x99000000)
         drawLine(ink, Offset(c.x - arm, c.y), Offset(c.x - gap, c.y), hair)
         drawLine(ink, Offset(c.x + gap, c.y), Offset(c.x + arm, c.y), hair)
         drawLine(ink, Offset(c.x, c.y - arm), Offset(c.x, c.y - gap), hair)
@@ -1758,7 +1760,7 @@ private fun RouteMenu(
             // knows what is open and costs a billed request each time it is asked. The two are
             // here side by side so he can compare them on ground he knows.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(false to "BRouter · offline", true to "Google · online").forEach { (google, label) ->
+                listOf(false to "BRouter", true to "Google").forEach { (google, label) ->
                     Box(
                         Modifier
                             .weight(1f)

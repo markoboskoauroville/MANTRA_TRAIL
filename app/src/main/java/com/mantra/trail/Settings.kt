@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -263,11 +264,17 @@ fun SettingsFace(
                                     Keyring.describe(key)
                                 },
                                 inset = true,
+                                // TWO BUTTONS THE SAME SIZE, side by side and not overlapping
+                                // (17.9.2026): a cross squeezed against a bordered box read as
+                                // one broken control.
                                 trailing = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Box(
                                             Modifier
-                                                .size(width = 52.dp, height = 34.dp)
+                                                .size(width = 58.dp, height = 36.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .border(1.2.dp, Paint.Amber, RoundedCornerShape(8.dp))
                                                 .clickable { onTestKey(key) },
@@ -275,10 +282,12 @@ fun SettingsFace(
                                         ) { Words("test", Paint.Amber, 12) }
                                         Box(
                                             Modifier
-                                                .size(width = 40.dp, height = 34.dp)
+                                                .size(width = 58.dp, height = 36.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(1.2.dp, Paint.Red, RoundedCornerShape(8.dp))
                                                 .clickable { onRemoveKey(key) },
                                             contentAlignment = Alignment.Center,
-                                        ) { Words("✕", Paint.Red, 14) }
+                                        ) { Words("delete", Paint.Red, 12) }
                                     }
                                 },
                             )
@@ -373,7 +382,7 @@ private fun Line(
             if (under != null) Words(under, Paint.Dim, 12, TextAlign.Start)
         }
         if (trailing != null) {
-            Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { trailing() }
+            Box(Modifier.widthIn(min = 56.dp), contentAlignment = Alignment.Center) { trailing() }
         } else if (opens) {
             Words("›", Paint.Dim, 18, modifier = Modifier.padding(end = 8.dp))
         }

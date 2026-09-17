@@ -246,10 +246,12 @@ check("every word over the map carries a shadow instead",
       "Shadow(color = Paint.Ground" in screens, "one Label, one shadow, no panel")
 # Split in two on 15.9.2026: the crosshair over the map and the mark on the key are different
 # things, and only the key's mark is a position colour.
-check("the crosshair over the map is four black hairlines and nothing else",
-      "Color(0x80000000)" in screens.split("private fun CentreCross")[1][:600]
-      and "drawCircle" not in screens.split("private fun CentreCross")[1].split("\n}")[0],
-      "half transparent, middle empty")
+# RULE THREE (17.9.2026): a hairline is one pixel with nothing behind it. Every double stroke I
+# had added as an outline is removed — the crosshair, the marks, the compass ring.
+check("the crosshair over the map is four hairlines and nothing else",
+      "Color(0x99000000)" in screens.split("private fun CentreCross")[1][:600]
+      and screens.split("private fun CentreCross")[1].split("\n}")[0].count("drawLine") == 4,
+      "four lines, one pass, middle empty")
 check("the key's mark is unchanged and still the position colour",
       "Paint.AmberBright" in screens.split("private fun PositionMark")[1][:400],
       "ring and dot, ringed in near-black")
@@ -552,10 +554,14 @@ check("the map key turns between the two maps and nothing else",
 check("the offline map has views of its own",
       "OFFLINE_VIEWS" in layers and "onOfflineView" in settings_src,
       "the same file drawn four ways, because Google's entry had four and this one had none")
-check("the compass has a black ring outside the white one",
-      "drawCircle(Color(0xFF0B0D10), radius = r" in screens
-      and "radius = r - 1.8.dp.toPx()" in screens,
-      "concentric, so there is no double edge anywhere on it")
+check("nothing on the compass is outlined",
+      "drawCircle(Color(0xFF0B0D10), radius = r" not in screens
+      and "drawCircle(Color.White, radius = r, center = c, style = Stroke(1.dp.toPx()))" in screens,
+      "one white ring at one pixel")
+check("nothing on the route marks is outlined either",
+      "argb(190, 11, 13, 16)" not in (MAIN / "Marks.kt").read_text()
+      and "setShadowLayer" not in (MAIN / "Marks.kt").read_text(),
+      "one hairline cross, one red letter, nothing behind either")
 check("the compass is one white ring and a needle inside it",
       "drawCircle(Color.White" in screens and 'Label("N"' not in screens
       and "* 0.58f" in screens,
@@ -765,8 +771,8 @@ check("what is left to do is written down",
       (ROOT / "TODO.md").exists(), "he asked to be told after every build")
 check("both routers are offered and the choice is his",
       "useGoogleRouting" in (MAIN / "Store.kt").read_text()
-      and "BRouter · offline" in screens and "Google · online" in screens,
-      "one needs no signal, the other costs a billed request")
+      and 'false to "BRouter"' in screens and 'true to "Google"' in screens,
+      "two words on one row; he knows which is online")
 check("Google is never asked for a route on its own",
       "GoogleRoutes.between(points, store, wanted)" in (MAIN / "MainActivity.kt").read_text()
       and "store.useGoogleRouting" in (MAIN / "MainActivity.kt").read_text(),
