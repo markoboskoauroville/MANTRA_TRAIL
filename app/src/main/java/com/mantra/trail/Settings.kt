@@ -73,6 +73,7 @@ fun SettingsFace(
     store: Store,
     current: MapLayer,
     installedMaps: List<java.io.File>,
+    unfinishedMaps: List<java.io.File>,
     drawingMapName: String,
     offlineUnder: String,
     onUseMap: (java.io.File) -> Unit,
@@ -140,7 +141,9 @@ fun SettingsFace(
             // The key on the map screen turns between the two MAPS, not through eight views.
             Group("maps") {
                 Line(
-                    title = "offline map",
+                    // PLURAL, BECAUSE THERE ARE SEVERAL (17.9.2026): the dropdown lists every map
+                    // on the phone, finished or half-fetched, and one of them draws at a time.
+                    title = "offline maps",
                     opens = true,
                     under = offlineUnder,
                     onPress = onMaps,
@@ -149,6 +152,38 @@ fun SettingsFace(
                     },
                 )
                 if (state.offlineOpen) {
+                    installedMaps.forEach { file ->
+                        Rule()
+                        Line(
+                            title = file.name.removePrefix("oam-").removeSuffix(".map"),
+                            under = "${file.length() / 1_000_000} MB",
+                            inset = true,
+                            chosen = file.name == drawingMapName,
+                            onPress = { onUseMap(file) },
+                        )
+                    }
+                    unfinishedMaps.forEach { file ->
+                        Rule()
+                        Line(
+                            title = file.name.removeSuffix(".part").removeSuffix(".zip")
+                                .removePrefix("oam-").removeSuffix(".map"),
+                            under = "${file.length() / 1_000_000} MB so far · not finished, open this row to carry on",
+                            inset = true,
+                            onPress = onMaps,
+                        )
+                    }
+                    if (installedMaps.isEmpty() && unfinishedMaps.isEmpty()) {
+                        Rule()
+                        Line(
+                            title = "no map on the phone yet",
+                            under = "open this row to fetch one",
+                            inset = true,
+                            onPress = onMaps,
+                        )
+                    }
+
+                    Rule()
+                    Line(title = "how they are drawn", inset = true)
                     Layers.OFFLINE_VIEWS.forEach { view ->
                         Rule()
                         Line(

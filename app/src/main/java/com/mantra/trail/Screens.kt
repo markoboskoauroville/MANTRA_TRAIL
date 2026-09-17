@@ -162,7 +162,8 @@ fun TrailApp(
     var listing by remember { mutableStateOf<List<OamIndex.Entry>>(emptyList()) }
     var listingOf by remember { mutableStateOf<String?>(null) }
     val appContext = androidx.compose.ui.platform.LocalContext.current
-    val installedMaps = remember(UiTick.n, showMaps) { OamDownload.installed(appContext) }
+    val installedMaps = remember(UiTick.n, showMaps, settings) { OamDownload.installed(appContext) }
+    val unfinishedMaps = remember(UiTick.n, showMaps, settings) { OamDownload.unfinished(appContext) }
     val scope = rememberCoroutineScope()
 
     // The map the app opened on, drawn as soon as the view is real and not a moment before.
@@ -489,11 +490,12 @@ fun TrailApp(
                 current = layer,
                 version = version,
                 installedMaps = installedMaps,
+                unfinishedMaps = unfinishedMaps,
                 drawingMapName = store.offlineMapName.ifBlank {
                     installedMaps.firstOrNull()?.name ?: ""
                 },
                 offlineUnder = if (installedMaps.isEmpty()) {
-                    "no map on the phone yet"
+                    if (unfinishedMaps.isEmpty()) "none yet" else "one unfinished — open to carry on"
                 } else {
                     val drawing = store.offlineMapName.ifBlank { installedMaps.first().name }
                     drawing.removePrefix("oam-").removeSuffix(".map") +

@@ -126,6 +126,17 @@ object OamDownload {
             ?.sortedByDescending { it.length() }
             ?: emptyList()
 
+    /**
+     * DOWNLOADS THAT NEVER FINISHED (17.9.2026). He asked where his Balkan map was, and the honest
+     * answer is either "on the phone" or "half on the phone" — a part file with a real size in it,
+     * waiting to be carried on. A list that shows only finished maps cannot answer him at all.
+     */
+    fun unfinished(context: Context): List<File> =
+        folder(context).listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".part") }
+            ?.sortedByDescending { it.length() }
+            ?: emptyList()
+
     suspend fun fetch(
         context: Context,
         region: Oam.Region,

@@ -460,8 +460,14 @@ check("two taps in a row are what lock it",
 # its own options and a dropdown of its views.
 check("tracks come first and each map is one entry",
       settings_src.index('Group("tracks")') < settings_src.index('Group("maps")')
-      and 'title = "offline map"' in settings_src and 'title = "Google map"' in settings_src,
-      "two maps, two entries, both called map")
+      and 'title = "offline maps"' in settings_src and 'title = "Google map"' in settings_src,
+      "two entries, both called map; the offline one plural because there are several")
+check("every offline map on the phone is a button in that dropdown",
+      "installedMaps.forEach { file ->" in settings_src and "chosen = file.name == drawingMapName" in settings_src,
+      "one drawing at a time, chosen by pressing its row")
+check("a half-fetched map is shown rather than hidden",
+      "fun unfinished(" in (MAIN / "OamDownload.kt").read_text() and "not finished, open this row to carry on" in settings_src,
+      "he asked where his Balkan map was; half on the phone is an answer")
 check("an arrow that opens a list is not the same control as the row",
       "private fun Caret(" in settings_src and "state.offlineOpen = !state.offlineOpen" in settings_src,
       "the row opens that map's options; the arrow drops its views")
