@@ -46,6 +46,7 @@ import java.io.FileInputStream
 class VtmCanvas(private val context: Context, private val store: Store) {
 
     val view: MapView = MapView(context)
+
     private val map get() = view.map()
 
     private var baseLayer: VectorTileLayer? = null
@@ -64,6 +65,9 @@ class VtmCanvas(private val context: Context, private val store: Store) {
     private var lastFix: Fix? = null
 
     init {
+        // The ground behind every map, before any of them is drawn: black, because this is a dark
+        // application and VTM's own default is light grey.
+        org.oscim.renderer.MapRenderer.setBackgroundColor(android.graphics.Color.BLACK)
         map.setMapPosition(store.lastLat, store.lastLon, (1 shl store.lastZoom).toDouble())
     }
 
@@ -76,6 +80,21 @@ class VtmCanvas(private val context: Context, private val store: Store) {
      * the key belong to the layers that need them — Google's tiles want both, Thunderforest's
      * want a key, the offline file wants neither — so callers with none say nothing.
      */
+    /**
+     * SHOW NOTHING, ON PURPOSE (17.9.2026).
+     *
+     * His screenshot: the top line said Satellite, Google had refused the key, and the offline map
+     * was drawn underneath — so the name and the ground disagreed and only the name was visible at
+     * a glance. A map that cannot be drawn must draw nothing. Black, not the library's light grey,
+     * because this is a dark application and a white screen on a hillside is a torch in the face.
+     */
+    fun blank() {
+        clearBaseLayers()
+        org.oscim.renderer.MapRenderer.setBackgroundColor(android.graphics.Color.BLACK)
+        map.clearMap()
+        map.updateMap(true)
+    }
+
     fun show(layer: MapLayer, session: String? = null, key: String? = null): String? {
         clearBaseLayers()
         return when (layer.kind) {

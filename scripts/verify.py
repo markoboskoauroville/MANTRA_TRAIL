@@ -289,9 +289,16 @@ check("the first draw is triggered by the view existing, not by a bare effect",
       "the factory says when the view is real")
 # The fallback was OpenStreetMap until it left the app on 16.9.2026; it is the offline file now,
 # and when that is what failed there is nothing to fall back TO, so the sentence stands alone.
-check("a layer that cannot draw falls back to one that can",
-      "showing the offline map meanwhile" in screens,
-      "the screen is never white without a sentence on it")
+# REVERSED 17.9.2026, with the reason. The fallback was written so the screen would never be
+# empty; his screenshot showed the cost — the top line said Satellite, Google had refused the key,
+# and the offline map was drawn underneath. A name that disagrees with the ground is worse than
+# nothing, because only the name is legible at a glance.
+check("a map that cannot be drawn draws nothing",
+      "CanvasHolder.canvas?.blank()" in screens and "fun blank()" in canvas_src,
+      "and the reason is on the screen with it")
+check("the ground behind a map is black",
+      "MapRenderer.setBackgroundColor(android.graphics.Color.BLACK)" in canvas_src,
+      "VTM's own default is light grey, and this is a dark application")
 check("zoom is on the screen as keys, not only as a pinch",
       "zoomOut()" in screens and "zoomIn()" in screens, "minus and plus at both ends of the row")
 

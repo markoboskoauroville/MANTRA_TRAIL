@@ -632,16 +632,14 @@ suspend fun showLayer(store: Store, layer: MapLayer) {
         Trail.say(if (layer.kind == LayerKind.VECTOR_FILE) canvas.emptyHere() else null)
         return
     }
-    // A MAP THAT CANNOT DRAW LEAVES THE SCREEN EMPTY, and an empty screen teaches nothing. The
-    // fallback used to be OpenStreetMap, which left the app on 16.9.2026; the offline file is
-    // what always works now, and when it is the offline file that failed there is nothing to
-    // fall back TO, so the reason is all there is to give.
-    if (layer.id == Layers.OFFLINE.id) {
-        Trail.say(problem)
-        return
-    }
-    val fallback = attempt(canvas, store, Layers.OFFLINE)
-    Trail.say(if (fallback == null) "$problem — showing the offline map meanwhile" else problem)
+    // A MAP THAT CANNOT BE DRAWN DRAWS NOTHING (17.9.2026).
+    //
+    // It used to fall back to the offline map, and his screenshot showed why that was wrong: the
+    // top line said Satellite, Google had refused the key, and the offline map was underneath. The
+    // name and the ground disagreed, and only the name was legible at a glance — which is worse
+    // than an empty screen, because an empty screen with a sentence on it is not ambiguous.
+    CanvasHolder.canvas?.blank()
+    Trail.say(problem)
 }
 
 /** One attempt at one layer. Returns null when it drew, or the reason it did not. */
