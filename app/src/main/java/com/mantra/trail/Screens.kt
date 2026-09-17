@@ -236,6 +236,7 @@ fun TrailApp(
         MapSurface(
             store = store,
             layer = layer,
+            generation = ready,
             points = points,
             fix = fix,
             line = Trail.line.collectAsState().value,
@@ -638,6 +639,7 @@ fun TrailApp(
 private fun MapSurface(
     store: Store,
     layer: MapLayer,
+    generation: Int,
     points: List<Pair<Double, Double>>,
     fix: Fix?,
     line: List<Fix>,
@@ -677,6 +679,8 @@ private fun MapSurface(
             // handed a surface that was still somebody else's, drew black. His offline map went
             // dark the moment Google's renderer had been shown once.
             onRelease = {
+                // Where he was looking goes with him to the other engine.
+                Canvases.rememberCamera(store)
                 GoogleHolder.canvas?.onPause()
                 GoogleHolder.canvas?.onDestroy()
                 GoogleHolder.canvas = null
@@ -703,16 +707,23 @@ private fun MapSurface(
             made.view
         },
         onRelease = {
-            // The same courtesy in the other direction: VTM stops drawing when it leaves.
+            // The same courtesy in the other direction: VTM stops drawing when it leaves, and
+            // says where it was looking first.
+            Canvases.rememberCamera(store)
             CanvasHolder.canvas?.pause()
             CanvasHolder.canvas = null
         },
     )
 
-    LaunchedEffect(line.size, fix?.timeMs, follow) {
-        Canvases.drawTrack(line)
-        Canvases.drawPosition(fix)
-        if (follow && fix != null) Canvases.centreOn(fix)
+    // NOTHING IS LEFT BEHIND WHEN THE VIEW CHANGES (17.9.2026).
+    //
+    // His words: changing the map is changing the VIEW, and everything laid over it is constant.
+    // This effect was keyed on the walk and the lock alone, so when a new engine took the screen
+    // it ran nothing — the track he was recording vanished, the lock stopped holding, the route
+    // and the points went with them. It is keyed on the canvas too now, so every map that
+    // appears inherits the whole state rather than an empty screen.
+    LaunchedEffect(generation, line.size, fix?.timeMs, follow) {
+        Canvases.handOver(points, line, fix, follow)
     }
 }
 

@@ -44,10 +44,12 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
     private var pendingCentre: Fix? = null
     private var pendingPoints: List<Pair<Double, Double>>? = null
     private var pendingTrack: Pair<List<Fix>, Long>? = null
+    private var pendingLive: List<Fix>? = null
     private var pendingPosition: Boolean? = null
     private var pendingBearing: Float? = null
     private var routeLine: Polyline? = null
     private var trackLine: Polyline? = null
+    private var liveLine: Polyline? = null
     private val marks = ArrayList<Marker>()
     private var wanted: MapLayer.GoogleView = MapLayer.GoogleView.NORMAL
 
@@ -79,11 +81,13 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
             // Everything he asked for while the map was on its way.
             pendingPoints?.let { setRoutePoints(it) }
             pendingTrack?.let { showTrack(it.first, it.second) }
+            pendingLive?.let { showLive(it) }
             pendingPosition?.let { showPosition(it) }
             pendingBearing?.let { setMapRotation(it) }
             pendingCentre?.let { centreOn(it) }
             pendingPoints = null
             pendingTrack = null
+            pendingLive = null
             pendingPosition = null
             pendingBearing = null
             pendingCentre = null
@@ -207,6 +211,35 @@ class GoogleCanvas(private val context: Context, private val store: Store) {
         } else {
             null
         }
+    }
+
+    /**
+     * THE WALK BEING RECORDED, which is a different line from the route and from a saved track
+     * (17.9.2026). All three shared one polyline here, so whichever was drawn last erased the
+     * others — and his recording vanished the moment a route was found.
+     */
+    fun showLive(points: List<Fix>) {
+        val ready = map
+        if (ready == null) {
+            pendingLive = points
+            return
+        }
+        liveLine?.remove()
+        liveLine = if (points.size >= 2) {
+            ready.addPolyline(
+                PolylineOptions()
+                    .addAll(points.map { LatLng(it.lat, it.lon) })
+                    .color(0xFF2196F3.toInt())
+                    .width(9f)
+            )
+        } else {
+            null
+        }
+    }
+
+    /** Where the camera is, so the other engine can pick it up exactly. */
+    fun camera(): Triple<Double, Double, Float>? = map?.cameraPosition?.let {
+        Triple(it.target.latitude, it.target.longitude, it.zoom)
     }
 
     fun onResume() = view.onResume()

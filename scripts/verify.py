@@ -807,6 +807,21 @@ check("save is not beside close",
 # renderer had drawn perfectly still ended with "the map view is not up yet" across a working map.
 # 17.9.2026: the kept imagery downloaded and drew, and no row anywhere chose it — a map on the
 # phone he could not ask for.
+# 17.9.2026, his standard: changing the map changes the VIEW, and everything laid over it is
+# constant. The effect that applied the overlays was keyed on the walk and the lock alone, so a
+# new engine took the screen and inherited nothing.
+check("a new map inherits everything that was on the old one",
+      "fun handOver(" in (MAIN / "Canvases.kt").read_text()
+      and "LaunchedEffect(generation, line.size" in screens,
+      "points, route, saved track, the walk being recorded, the position and the lock")
+check("the walk being recorded has its own line on both engines",
+      "fun showLive(" in (MAIN / "GoogleCanvas.kt").read_text()
+      and "google?.showLive(points)" in (MAIN / "Canvases.kt").read_text(),
+      "all three shared one polyline, so the last drawn erased the others")
+check("where he was looking goes with him",
+      "fun rememberCamera(" in (MAIN / "Canvases.kt").read_text()
+      and "Canvases.rememberCamera(store)" in screens,
+      "the arriving engine starts where the leaving one stopped")
 check("the kept satellite can be chosen",
       'title = "Satellite, kept on the phone"' in settings_src
       and "onPick(Layers.IMAGERY)" in settings_src,

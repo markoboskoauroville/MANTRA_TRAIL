@@ -74,9 +74,45 @@ object Canvases {
         if (googleIsUp) google?.showTrack(points, colour) else vtm?.showSavedTrack(points, colour)
     }
 
+    /** The walk being recorded. Its own line on both engines, not the route's and not a track's. */
     fun drawTrack(points: List<Fix>) {
-        // The walk being recorded: VTM draws it in its own colour, Google in the same blue.
-        if (googleIsUp) google?.showTrack(points, 0xFF60A5FA) else vtm?.drawTrack(points)
+        if (googleIsUp) google?.showLive(points) else vtm?.drawTrack(points)
+    }
+
+    /**
+     * EVERYTHING THE NEW MAP MUST INHERIT (17.9.2026), in one place so that nothing is remembered
+     * by one engine and forgotten by the other. He said it plainly: changing the view changes the
+     * view and nothing else.
+     */
+    fun handOver(
+        points: List<Pair<Double, Double>>,
+        live: List<Fix>,
+        fix: Fix?,
+        follow: Boolean,
+    ) {
+        setRoutePoints(points)
+        Shown.route?.let { drawRoute(it.first, it.second) }
+        Shown.track?.let { drawSavedTrack(it.first, it.second) }
+        drawTrack(live)
+        drawPosition(fix)
+        if (follow && fix != null) centreOn(fix)
+    }
+
+    /** Where the leaving engine was looking, so the arriving one starts there. */
+    fun rememberCamera(store: Store) {
+        if (googleIsUp) {
+            google?.camera()?.let { (lat, lon, zoom) ->
+                store.lastLat = lat
+                store.lastLon = lon
+                store.lastZoom = zoom.toInt()
+            }
+        } else {
+            vtm?.centre()?.let { (lat, lon) ->
+                store.lastLat = lat
+                store.lastLon = lon
+                store.lastZoom = vtm?.currentZoom() ?: store.lastZoom
+            }
+        }
     }
 
     fun clearSavedTrack() {
