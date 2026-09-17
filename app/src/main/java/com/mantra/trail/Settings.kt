@@ -95,6 +95,8 @@ fun SettingsFace(
     installedMaps: List<java.io.File>,
     unfinishedMaps: List<java.io.File>,
     onFetchOffer: (OamIndex.Entry) -> Unit,
+    hasImagery: Boolean,
+    imageryHeld: String,
     keyring: List<Keyring.Key>,
     onTestKey: (Keyring.Key) -> Unit,
     onRemoveKey: (Keyring.Key) -> Unit,
@@ -220,6 +222,20 @@ fun SettingsFace(
                                 onPress = { onFetchOffer(offer) },
                             )
                         }
+                    }
+
+                    // THE KEPT SATELLITE (17.9.2026). It downloads and it draws, and until now
+                    // there was no row anywhere that chose it — a map on the phone he could not
+                    // ask for. It sits with the other offline maps, because that is what it is.
+                    if (hasImagery) {
+                        Rule()
+                        Line(
+                            title = "Satellite, kept on the phone",
+                            under = imageryHeld,
+                            inset = true,
+                            chosen = current.id == Layers.IMAGERY.id,
+                            onPress = { onPick(Layers.IMAGERY) },
+                        )
                     }
 
                     Rule()

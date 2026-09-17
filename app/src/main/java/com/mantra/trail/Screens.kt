@@ -189,6 +189,7 @@ fun TrailApp(
     var listingOf by remember { mutableStateOf<String?>(null) }
     val appContext = androidx.compose.ui.platform.LocalContext.current
     val installedMaps = remember(UiTick.n, showMaps, settings) { OamDownload.installed(appContext) }
+    val imageryKept = remember(UiTick.n, showMaps, settings) { ImageryStore.label(appContext) }
     val unfinishedMaps = remember(UiTick.n, showMaps, settings) { OamDownload.unfinished(appContext) }
     val scope = rememberCoroutineScope()
 
@@ -490,7 +491,7 @@ fun TrailApp(
                 installed = installedMaps,
                 imageryDepth = imageryDepth,
                 imageryCost = imageryCost,
-                imageryHeld = remember(UiTick.n, showMaps) { ImageryStore.label(appContext) },
+                imageryHeld = imageryKept,
                 onImageryDepth = { imageryDepth = it },
                 onFetchImagery = { onFetchImagery(imageryDepth) },
                 onForgetImagery = {
@@ -568,6 +569,8 @@ fun TrailApp(
                 keyring = remember(UiTick.n, settings) { store.keyring },
                 onTestKey = onTestKey,
                 onRemoveKey = onRemoveKey,
+                hasImagery = imageryKept != "none yet",
+                imageryHeld = imageryKept,
                 onFetchOffer = { entry ->
                     settings = false
                     showMaps = true

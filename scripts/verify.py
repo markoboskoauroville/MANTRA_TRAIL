@@ -805,6 +805,12 @@ check("save is not beside close",
 # dutifully centred a map he could not see.
 # 17.9.2026: showLayer asked the offline canvas for every layer, so a Google view that their own
 # renderer had drawn perfectly still ended with "the map view is not up yet" across a working map.
+# 17.9.2026: the kept imagery downloaded and drew, and no row anywhere chose it — a map on the
+# phone he could not ask for.
+check("the kept satellite can be chosen",
+      'title = "Satellite, kept on the phone"' in settings_src
+      and "onPick(Layers.IMAGERY)" in settings_src,
+      "in the offline maps dropdown, where it belongs")
 check("a Google view is drawn by Google's canvas",
       "if (layer.family == MapLayer.Family.GOOGLE) {\n        val google = GoogleHolder.canvas" in screens,
       "and the offline canvas is not asked about a map it is not drawing")
