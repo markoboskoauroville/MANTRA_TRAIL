@@ -692,67 +692,58 @@ object CanvasHolder {
  * It is 44dp, which is a thumb, and it sits under the top bar at the right-hand edge.
  */
 /**
- * THE COMPASS: HOLLOW, AND IT DOES ONE THING (17.9.2026).
+ * THE COMPASS (17.9.2026, third attempt, to his description and no further).
  *
- * Baba: *"It shows me if I manually rotating my map where it is pointing to... And when I click
- * on it, it turns the map to upright position. And it's hollow. There will be just outline and
- * compass. No black background."*
+ * One white ring. One needle, wholly inside it, red to the north and pale to the south. Nothing
+ * else: no letter, no disc, no second stroke under anything.
  *
- * So: no disc. A ring, a needle whose north half is red, the letter N, and nothing behind them.
- * It turns with the map, which is the whole of what it reports, and one tap puts north back at the
- * top. The second state — turning the map to follow his walk — is gone with the second tap that
- * chose it; a control that does one thing needs no explanation of which thing it is doing.
+ * What was wrong before, in his words and mine: the needle reached past the ring; the ring and
+ * the needle were each drawn twice, near-black under colour, and the two passes did not meet
+ * cleanly at the point — which is the "double sword" on the edges; and the N carried a shadow
+ * because it too was drawn twice. Drawing a thing twice to make it readable is a trick for a
+ * hairline over a map, and a filled needle is not a hairline. It needs none of it.
  *
- * Every stroke is drawn twice, near-black a little wider and then the light colour, because this
- * hangs over a map that may be a snowfield or a forest and a single colour cannot be read on both.
+ * The needle ends at 0.58 of the radius, so there is air between its point and the ring.
  */
 @Composable
 private fun LittleCompass(turn: Float, onTap: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier.size(48.dp).clip(CircleShape).clickable(onClick = onTap),
+        modifier.size(44.dp).clip(CircleShape).clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(30.dp)) {
-                val c = Offset(size.width / 2f, size.height / 2f)
-                val r = size.minDimension / 2f - 1.dp.toPx()
+        Canvas(Modifier.size(30.dp)) {
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val r = size.minDimension / 2f - 1.dp.toPx()
 
-                drawCircle(Paint.Ground, radius = r, center = c, style = Stroke(2.6.dp.toPx()))
-                drawCircle(Paint.Sand, radius = r, center = c, style = Stroke(1.2.dp.toPx()))
+            drawCircle(Color.White, radius = r, center = c, style = Stroke(1.2.dp.toPx()))
 
-                // The needle turns against the map: the map turned east puts north to the left.
-                val angle = Math.toRadians(-turn.toDouble() - 90.0)
-                val across = Math.toRadians(-turn.toDouble())
-                fun at(distance: Float, radians: Double) = Offset(
-                    c.x + (distance * Math.cos(radians)).toFloat(),
-                    c.y + (distance * Math.sin(radians)).toFloat(),
+            // The needle turns against the map: the map turned east puts north to the left.
+            val along = Math.toRadians(-turn.toDouble() - 90.0)
+            val across = Math.toRadians(-turn.toDouble())
+            fun at(distance: Float, radians: Double) = Offset(
+                c.x + (distance * Math.cos(radians)).toFloat(),
+                c.y + (distance * Math.sin(radians)).toFloat(),
+            )
+            val reach = r * 0.58f
+            val waist = r * 0.13f
+            val tip = at(reach, along)
+            val tail = at(-reach, along)
+            val left = at(waist, across)
+            val right = at(-waist, across)
+
+            fun half(point: Offset, colour: Color) {
+                drawPath(
+                    androidx.compose.ui.graphics.Path().apply {
+                        moveTo(point.x, point.y)
+                        lineTo(left.x, left.y)
+                        lineTo(right.x, right.y)
+                        close()
+                    },
+                    colour,
                 )
-                val tip = at(r * 0.82f, angle)
-                val tail = at(-r * 0.82f, angle)
-                val left = at(r * 0.26f, across)
-                val right = at(-r * 0.26f, across)
-
-                fun half(point: Offset, colour: Color, widen: Float) {
-                    drawPath(
-                        androidx.compose.ui.graphics.Path().apply {
-                            moveTo(point.x, point.y)
-                            lineTo(left.x, left.y)
-                            lineTo(right.x, right.y)
-                            close()
-                        },
-                        colour,
-                        style = if (widen > 0f) Stroke(widen) else Fill,
-                    )
-                }
-                half(tip, Paint.Ground, 3.2.dp.toPx())
-                half(tail, Paint.Ground, 3.2.dp.toPx())
-                half(tip, Color(0xFFEA4335), 0f)
-                half(tail, Paint.Sand, 0f)
             }
-            Box(contentAlignment = Alignment.Center) {
-                Label("N", Paint.Ground, size = 11)
-                Label("N", Paint.Sand, size = 10)
-            }
+            half(tip, Color(0xFFE53935))
+            half(tail, Color.White)
         }
     }
 }

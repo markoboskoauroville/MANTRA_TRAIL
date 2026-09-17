@@ -521,10 +521,10 @@ check("the compass is on the screen, not inside the centre target",
 # 17.9.2026: he sent Google's screenshot twice. Black disc, red north half, white south half, N.
 # Refined 17.9.2026: hollow, and one thing only. No disc behind it, and the tap that used to
 # choose a second state is gone with the state.
-check("the compass is hollow",
-      "private fun LittleCompass(turn: Float, onTap: () -> Unit" in screens
-      and "Color(0xFF17171A)" not in screens,
-      "a ring, a needle and an N, with the map showing through")
+check("the compass is one white ring and a needle inside it",
+      "drawCircle(Color.White" in screens and 'Label("N"' not in screens
+      and "r * 0.58f" in screens,
+      "nothing drawn twice, nothing reaching past the ring, no letter")
 check("one tap rights the map and that is all it does",
       "onTap = { CanvasHolder.canvas?.setMapRotation(0f) }" in screens
       and "NORTH_FOLLOW" not in screens,
