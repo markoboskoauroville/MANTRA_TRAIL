@@ -174,6 +174,14 @@ class Store(context: Context) {
         get() = Keyring.decode(prefs.getString(KEY_RING, null))
         set(v) = prefs.edit().putString(KEY_RING, Keyring.encode(v)).apply()
 
+    /**
+     * WHICH ROUTER ANSWERS (17.9.2026). BRouter is in the app and works with the radio off;
+     * Google knows what is open and costs a billed request each time it is asked.
+     */
+    var useGoogleRouting: Boolean
+        get() = prefs.getBoolean(KEY_GOOGLE_ROUTING, false)
+        set(v) = prefs.edit().putBoolean(KEY_GOOGLE_ROUTING, v).apply()
+
     /** Which BRouter profile the ways are found for. */
     var routeProfile: String
         get() = prefs.getString(KEY_ROUTE_PROFILE, "trekking") ?: "trekking"
@@ -217,6 +225,7 @@ class Store(context: Context) {
         private const val KEY_THEME = "themeName"
         private const val KEY_GOOGLE_VIEW = "googleView"
         private const val KEY_RING = "keyring"
+        private const val KEY_GOOGLE_ROUTING = "googleRouting"
         private const val KEY_OFFLINE_MAP = "offlineMapName"
         private const val KEY_ROUTE_POINTS = "routePoints"
         private const val KEY_USE_VTM = "useVtm"

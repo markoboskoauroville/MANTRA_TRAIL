@@ -1514,6 +1514,7 @@ private fun RouteMenu(
     var options by remember { mutableIntStateOf(store.routeOptions) }
     var speed by remember { mutableStateOf(store.walkSpeedKmh) }
     var profile by remember { mutableStateOf(store.routeProfile) }
+    var useGoogle by remember { mutableStateOf(store.useGoogleRouting) }
     val enough = points.size >= 2
     val straight = Route.straightMetres(points)
 
@@ -1586,7 +1587,36 @@ private fun RouteMenu(
                 }
             }
 
+            // WHICH ROUTER ANSWERS (17.9.2026). BRouter is in the app and needs no signal; Google
+            // knows what is open and costs a billed request each time it is asked. The two are
+            // here side by side so he can compare them on ground he knows.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(false to "BRouter · offline", true to "Google · online").forEach { (google, label) ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Paint.Card)
+                            .then(
+                                if (google == useGoogle) {
+                                    Modifier.border(1.5.dp, Paint.Amber, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable {
+                                useGoogle = google
+                                store.useGoogleRouting = google
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Label(label, if (google == useGoogle) Paint.Amber else Paint.Sand, size = 11)
+                    }
+                }
+            }
+
+            if (!useGoogle) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Routing.PROFILES.forEach { name ->
                     Box(
                         Modifier

@@ -169,10 +169,14 @@ class MainActivity : ComponentActivity() {
             Trail.say("Still looking")
             return
         }
-        val missing = points
-            .flatMap { Segments.namesFor(it.first, it.second, it.first, it.second) }
-            .distinct()
-            .filterNot { java.io.File(Routing.segmentDir(this), it).exists() }
+        val missing = if (store.useGoogleRouting) {
+            emptyList()
+        } else {
+            points
+                .flatMap { Segments.namesFor(it.first, it.second, it.first, it.second) }
+                .distinct()
+                .filterNot { java.io.File(Routing.segmentDir(this), it).exists() }
+        }
         if (missing.isNotEmpty()) {
             val name = missing.first()
             if (pendingSegment != name) {
@@ -184,10 +188,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         routing = true
-        Trail.say("Looking for ways…")
+        Trail.say(if (store.useGoogleRouting) "Asking Google for ways…" else "Looking for ways…")
         lifecycleScope.launch {
-            val (options, problem) = Routing.through(this@MainActivity, points, profile, wanted) {
-                Trail.say(it)
+            val (options, problem) = if (store.useGoogleRouting) {
+                // HIS CHOICE, AND IT COSTS HIM A REQUEST: nothing here asks Google on its own.
+                GoogleRoutes.between(points, store, wanted)
+            } else {
+                Routing.through(this@MainActivity, points, profile, wanted) { Trail.say(it) }
             }
             routing = false
             routeOptions = options

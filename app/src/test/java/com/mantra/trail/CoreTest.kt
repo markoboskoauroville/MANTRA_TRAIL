@@ -688,6 +688,39 @@ class CoreTest {
         assertFalse(MapLayer.GoogleView.SATELLITE.overlayRoads)
     }
 
+    // --- Google's encoded polyline -----------------------------------------------------------
+
+    @Test fun theExampleFromGooglesOwnDocumentationDecodes() {
+        // Their published example: three points in California.
+        val points = Polyline.decode("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+        assertEquals(3, points.size)
+        assertEquals(38.5, points[0].first, 1e-5)
+        assertEquals(-120.2, points[0].second, 1e-5)
+        assertEquals(40.7, points[1].first, 1e-5)
+        assertEquals(-120.95, points[1].second, 1e-5)
+        assertEquals(43.252, points[2].first, 1e-5)
+        assertEquals(-126.453, points[2].second, 1e-5)
+    }
+
+    @Test fun anEmptyStringIsAnEmptyRoute() {
+        assertTrue(Polyline.decode("").isEmpty())
+    }
+
+    @Test fun aStringThatRunsOutMidNumberYieldsWhatItRead() {
+        val whole = "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+        val cut = whole.substring(0, whole.length - 3)
+        val points = Polyline.decode(cut)
+        assertTrue(points.size.toString(), points.size in 1..2)
+        assertEquals(38.5, points[0].first, 1e-5)
+    }
+
+    @Test fun rubbishDecodesToSomethingRatherThanThrowing() {
+        // Not a crash, whatever arrives: the worst case is a short list of odd points.
+        Polyline.decode("!!!!")
+        Polyline.decode("????????")
+        assertTrue(true)
+    }
+
     // --- the keyring: several keys, tried in order ------------------------------------------------
 
     private fun aKey(tail: String) = "AIza" + "B".repeat(31) + tail

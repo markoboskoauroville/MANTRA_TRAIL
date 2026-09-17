@@ -732,6 +732,19 @@ check("the theme is chosen, not fixed at a motorcycle one",
 # THE KEYRING (17.9.2026), as in his own KEY_RING_TESTER: several keys, each testable, and the app
 # walks them in order rather than dying with the first one that stops working.
 ring_src = (MAIN / "Keyring.kt").read_text()
+# 17.9.2026, after he enabled the rest of Google's APIs: their walking directions beside BRouter's,
+# with a toggle, because the two answer different questions and both are worth having.
+check("both routers are offered and the choice is his",
+      "useGoogleRouting" in (MAIN / "Store.kt").read_text()
+      and "BRouter · offline" in screens and "Google · online" in screens,
+      "one needs no signal, the other costs a billed request")
+check("Google is never asked for a route on its own",
+      "GoogleRoutes.between(points, store, wanted)" in (MAIN / "MainActivity.kt").read_text()
+      and "store.useGoogleRouting" in (MAIN / "MainActivity.kt").read_text(),
+      "every request is one he pressed for")
+check("their polyline is decoded where it can be tested",
+      (MAIN / "Polyline.kt").exists() and "fun decode(encoded: String)" in (MAIN / "Polyline.kt").read_text(),
+      "a route that drifts into the sea two kilometres along is a decoder bug")
 check("the keys are a ring, not one key",
       "fun order(" in ring_src and "sessionFromRing" in (MAIN / "GoogleTiles.kt").read_text(),
       "the one that worked last is tried first, the refused one last")
