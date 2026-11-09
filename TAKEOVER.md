@@ -1,3 +1,7 @@
+
+
+## From the former README (9.11.2026)
+
 # Mantra Trail
 
 **Offline outdoor maps, a track that records itself to a file as you walk, a compass and a spirit
