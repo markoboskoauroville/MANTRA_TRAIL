@@ -286,6 +286,7 @@ fun SettingsFace(
                     }
                 }
             }
+            Words("© 2026 Mantra Productions", Paint.Dim, 12, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp))
         }
     }
 }
